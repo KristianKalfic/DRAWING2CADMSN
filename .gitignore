@@ -3,3 +3,5 @@ drawings/
 __pycache__/
 *.pyc
 .env
+.venv/
+.pytest_cache/
