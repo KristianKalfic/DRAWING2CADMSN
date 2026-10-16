@@ -206,7 +206,7 @@ def execute(code):
 
 if __name__ == "__main__":
     import cadquery as cq
-    spec = json.load(open(sys.argv[1]))
+    spec = json.load(open(sys.argv[1], encoding="utf-8"))
     code, info = generate(spec)
     wp = execute(code)
     os.makedirs("out", exist_ok=True)

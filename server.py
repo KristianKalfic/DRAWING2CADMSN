@@ -223,7 +223,7 @@ def run_cadquery_script(part_id: str, script: str, timeout_s: int = 20) -> dict:
 def write_review_list(part_id: str, items: list[dict]) -> dict:
     """Review-Liste speichern: [{"feature":..,"value":..,"reason":"angenommen aus Zeichnungsgeometrie ...","confidence":0.6}]"""
     path = os.path.join(OUT, _safe(part_id) + "_review.json")
-    json.dump(items, open(path, "w"), indent=2, ensure_ascii=False)
+    json.dump(items, open(path, "w", encoding="utf-8"), indent=2, ensure_ascii=False)
     return {"ok": True, "path": path, "count": len(items)}
 
 
