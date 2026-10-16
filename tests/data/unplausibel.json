@@ -1,0 +1,12 @@
+{
+  "part_name": "Unplausibel",
+  "base": {"shape": "box", "length": 50, "width": 30, "height": 10},
+  "features": [
+    {"type": "hole", "x": 22, "y": 0, "diameter": 8, "through": true},
+    {"type": "hole", "x": 0, "y": 0, "diameter": 6, "through": true, "confidence": 0.5},
+    {"type": "hole", "x": 4, "y": 0, "diameter": 6, "through": true},
+    {"type": "hole", "x": 0, "y": 0, "diameter": 40, "through": true},
+    {"type": "fillet", "edges": "|Z", "size": 20}
+  ],
+  "review": [{"feature": "hole", "reason": "Wert fehlt im JSON"}]
+}

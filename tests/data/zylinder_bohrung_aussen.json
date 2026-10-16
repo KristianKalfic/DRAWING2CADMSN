@@ -1,0 +1,9 @@
+{
+  "part_name": "Scheibe",
+  "base": {"shape": "cylinder", "diameter": 40, "height": 8},
+  "features": [
+    {"type": "hole", "x": 0, "y": 0, "diameter": 6, "through": true},
+    {"type": "hole", "x": 0, "y": 0, "diameter": 5, "through": true,
+     "pattern": {"type": "circle", "n": 4, "radius": 18, "start_angle": 45}}
+  ]
+}

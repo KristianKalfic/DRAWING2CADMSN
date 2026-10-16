@@ -1,0 +1,10 @@
+{
+  "part_name": "Platte_B2",
+  "base": {"shape": "box", "length": 100, "width": 65, "height": 20},
+  "features": [
+    {"type": "fillet", "edges": "|Z", "size": 5},
+    {"type": "hole", "x": 0, "y": 0, "diameter": 9, "through": true,
+     "pattern": {"type": "rect", "nx": 2, "ny": 2, "dx": 70, "dy": 40}},
+    {"type": "pocket", "x": 0, "y": 0, "length": 30, "width": 20, "depth": 5}
+  ]
+}

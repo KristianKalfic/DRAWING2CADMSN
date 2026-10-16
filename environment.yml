@@ -9,3 +9,4 @@ dependencies:
       - "mcp[cli]<2"
       - pymupdf
       - pillow
+      - pytest
