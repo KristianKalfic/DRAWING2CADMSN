@@ -10,7 +10,7 @@ Aufruf:
   python issue_check.py extraktion_A.json extraktion_B.json out/teil.step [--freecad "C:/Program Files/FreeCAD 1.0/bin/FreeCADCmd.exe"]
 Exit-Code 0 = freigegeben, 1 = offene Blocker.
 """
-import json, os, subprocess, sys, tempfile
+import json, os, shutil, subprocess, sys, tempfile
 
 TOL = 0.05  # mm
 
@@ -31,8 +31,14 @@ def compare(a, b):
     if len(fa) != len(fb):
         out.append(issue("blocker", "FEATURE_COUNT",
                          f"Anzahl Features: A={len(fa)} vs B={len(fb)}", "features"))
-    holes_a = sorted([f for f in fa if f.get("type") == "hole"], key=lambda f: (f["x"], f["y"]))
-    holes_b = sorted([f for f in fb if f.get("type") == "hole"], key=lambda f: (f["x"], f["y"]))
+    # Sortierschluessel gerundet: Kreismuster liefern x = +-1e-15 statt 0 und wuerden sonst
+    # gleiche Bohrungen in unterschiedlicher Reihenfolge paaren (Falschalarm).
+    key = lambda f: (round(float(f["x"]), 2), round(float(f["y"]), 2))
+    holes_a = sorted([f for f in fa if f.get("type") == "hole"], key=key)
+    holes_b = sorted([f for f in fb if f.get("type") == "hole"], key=key)
+    if len(holes_a) != len(holes_b):
+        out.append(issue("blocker", "HOLE_COUNT",
+                         f"Anzahl Bohrungen: A={len(holes_a)} vs B={len(holes_b)}", "features.hole"))
     for i, (h1, h2) in enumerate(zip(holes_a, holes_b)):
         for k in ("x", "y", "diameter"):
             if abs(h1[k] - h2[k]) > TOL:
@@ -45,6 +51,7 @@ def compare(a, b):
 def plausible(spec):
     out, base = [], spec.get("base", {})
     L, W, H = base.get("length"), base.get("width"), base.get("height")
+    D = base.get("diameter") if base.get("shape") == "cylinder" else None
     for f in spec.get("features", []):
         if f.get("confidence", 1) < 0.7:
             out.append(issue("warning", "LOW_CONFIDENCE",
@@ -57,6 +64,11 @@ def plausible(spec):
                                  f"(Nullpunkt-Annahme: Mitte!)", "features.hole"))
             if f["diameter"] >= min(L, W):
                 out.append(issue("blocker", "HOLE_TOO_BIG", "Bohrung groesser als Koerper", "features.hole"))
+        if f.get("type") == "hole" and D:
+            if (f["x"] ** 2 + f["y"] ** 2) ** 0.5 + f["diameter"] / 2 > D / 2:
+                out.append(issue("blocker", "HOLE_OUTSIDE_BODY",
+                                 f"Bohrung d={f['diameter']} @({f['x']},{f['y']}) ragt aus dem Zylinder "
+                                 f"D={D} (Nullpunkt-Annahme: Mitte!)", "features.hole"))
         if f.get("type") == "fillet" and L and W and f["size"] > min(L, W) / 2:
             out.append(issue("blocker", "FILLET_TOO_BIG", "Radius > halbe Kante", "features.fillet"))
     holes = [f for f in spec.get("features", []) if f.get("type") == "hole"]
@@ -66,7 +78,7 @@ def plausible(spec):
             if d < (holes[i]["diameter"] + holes[j]["diameter"]) / 2:
                 out.append(issue("blocker", "HOLES_OVERLAP", f"Bohrungen {i} und {j} ueberlappen", "features.hole"))
     for r in spec.get("review", []):
-        out.append(issue("review", "ASSUMPTION", f"{r['feature']}={r['value']}: {r['reason']}", "review"))
+        out.append(issue("review", "ASSUMPTION", f"{r.get('feature')}={r.get('value')}: {r.get('reason')}", "review"))
     return out
 
 
@@ -78,23 +90,46 @@ s = Part.read(p)
 bb = s.BoundBox
 res = {"valid": s.isValid(), "solids": len(s.Solids), "volume": s.Volume,
        "bbox": [bb.XLength, bb.YLength, bb.ZLength],
-       "holes": [{"d": 2*f.Surface.Radius, "x": f.Surface.Center.x, "y": f.Surface.Center.y}
-                 for f in s.Faces if f.Surface.__class__.__name__ == "Cylinder"]}
-json.dump(res, open(os.environ["D2C_FC_OUT"], "w"))
+       "holes": []}
+# Nur konkave Zylinder mit Achse parallel Z (sonst zaehlen Eckenrundungen als Bohrungen)
+for f in s.Faces:
+    c = f.Surface
+    if c.__class__.__name__ != "Cylinder" or abs(abs(c.Axis.z) - 1) > 1e-6:
+        continue
+    u0, u1, v0, v1 = f.ParameterRange
+    u, v = (u0 + u1) / 2, (v0 + v1) / 2
+    p, n = f.valueAt(u, v), f.normalAt(u, v)
+    if n.x * (p.x - c.Center.x) + n.y * (p.y - c.Center.y) < 0:
+        res["holes"].append({"d": 2 * c.Radius, "x": c.Center.x, "y": c.Center.y})
+json.dump(res, open(os.environ["D2C_FC_OUT"], "w", encoding="utf-8"))
 '''
 
 
 def freecad(step, spec, fc_exe):
     out = []
+    if not os.path.isfile(step):
+        return [issue("blocker", "STEP_MISSING", f"STEP-Datei nicht gefunden: {step}", step)]
+    exe = fc_exe if os.path.isfile(fc_exe) else shutil.which(fc_exe)
+    if not exe:
+        return [issue("blocker", "FREECAD_NOT_FOUND",
+                      f"FreeCAD nicht gefunden ({fc_exe!r}). FreeCAD installieren oder Pfad angeben: "
+                      f"--freecad \"C:/Program Files/FreeCAD 1.0/bin/FreeCADCmd.exe\". "
+                      f"Ohne diese unabhaengige Pruefung wird nicht freigegeben.", step)]
     with tempfile.TemporaryDirectory() as d:
         sp, op = os.path.join(d, "s.py"), os.path.join(d, "r.json")
-        open(sp, "w").write(FC_SCRIPT)
+        open(sp, "w", encoding="utf-8").write(FC_SCRIPT)
         env = dict(os.environ, D2C_STEP=os.path.abspath(step), D2C_FC_OUT=op)
         try:
-            subprocess.run([fc_exe, sp], env=env, timeout=120, capture_output=True)
-            r = json.load(open(op))
-        except Exception as e:
-            return [issue("blocker", "FREECAD_FAILED", f"FreeCAD konnte STEP nicht pruefen: {e}", step)]
+            p = subprocess.run([exe, sp], env=env, timeout=120, capture_output=True, text=True)
+        except subprocess.TimeoutExpired:
+            return [issue("blocker", "FREECAD_FAILED", "FreeCAD-Pruefung nach 120 s abgebrochen", step)]
+        except OSError as e:
+            return [issue("blocker", "FREECAD_FAILED", f"FreeCAD konnte nicht gestartet werden: {e}", step)]
+        if not os.path.isfile(op):
+            tail = ((p.stderr or "") + (p.stdout or ""))[-500:]
+            return [issue("blocker", "FREECAD_FAILED",
+                          f"FreeCAD lieferte kein Ergebnis (Exit {p.returncode}): {tail}", step)]
+        r = json.load(open(op, encoding="utf-8"))
     if not r["valid"] or r["solids"] != 1:
         out.append(issue("blocker", "STEP_INVALID", f"valid={r['valid']} solids={r['solids']}", step))
     b = spec.get("base", {})
@@ -116,7 +151,7 @@ def freecad(step, spec, fc_exe):
 
 if __name__ == "__main__":
     from json_builder import normalize  # pattern-Objekte zu Einzelbohrungen expandieren
-    a, b = normalize(json.load(open(sys.argv[1])))[0], normalize(json.load(open(sys.argv[2])))[0]
+    a, b = normalize(json.load(open(sys.argv[1], encoding="utf-8")))[0], normalize(json.load(open(sys.argv[2], encoding="utf-8")))[0]
     step = sys.argv[3]
     fc = sys.argv[sys.argv.index("--freecad") + 1] if "--freecad" in sys.argv else "FreeCADCmd"
     issues = compare(a, b) + plausible(a) + freecad(step, a, fc)
@@ -125,6 +160,6 @@ if __name__ == "__main__":
         s: len([i for i in issues if i["severity"] == s]) for s in ("blocker", "warning", "review")},
         "issues": issues}
     path = os.path.splitext(step)[0] + "_issues.json"
-    json.dump(report, open(path, "w"), indent=2, ensure_ascii=False)
+    json.dump(report, open(path, "w", encoding="utf-8"), indent=2, ensure_ascii=False)
     print(json.dumps(report["counts"]), "->", "FREIGEGEBEN" if report["released"] else "GESPERRT", path)
     sys.exit(0 if report["released"] else 1)
