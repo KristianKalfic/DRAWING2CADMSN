@@ -1,1 +1,114 @@
-# DRAWING2CADMSN
+# Drawing2CAD (Hackathon-Prototyp)
+
+Aus einer 2D-Zeichnung (PDF/Scan/Bild) entsteht ein einfaches 3D-Modell als STEP-Datei.
+Alles läuft lokal; der CAD-Kern ist CadQuery (OpenCascade, Open Source).
+
+## Architektur
+
+```
+Zeichnung ──► Claude liest sie, schreibt JSON (Schema unten, Beispiel: examples/beispiel_v2.json)
+          ──► MCP-Server server.py ── build_from_json
+                 └─ json_builder.py: JSON ──► CadQuery-Code (deterministisch, nur validierte Zahlen
+                                              + Selektor-Whitelist, keine Freitext-Einschleusung)
+          ──► Validierung (Solid gültig, genau 1 Körper, Maße + Lage, Bohrungen)
+          ──► export_step: STEP schreiben, re-importieren, Volumen vergleichen
+          ──► issue_check.py: 2 Extraktionen vergleichen, Plausibilität, Nachmessen in FreeCAD
+```
+
+Nicht Umsetzbares wird **nicht geraten**, sondern in `unsupported` / `warnings` (Server) bzw.
+als Issue (issue_check) gemeldet. Unsichere Maße gehören mit Begründung in `review`.
+
+Dateien: `server.py` (MCP-Tools), `json_builder.py` (JSON → CadQuery), `issue_check.py`
+(unabhängige Prüfung), `tests/` (pytest), `Dockerfile`, `environment.yml`.
+
+## Installation
+
+```bash
+conda env create -f environment.yml      # legt Umgebung "d2c" an (Python 3.11, CadQuery, mcp<2, pytest)
+conda activate d2c
+```
+
+`mcp` ist auf `<2` gepinnt: In mcp 2.x gibt es `mcp.server.fastmcp` nicht mehr.
+
+Docker (Server ohne Netzwerk):
+
+```bash
+docker build -t drawing2cad .
+docker run -i --rm --network none -v "$PWD/out:/data/out" drawing2cad
+# Linux-Host zusätzlich: --user $(id -u):$(id -g)   (sonst keine Schreibrechte in out/)
+```
+
+## Test
+
+```bash
+python json_builder.py examples/beispiel_v2.json   # ohne KI: -> out/Flanschplatte_4711.step
+python -m pytest tests -q                          # Builder, Validierung, STEP-Re-Import, issue_check
+python issue_check.py A.json B.json out/teil.step --freecad "C:/Program Files/FreeCAD 1.0/bin/FreeCADCmd.exe"
+```
+
+`issue_check.py` gibt ohne FreeCAD den Blocker `FREECAD_NOT_FOUND` aus und gibt nicht frei (Exit 1).
+Der FreeCAD-Test in `tests/` wird übersprungen, wenn `FreeCADCmd` nicht im PATH ist.
+
+## Claude Desktop (Windows)
+
+`%APPDATA%\Claude\claude_desktop_config.json` – Vorlage: `claude_desktop_config.example.json`
+
+```json
+{
+  "mcpServers": {
+    "drawing2cad": {
+      "command": "C:\\Users\\DEIN_NAME\\miniconda3\\envs\\d2c\\python.exe",
+      "args": ["C:\\Pfad\\zu\\DRAWING2CADMSN\\server.py"],
+      "env": { "D2C_OUT": "C:\\Pfad\\zu\\DRAWING2CADMSN\\out" }
+    }
+  }
+}
+```
+
+Variante Docker: `"command": "docker"`, `"args": ["run", "-i", "--rm", "--network", "none",
+"-v", "C:\\Pfad\\zu\\DRAWING2CADMSN\\out:/data/out", "drawing2cad"]`.
+Den Python-Pfad liefert `conda activate d2c` + `where python`. Danach Claude Desktop neu starten.
+
+## JSON-Schema (Kurzreferenz)
+
+Einheiten **mm**. Nullpunkt = **Mitte der Unterseite** (X/Y zentriert, Z=0 unten, Z=height oben).
+Reihenfolge beim Bauen: Grundkörper → Kanten (fillet/chamfer) → Taschen → Bohrungen.
+
+```jsonc
+{
+  "part_name": "Flanschplatte_4711",
+  "base": {"shape": "box", "length": 100, "width": 60, "height": 20},
+  //   | {"shape": "cylinder", "diameter": 50, "height": 10}
+  //   | {"shape": "profile", "points": [[x, y], ...], "height": 10}  // Punkte um (0,0) zentriert angeben
+  "features": [
+    {"type": "fillet", "edges": "|Z", "size": 5},           // oder "chamfer"; edges: |Z >Z <Z #Z ...
+    {"type": "pocket", "x": 0, "y": 0, "length": 30, "width": 20, "depth": 5, "face": "top"},
+    {"type": "hole", "x": 0, "y": 0, "diameter": 8.5, "through": true, "face": "top",
+     "pattern": {"type": "rect", "nx": 2, "ny": 2, "dx": 70, "dy": 40}}
+    // Blindbohrung: "depth": 8 statt "through"; face: "top" | "bottom"
+    // Senkung: "counterbore_diameter": 11, "counterbore_depth": 6 (Tiefe Pflicht)
+    // Kreismuster: "pattern": {"type": "circle", "n": 6, "radius": 30, "start_angle": 0}
+  ],
+  "review": [{"feature": "pocket depth", "value": 5, "reason": "nicht bemaßt", "confidence": 0.6}]
+}
+```
+
+Optional pro Eintrag: `evidence` (wo in der Zeichnung), `confidence` (0…1; < 0.7 → Warnung).
+Muster nur als Text (`"pattern": "4x"`) wird **nicht** vervielfacht, sondern als Warnung gemeldet.
+
+## Offene Punkte
+
+- Bohrungen und Taschen auf **Seitenflächen** (nur `top`/`bottom`); Taschen mit Drehwinkel
+  oder nicht-rechteckiger Kontur.
+- Kegelsenkungen (countersink), Gewinde, Nuten, Fasen/Rundungen an Bohrungs- oder Taschenkanten.
+- `validate()` prüft Bohrungen nur über Ø und X/Y (nicht Tiefe, nicht Senkungsmaße); Taschen
+  werden gar nicht nachgemessen.
+- Profil: Nullpunkt wird nicht automatisch zentriert (nur Warnung); `plausible()` prüft
+  Bohrungslage nur bei Box und Zylinder.
+- `compare()` vergleicht nur Grundkörper und Bohrungen, nicht Taschen/Kanten.
+- FreeCAD-Teil von `issue_check.py` ist ungetestet (FreeCAD war in der Testumgebung nicht installiert).
+- Legacy-Tools (`create_base_body`, `add_hole`, …, `revolve_profile`): nur Basisfälle getestet;
+  Bedeutung von x/y auf Seitenflächen (`>X` usw.) ist undefiniert.
+- Einlesen der Zeichnung (PDF/Bild) ist nicht Teil des Servers; `pymupdf`/`pillow` sind
+  installiert, werden aber noch nicht verwendet.
+- Windows-Betrieb (lokal und Docker Desktop) ist ungetestet.
