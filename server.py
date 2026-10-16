@@ -183,7 +183,14 @@ def export_step(part_id: str, filename: str = "") -> dict:
     """Exportiert STEP, re-importiert die Datei und validiert erneut. Gibt Pfad + Prüfergebnis zurück."""
     p = _part(part_id)
     path = os.path.join(OUT, _safe(filename or part_id) + ".step")
+    if os.path.exists(path):
+        os.remove(path)  # sonst wuerde eine alte Datei gleichen Namens re-importiert
     cq.exporters.export(p["wp"], path)
+    if not os.path.isfile(path):
+        # CadQuery meldet einen fehlgeschlagenen STEP-Export nicht als Exception
+        return {"ok": False, "path": None, "error": f"STEP-Datei wurde nicht geschrieben: {path} "
+                f"(Schreibrechte/Speicherplatz pruefen, D2C_OUT={OUT})",
+                "validation": {**_validate(p), "all_pass": False}, "history": p["log"]}
     try:
         imp = cq.importers.importStep(path)
         n = len(imp.solids().vals())
@@ -194,7 +201,7 @@ def export_step(part_id: str, filename: str = "") -> dict:
     v["reimport"] = reimport
     v["volume_match"] = reimport.get("volume") is not None and abs(reimport["volume"] - v["volume"]) < 1e-3 * max(v["volume"], 1)
     v["all_pass"] = v["all_pass"] and reimport["ok"] and v["volume_match"]
-    return {"path": path, "validation": v, "history": p["log"]}
+    return {"ok": True, "path": path, "validation": v, "history": p["log"]}
 
 
 # ---------------- Fallback: Sandbox ----------------
