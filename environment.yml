@@ -1,0 +1,11 @@
+name: d2c
+channels:
+  - conda-forge
+dependencies:
+  - python=3.11
+  - cadquery
+  - pip
+  - pip:
+      - "mcp[cli]"
+      - pymupdf
+      - pillow

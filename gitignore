@@ -1,0 +1,5 @@
+out/
+drawings/
+__pycache__/
+*.pyc
+.env
