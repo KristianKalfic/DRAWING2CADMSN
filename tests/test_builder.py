@@ -255,3 +255,14 @@ def test_dateiname_kein_pfadausbruch(tmp_out):
     assert "/" not in r["part_id"] and not r["part_id"].startswith(".")
     e = S.export_step(r["part_id"], filename="../../x")
     assert os.path.dirname(e["path"]) == str(tmp_out)
+
+
+def test_export_fehlgeschlagen_wird_gemeldet(tmp_path, monkeypatch):
+    """CadQuery wirft bei nicht schreibbarem Ziel keine Exception -> export_step muss es selbst melden."""
+    (tmp_path / "datei").write_text("x")
+    monkeypatch.setattr(S, "OUT", str(tmp_path / "datei" / "unterordner"))
+    r = build(box(10, 10, 10))
+    e = S.export_step(r["part_id"])
+    assert e["ok"] is False and e["path"] is None
+    assert "nicht geschrieben" in e["error"]
+    assert e["validation"]["all_pass"] is False
