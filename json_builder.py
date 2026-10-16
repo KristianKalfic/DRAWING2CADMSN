@@ -96,10 +96,12 @@ def generate(spec):
         lines.append(f'result = cq.Workplane("XY").box({_n(L,"length",True)}, {_n(W,"width",True)}, {h}, '
                      f'centered=(True, True, False))')
         bbox = {"x": float(L), "y": float(W), "z": H}
+        bbox_min = {"x": -float(L) / 2, "y": -float(W) / 2, "z": 0.0}
     elif shape == "cylinder":
         D = base.get("diameter")
         lines.append(f'result = cq.Workplane("XY").circle({_n(float(D)/2,"diameter",True)}).extrude({h})')
         bbox = {"x": float(D), "y": float(D), "z": H}
+        bbox_min = {"x": -float(D) / 2, "y": -float(D) / 2, "z": 0.0}
     elif shape == "profile":
         pts = base.get("points") or []
         if len(pts) < 3:
@@ -108,6 +110,12 @@ def generate(spec):
         lines.append(f'result = cq.Workplane("XY").polyline([{ptxt}]).close().extrude({h})')
         xs, ys = [float(p[0]) for p in pts], [float(p[1]) for p in pts]
         bbox = {"x": max(xs) - min(xs), "y": max(ys) - min(ys), "z": H}
+        bbox_min = {"x": min(xs), "y": min(ys), "z": 0.0}
+        cx, cy = (max(xs) + min(xs)) / 2, (max(ys) + min(ys)) / 2
+        if abs(cx) > 1e-6 or abs(cy) > 1e-6:
+            warnings.append(f"Profil ist nicht um den Nullpunkt zentriert (Mitte der Kontur bei ({cx:g}, {cy:g})). "
+                            f"Konvention: Nullpunkt = Mitte Unterseite. Feature-Koordinaten beziehen sich auf "
+                            f"die Profil-Koordinaten -> PRUEFEN")
     else:
         raise ValueError(f"Unbekannte base.shape {shape!r}")
 
@@ -119,11 +127,14 @@ def generate(spec):
     for f in others:
         unsupported.append(f"Feature-Typ {f.get('type')!r} nicht unterstuetzt: {json.dumps(f)[:100]}")
 
-    def cutter(face, extent_depth):
-        """Gibt (Workplane-Praefix, Extrusionslaenge) zurueck; 1 mm Ueberstand gegen Koplanaritaet."""
+    def cutter(face, extent_depth, through=False):
+        """Gibt (Workplane-Praefix, Extrusionslaenge) zurueck; 1 mm Ueberstand gegen Koplanaritaet.
+        Durchgaenge bekommen auf BEIDEN Seiten 1 mm Ueberstand (sonst endet das Werkzeug koplanar
+        auf der Gegenflaeche)."""
+        ext = extent_depth + (2 if through else 1)
         if face == "top":
-            return f'cq.Workplane("XY").workplane(offset={_n(H+1,"o")})', f"-{_n(extent_depth+1,'d')}"
-        return f'cq.Workplane("XY").workplane(offset=-1.0)', _n(extent_depth + 1, "d")
+            return f'cq.Workplane("XY").workplane(offset={_n(H+1,"o")})', f"-{_n(ext,'d')}"
+        return f'cq.Workplane("XY").workplane(offset=-1.0)', _n(ext, "d")
 
     # ---- Kanten (zuerst, solange der Koerper noch einfach ist) ----
     if edge:
@@ -161,17 +172,24 @@ def generate(spec):
             continue
         r = float(f["diameter"]) / 2
         depth = f.get("depth")
-        through = f.get("through", depth is None)
-        d = H if through else float(depth)
-        pre, ext = cutter(face, d)
+        through = bool(f.get("through", depth is None))
+        if not through and depth is None:
+            raise ValueError(f"Bohrung @({f.get('x')},{f.get('y')}): through=false, aber keine depth angegeben")
+        d = H if through else float(_n(depth, "hole.depth", True))
+        through = through or d >= H
+        pre, ext = cutter(face, min(d, H), through)
         lines.append(f'result = result.cut({pre}.center({_n(f["x"],"x")}, {_n(f["y"],"y")})'
                      f'.circle({_n(r,"diameter",True)}).extrude({ext}))')
         if f.get("counterbore_diameter"):
-            pre, ext = cutter(face, float(f.get("counterbore_depth", 0)) or 1.0)
+            if not f.get("counterbore_depth"):
+                unsupported.append(f"Senkung Ø{f['counterbore_diameter']} @({f.get('x')},{f.get('y')}) ohne "
+                                   f"counterbore_depth: Senkung NICHT gebaut (Tiefe wird nicht geraten)")
+                continue
+            pre, ext = cutter(face, float(_n(f["counterbore_depth"], "counterbore_depth", True)))
             lines.append(f'result = result.cut({pre}.center({_n(f["x"],"x")}, {_n(f["y"],"y")})'
                          f'.circle({_n(float(f["counterbore_diameter"])/2,"cb",True)}).extrude({ext}))')
 
-    expected = {"bbox": bbox, "tol": 0.05,
+    expected = {"bbox": bbox, "bbox_min": bbox_min, "tol": 0.05,
                 "holes": [{"x": float(f["x"]), "y": float(f["y"]), "d": float(f["diameter"])}
                           for f in holes if _face(f) is not None]}
     return "\n".join(lines) + "\n", {"warnings": warnings, "unsupported": unsupported, "expected": expected}
