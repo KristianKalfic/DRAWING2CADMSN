@@ -27,6 +27,7 @@ GENERAL_ENTRIES = {
     "ISO 2768-c": "DIN ISO 2768 (coarse/grob)",
     "ISO 2768-v": "DIN ISO 2768 (very coarse/sehr grob)",
 }
+NO_TABLES = "tolerance tables not found (D2C_TABLES)"  # what a caller says when tables_found() is False
 
 
 class ToleranceError(ValueError):
@@ -40,6 +41,15 @@ def _table(pattern: str) -> ET.Element:
     if not files:
         raise ToleranceError(f"Keine Datei für {pattern} in {folder} gefunden: Setze D2C_TABLES auf den Ordner mit den BCT-Tabellen.")
     return ET.parse(files[0]).getroot()  # the parser reads the encoding (ISO-8859-1) from the XML header
+
+
+def tables_found() -> bool:
+    """Whether D2C_TABLES holds both table files, the ISO 286 and the ISO 2768 one."""
+    try:
+        _table("*isolim*.xml"), _table("*toltabs*.xml")
+    except ToleranceError:
+        return False
+    return True
 
 
 def _covers(row: ET.Element, nominal: float) -> bool:
@@ -143,7 +153,7 @@ def compliance(spec: PartSpec, ops: list[dict], report: dict, mode: Variant) -> 
     The ops are read as apply_mode(ops, spec, mode) builds them; report is the worker report of that build.
     values are the op values bound to the dimension by refs and, for a diameter, the diameters measured at
     the holes that name it. in_tolerance: every value lies between nominal + lower and nominal + upper.
-    A dimension that nothing is bound to has no values and so counts as in tolerance.
+    A dimension that nothing is bound to has no values: in_tolerance is None there, not checked.
     """
     built, _ = apply_mode(ops, spec, mode)
     bound = defaultdict(list)
@@ -155,9 +165,9 @@ def compliance(spec: PartSpec, ops: list[dict], report: dict, mode: Variant) -> 
         if source == "none":
             continue
         values = bound[dim.id] + _measured_diameters(report, dim)
+        within = all(dim.value + lower - EPS <= v <= dim.value + upper + EPS for v in values)
         entries.append({
             "dim_id": dim.id, "text": dim.text, "nominal": dim.value, "lower": lower, "upper": upper,
-            "source": source, "values": values,
-            "in_tolerance": all(dim.value + lower - EPS <= v <= dim.value + upper + EPS for v in values),
+            "source": source, "values": values, "in_tolerance": within if values else None,
         })
     return entries

@@ -10,7 +10,7 @@ from pydantic import TypeAdapter
 
 from d2c.ops import Op
 from d2c.spec import Dimension, PartSpec
-from d2c.tolerances import ToleranceError, apply_mode, compliance, limits, mid_value
+from d2c.tolerances import ToleranceError, apply_mode, compliance, limits, mid_value, tables_found
 
 FIXTURE_TABLES = Path(__file__).parent / "fixtures" / "tables"
 OPS = TypeAdapter(list[Op])
@@ -263,3 +263,27 @@ def test_compliance_lists_tolerated_dimensions_only():
         general="ISO 2768-m")
     result = compliance(spec, [], {"ok": True, "dims": []}, "nominal")
     assert [(c["dim_id"], c["source"], c["values"]) for c in result] == [("a", "explicit", []), ("b", "general", [])]
+
+
+def test_compliance_unbound_dim_is_not_checked():
+    """A tolerated dimension without an op value or a measured hole has nothing to check: None, not True."""
+    spec = make_spec(dim(16, "diameter", id="d16", fit="H7"), dim(31, id="l31", tol_upper=0.0, tol_lower=-0.1))
+    ops = plain_ops(extrude(31, {"distance": "l31"}))
+    by_id = {c["dim_id"]: c for c in compliance(spec, ops, {"ok": True, "dims": []}, "nominal")}
+    assert (by_id["d16"]["values"], by_id["d16"]["in_tolerance"]) == ([], None)
+    assert (by_id["l31"]["values"], by_id["l31"]["in_tolerance"]) == ([31], True)
+    # a hole the build found counts as a value, so the diameter is checked after all
+    measured = compliance(spec, ops, hole_report(16.0), "nominal")[0]
+    assert (measured["values"], measured["in_tolerance"]) == ([16.0], True)
+
+
+def test_tables_found(monkeypatch, tmp_path):
+    assert tables_found()  # conftest points D2C_TABLES at the test tables
+    monkeypatch.setenv("D2C_TABLES", str(tmp_path))
+    assert not tables_found()
+    (tmp_path / "x_isolim.xml").write_text("<ISOLIM/>")
+    assert not tables_found()  # ISO 286 alone is not enough
+    (tmp_path / "x_toltabs.xml").write_text("<TOLTABS/>")
+    assert tables_found()
+    monkeypatch.setenv("D2C_TABLES", str(tmp_path / "missing"))
+    assert not tables_found()
