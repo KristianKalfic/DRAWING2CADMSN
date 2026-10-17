@@ -10,7 +10,7 @@ Drawing2CAD erzeugt aus einer technischen 2D-Zeichnung (Vektor-PDF) ein geprüft
 | --- | --- |
 | Einzelteile aus genau einem Volumenkörper | Baugruppen |
 | Prismatische und rotationssymmetrische Geometrie, Bohrungen mit Senkung und Gewinde-Kernloch, Rundungen, Fasen, Entformungsschrägen | Freiformflächen, Gewindegeometrie |
-| Zeichnungen als PDF, Messung aus der Vektorgeometrie | Messung in Rasterbildern und Scans |
+| Zeichnungen als PDF oder als PNG und JPG, die zu einer einseitigen PDF-Datei umgewandelt werden; Messung aus der Vektorgeometrie | Messung in Rasterbildern und Scans |
 | STEP mit farbig markierten Annahmen | Native CAD-Formate |
 
 ## 3. Anforderungen
@@ -23,13 +23,13 @@ Drawing2CAD erzeugt aus einer technischen 2D-Zeichnung (Vektor-PDF) ein geprüft
 | A4 | Der MCP-Server läuft vollständig lokal, ohne Cloud-Abhängigkeit | Docker-Image, Transport stdio, Start mit `--network none` (14) |
 | A5 | Modellskripte laufen isoliert: ohne Netzwerk, mit Zeitlimit | Unterprozess für den Modellaufbau mit Zeitlimit und Ressourcengrenzen (14) |
 | A6 | Skriptfähiger quelloffener CAD-Kern auf OpenCascade-Basis | CadQuery 2.8.0 mit OCP 7.9.3 |
-| A7 | Wenige Werkzeuge mit strukturierten Parametern, freier Code nur als Rückfall | 14 Werkzeuge, `run_script` als Rückfall (6) |
+| A7 | Wenige Werkzeuge mit strukturierten Parametern, freier Code nur als Rückfall | 15 Werkzeuge, `run_script` als Rückfall (6) |
 | A8 | Nach jedem Modellaufbau prüfen und maschinenlesbar zurückmelden: gültiger Volumenkörper, Maße gegen die Zeichnung, fehlerfreier STEP-Rückimport | `checks.py`, BuildReport (5.3, 7) |
 | A9 | Unabhängig vom verwendeten Sprachmodell | MCP-Standard, Arbeitsanleitung `instructions.md` (6) |
 | A10 | Unklare Information im 3D-Modell markieren | Orange Flächen, benannt nach dem Prüfeintrag (8.1) |
 | A11 | Fehlende Maße aus der Zeichnungsgeometrie annehmen und mit Begründung führen | `measure_drawing`, `assumed` mit `assumption_basis` und Prüfeintrag (5.1) |
-| A12 | Toleranzen auslesen, auf Toleranzmitte legen, Einhaltung prüfen | Textebene liest Toleranzen und Passungen; Bibliothek `tolerances.py` (10) |
-| A13 | STEP AP242 mit semantischem PMI | Bibliothek `export.py` (8.2) |
+| A12 | Toleranzen auslesen, auf Toleranzmitte legen, Einhaltung prüfen | Textebene liest Toleranzen und Passungen; Bibliothek `tolerances.py` (10), `export_step` mit `variant="mid"` (8.1) |
+| A13 | STEP AP242 mit semantischem PMI und GLB für die 3D-Ansicht | Bibliothek `export.py`, genutzt von `export_step` (8) |
 
 ## 4. Architektur
 
@@ -45,7 +45,7 @@ Quelle der Grafik: `architektur.excalidraw` (Excalidraw).
 2. **Beschreibung einreichen:** `submit_spec` prüft die `PartSpec` gegen Schema, Konsistenz- und Prüfvermerkregeln und legt das Teil an.
 3. **Bauen:** `extrude`, `revolve`, `add_holes` und `edge_finish`, als Rückfall `run_script`. Jede Änderung baut alle Operationen in einem neuen Unterprozess neu und prüft das Ergebnis.
 4. **Korrigieren:** `edit_op`, `delete_op` und `move_op` ändern die Liste der Operationen, `get_state` zeigt den Stand.
-5. **Exportieren:** `export_step` schreibt STEP, Prüfbericht und Prüfliste, wenn alle Prüfungen bestehen.
+5. **Exportieren:** `export_step` schreibt bei bestandenen Prüfungen STEP AP242 mit semantischem PMI, dazu GLB, `marks.json`, `pmi.json`, Prüfbericht und Prüfliste.
 
 ### 4.3 Entwurfsentscheidungen
 
@@ -59,13 +59,15 @@ Quelle der Grafik: `architektur.excalidraw` (Excalidraw).
 8. **Server und Sprachmodell sind getrennt.** Der Server braucht kein Netzwerk. Jeder MCP-Client kann ihn nutzen.
 9. **Zwei Phasen, ein Vertrag.** In der Lesephase füllt ein Modell mit Bildverständnis die `PartSpec`. In der Bauphase setzt ein beliebiges Modell sie in Operationen um, auch ohne Bildverständnis.
 10. **Rückverfolgbarkeit.** Jeder Wert einer Operation, der einem gedruckten Maß entspricht, ist über `refs` an dessen id gebunden. Daraus entsteht der Abschnitt „Rückverfolgbarkeit“ der Prüfliste. Ungebundene Größen stehen im Abschnitt „Werte ohne Maßbezug“.
-11. **Die Web-Oberfläche hat keinen eigenen Zustand.** Sie zeigt den Ergebnisordner.
+11. **Die Web-Oberfläche hat keinen eigenen Teilzustand.** Sie zeigt den Ergebnisordner; Uploads liegen im Unterordner `uploads/` der Zeichnungen, laufende Agentenläufe nur im Speicher des Web-Prozesses.
 
 ### 4.4 Komponenten
 
 | Modul | Aufgabe |
 | --- | --- |
-| `server.py`, `instructions.md` | MCP-Server mit 14 Werkzeugen über stdio oder HTTP, Arbeitsanleitung für das Modell |
+| `server.py`, `instructions.md` | MCP-Server mit 15 Werkzeugen über stdio oder HTTP, Arbeitsanleitung für das Modell |
+| `crosscheck.py` | Plausibilitätsprüfung der `PartSpec` und Vergleich mit einer zweiten Auswertung (`check_spec`) |
+| `agent.py` | Agent auf dem Claude Agent SDK: liest die Zeichnung und baut das Teil über die Werkzeuge des MCP-Servers, meldet Fortschritt als Ereignisse |
 | `drawing.py` | Pfadprüfung, Seiteninformation, PDF-Seite oder Ausschnitt als PNG |
 | `text.py` | Textebene lesen, Maßtexte mit Toleranz, Passung und Symbolen zerlegen |
 | `vector.py` | Kreise, Bögen und Ausdehnung aus der Vektorgeometrie, Maßstabsvorschlag, Prüfung von Maßangaben |
@@ -75,14 +77,14 @@ Quelle der Grafik: `architektur.excalidraw` (Excalidraw).
 | `sandbox.py`, `worker.py` | Modellaufbau im Unterprozess mit Zeitlimit und Ressourcengrenzen, Prüfung von Skripten |
 | `checks.py` | Volumenkörper, Maße und Bohrungen, STEP-Export mit Farben und Rückimport |
 | `review.py` | Prüfliste als Markdown und JSON |
-| `export.py` | Bibliothek: STEP AP242 mit semantischem PMI, GLB, PMI-Leser |
-| `tolerances.py` | Bibliothek: ISO 286, ISO 2768, Toleranzmitte, Einhaltung |
+| `export.py` | Bibliothek: STEP AP242 mit semantischem PMI, GLB, PMI-Leser; schreibt die STEP- und GLB-Dateien von `export_step` |
+| `tolerances.py` | Bibliothek: ISO 286, ISO 2768, Toleranzmitte, Einhaltung; von `export_step` genutzt |
 | `web/` | Ergebnisansicht im Browser, Hochladen, Läufe per Server-Sent Events |
 | `demo.py` | Demo-Lauf ohne Sprachmodell: baut das Demo-Teil aus den Test-Fixtures und gibt alle Prüfungen aus |
 
 ### 4.5 Technologie
 
-Python 3.12, `cadquery==2.8.0` (OCP 7.9.3), `mcp==2.3.0`, pydantic 2, `pymupdf==1.28.2` (Lizenz AGPL), poppler-utils, pytest. Docker-Basis `python:3.12-slim` mit den Paketen `libgl1`, `libglu1-mesa`, `libxrender1` und `poppler-utils`.
+Python 3.12, `cadquery==2.8.0` (OCP 7.9.3), `claude-agent-sdk==0.2.168`, `mcp==2.3.0`, pydantic 2, `pymupdf==1.28.2` (Lizenz AGPL), poppler-utils, pytest. Docker-Basis `python:3.12-slim` mit den Paketen `libgl1`, `libglu1-mesa`, `libxrender1` und `poppler-utils`.
 
 ## 5. Datenmodell
 
@@ -161,7 +163,8 @@ Jedes Werkzeug für den Modellaufbau gibt diesen Bericht zurück:
   "solid": {"valid", "solids", "free_edges", "volume", "bbox": [xmin, ymin, zmin, xmax, ymax, zmax], "ok"},
   "dims": [{"check": "bbox_x" | "bbox_y" | "bbox_z" | "hole", "expected", "actual", "ok", "dim_ids"}],
   "build_notes": [{"op_index", ...}],
-  "roundtrip": {"path", "reimport_valid", "solids", "volume_rel_diff", "marks": [{"id", "faces"}], "ok"},
+  "roundtrip": {"path", "reimport_valid", "solids", "volume_rel_diff", "marks": [{"id", "faces"}],
+                "pmi": {"written", "read_back"}, "ok"},
   "op_index": int }
 ```
 
@@ -172,7 +175,7 @@ Jedes Werkzeug für den Modellaufbau gibt diesen Bericht zurück:
 
 ## 6. MCP-Schnittstelle
 
-Der Server heißt `drawing2cad` und liefert `instructions.md` als Arbeitsanleitung an den Client. Er bietet 14 Werkzeuge, keine Ressourcen und keine Prompts. Transport ist stdio; mit `python -m d2c.server --http HOST:PORT` spricht er Streamable HTTP unter `/mcp`.
+Der Server heißt `drawing2cad` und liefert `instructions.md` als Arbeitsanleitung an den Client. Er bietet 15 Werkzeuge, keine Ressourcen und keine Prompts. Transport ist stdio; mit `python -m d2c.server --http HOST:PORT` spricht er Streamable HTTP unter `/mcp`.
 
 ### 6.1 Werkzeuge
 
@@ -181,6 +184,7 @@ Der Server heißt `drawing2cad` und liefert `instructions.md` als Arbeitsanleitu
 | `render_drawing` | `pdf`, `page` = 1, `dpi` = 100, `crop` | PNG der Seite oder des Ausschnitts und Seiteninformation |
 | `read_drawing_text` | `pdf`, `page` = 1, `region` | Textelemente mit Position, Schrift und zerlegtem Maß, höchstens 300 je Aufruf |
 | `measure_drawing` | `pdf`, `page` = 1, `region`, `scale`, `printed_dims`, `expect`, `edge_width` = "auto" | Ausdehnung, je höchstens 12 Kreise und Bögen in mm, Maßstabsvorschlag, Prüfung von Angaben wie `d=30` oder `L=80`, Hinweise |
+| `check_spec` | `spec`, `second` | Befunde zu unmöglichen Werten: Bohrung außerhalb des erwarteten Rahmens, überlappende Bohrungen, zu große Rundung, und mit `second` jeder Unterschied zu einer zweiten unabhängigen Auswertung derselben Seite; es wird nichts übernommen |
 | `submit_spec` | `spec` | Teil anlegen oder neu beginnen |
 | `extrude`, `revolve`, `add_holes`, `edge_finish` | `part` und die Felder der Operation | BuildReport |
 | `run_script` | `part`, `code` | BuildReport |
@@ -188,7 +192,7 @@ Der Server heißt `drawing2cad` und liefert `instructions.md` als Arbeitsanleitu
 | `delete_op` | `part`, `index` | BuildReport |
 | `move_op` | `part`, `index`, `new_index` | BuildReport |
 | `get_state` | `part` | Kurzfassung der Spec, Operationen, letzter Bericht |
-| `export_step` | `part` | Bei Erfolg Dateien und Bericht, sonst `ok = false` mit Bericht |
+| `export_step` | `part`, `variant` = "nominal" | Bei Erfolg Dateien und Bericht, sonst `ok = false` mit Bericht; `variant="mid"` baut auf den Toleranzmitten und schreibt nur `<teil>_mid.step` und `report_mid.json` |
 
 - `crop` und `region` sind Bruchteile der angezeigten Seite (x0, y0, x1, y1), Ursprung oben links.
 - `render_drawing` begrenzt die Auflösung auf 600 dpi und die längere Bildseite auf 2000 Pixel.
@@ -210,50 +214,53 @@ Der Server heißt `drawing2cad` und liefert `instructions.md` als Arbeitsanleitu
 | Volumenkörper | `isValid()`, genau ein Volumenkörper, keine freien Kanten, Volumen größer 0 |
 | Gesamtmaße | Achsparallele Ausdehnung je Achse in Modellkoordinaten höchstens 0,01 mm Abweichung von `expected.bbox` |
 | Bohrungen | Eine konkave Zylinderfläche je erwarteter Bohrung: Durchmesser höchstens 0,01 mm Abweichung, Abstand der Achse zu `at` höchstens 0,01 mm, Achsen parallel (Betrag des Kosinus mindestens 0,9999) |
-| STEP-Rückimport | Gültiger Rückimport, genau ein Volumenkörper, relative Volumenänderung höchstens 1e-6, jede Markierung trifft mindestens eine Fläche |
+| STEP-Rückimport | Gültiger Rückimport, genau ein Volumenkörper, relative Volumenänderung höchstens 1e-6, jede Markierung trifft mindestens eine Fläche, alle geschriebenen semantischen PMI-Maße werden im Rückimport wieder gelesen |
 
 Die Prüfungen laufen nach jedem Modellaufbau, nicht nur beim Export. Tiefe und Durchgang einer Bohrung sowie zusätzliche, nicht erwartete Bohrungen werden nicht geprüft.
 
 ## 8. Export
 
-### 8.1 STEP aus `export_step`
+### 8.1 STEP und GLB aus `export_step`
 
-Der Modellaufbau schreibt `<teil>.step` über eine CadQuery-Baugruppe, Schema AP214 (`AUTOMOTIVE_DESIGN`), Einheit mm:
+Bei bestandenen Prüfungen schreibt der Modellaufbau die STEP-Datei über die Bibliothek `export.py` (8.2): Schema AP242, Einheit mm, mit Farben, Namen, Ebenen und semantischem PMI. Dazu entsteht eine GLB-Datei mit denselben Farben:
 
 | Bedeutung | Farbe (RGB) |
 | --- | --- |
 | Körper | 0,6 / 0,67 / 0,69 |
 | Fläche eines Prüfeintrags, benannt mit dessen ID | 1,0 / 0,5 / 0,0 (orange) |
+| Fläche einer Gewindebohrung | 0,396 / 0,941 / 0,451 (grün) |
 
-Eine Fläche gehört zu einem Prüfeintrag, wenn sie höchstens 0,5 mm von einem seiner Punkte `mark_near` entfernt ist. Bestehen nicht alle Prüfungen, löscht `export_step` STEP, Bericht und Prüfliste des Teils und meldet `ok = false`.
+Eine Fläche gehört zu einem Prüfeintrag, wenn sie höchstens 0,5 mm von einem seiner Punkte `mark_near` entfernt ist. Bestehen nicht alle Prüfungen, löscht `export_step` die Ergebnisdateien des Teils und meldet `ok = false`. Mit `variant="mid"` baut der Export jedes über `refs` gebundene tolerierte Maß auf seiner Toleranzmitte und schreibt nur `<teil>_mid.step` und `report_mid.json`; dafür muss die Bibliothek `tolerances.py` (10) die Toleranztabellen lesen können. Der Bericht des Exports enthält unter `compliance` je toleriertem Maß die Einhaltung beim Nennmaß und bei der Toleranzmitte, oder null ohne Tabellen.
 
 ### 8.2 Bibliothek `export.py`
 
-`export.py` ist geprüft, wird aber von den MCP-Werkzeugen nicht aufgerufen. Es stellt bereit:
+`export.py` schreibt die STEP- und GLB-Dateien von `export_step` (8.1) und ist selbst geprüft. Es stellt bereit:
 
 - **STEP AP242** (`AP242_MANAGED_MODEL_BASED_3D_ENGINEERING_MIM_LF`) über den XCAF-Writer von OpenCascade, mit Farben, Namen, Ebenen und semantischem PMI.
-- **Semantisches PMI:** Bohrungsdurchmesser als `DIMENSIONAL_SIZE` mit Passung (`LIMITS_AND_FITS`) oder Plus-Minus-Toleranz. Ein angenommenes, fehlendes Längenmaß zwischen zwei parallelen Ebenen als `DIMENSIONAL_LOCATION` mit der Beschreibung „ANNAHME: <Annahme> - <Begründung> - bitte prüfen“.
-- **Markierung:** Prüfflächen orange, benannt „PRÜFEN <id>“, auf der Ebene `ASSUMED_CHECK`. Gewindebohrungen grün (0,396 / 0,941 / 0,451). Namen und Beschreibungen werden in ASCII umgesetzt („Ø“ wird „dia“).
-- **GLB** für Web-Ansichten, mit denselben Farben, dazu `marks.json` (Farbe zu Prüfeintrags-IDs). PMI und Ebenen gehen im GLB verloren.
+- **Semantisches PMI:** Bohrungsdurchmesser als `DIMENSIONAL_SIZE` mit Passung (`LIMITS_AND_FITS`) oder Plus-Minus-Toleranz. Ein angenommenes, fehlendes Längenmaß zwischen zwei parallelen Ebenen als `DIMENSIONAL_LOCATION` mit der Beschreibung „ANNAHME: <Annahme> - <Begründung> - bitte prüfen“. Die Einträge erzeugt `pmi_from` aus der `PartSpec` und dem Prüfergebnis des Aufbaus.
+- **Markierung:** Prüfflächen orange, benannt „PRUEFEN <id>“ (ASCII), auf der Ebene `ASSUMED_CHECK`. Gewindebohrungen grün (0,396 / 0,941 / 0,451). Namen und Beschreibungen werden in ASCII umgesetzt („Ø“ wird „dia“).
+- **GLB** für Web-Ansichten, mit denselben Farben (Material wird matt gesetzt), dazu `marks.json` (Farbe zu Prüfeintrags-IDs). PMI und Ebenen gehen im GLB verloren.
 - **PMI-Leser** `read_pmi`: Schema, Maße mit Toleranz und Passung, Farben und Ebenen einer STEP-Datei.
 
 ## 9. Prüfliste und Rückverfolgbarkeit
 
-`export_step` schreibt die Prüfliste als deutschsprachige Markdown-Datei `review.md` und als `review.json`. `review.md` beginnt mit Titel, Teil, Zeichnung, Maßstab und Allgemeintoleranz und endet mit der Zeile `Alle Prüfungen bestanden: ja` oder `Alle Prüfungen bestanden: nein`. Dazwischen stehen diese Abschnitte:
+`export_step` schreibt die Prüfliste als deutschsprachige Markdown-Datei `review.md` und als `review.json`. `review.md` beginnt mit Titel, Teil, Zeichnung mit Seite, Maßstab und Allgemeintoleranz und endet mit der Zeile `Alle Prüfungen bestanden: ja` oder `Alle Prüfungen bestanden: nein`. Dazwischen stehen diese Abschnitte:
 
 | Abschnitt | Inhalt |
 | --- | --- |
-| Annahmen und offene Punkte | Je Prüfeintrag: Maße, Problem, Annahme, Grund, Quelle auf der Zeichnung, Zahl der markierten Flächen |
+| Annahmen und offene Punkte | Je Prüfeintrag: Maße, Problem, Annahme, Grund, Quelle auf der Zeichnung, Zahl der markierten Flächen in der STEP-Datei |
 | Zeichnungshinweise | Hinweise der Zeichnung |
 | Rückverfolgbarkeit | Je Eintrag in `refs`: Operation, Parameter, aktueller Wert, Maß-ID, gedruckter Text |
 | Werte ohne Maßbezug | Größen einer Operation ohne `refs` und ohne gleich großes Maß (Abstand höchstens 0,01 mm): abgeleitete oder geschätzte Werte |
+| Toleranzen | Je toleriertem Maß: Nennmaß, Grenzmaße, Toleranzmitte, Quelle, Einhaltung beim Nennmaß und bei der Toleranzmitte; ohne Toleranztabellen der Hinweis, dass sie fehlen |
+| PMI in der STEP-Datei | Maße, die `read_pmi` in der geschriebenen STEP-Datei findet: Art, Wert, Toleranz oder Passung, Flächen, Beschreibung |
 | Prüfungen | Alle Prüfungen mit Soll, Ist und Ergebnis |
 
-`review.json` enthält dieselben Daten unter `assumptions`, `notes`, `traceability`, `unreferenced`, `validation` und `all_ok`.
+`review.json` enthält dieselben Daten unter `assumptions`, `notes`, `traceability`, `unreferenced`, `tolerances`, `pmi`, `validation` und `all_ok`.
 
 ## 10. Toleranzen (Bibliothek `tolerances.py`)
 
-`tolerances.py` ist geprüft, wird aber von den MCP-Werkzeugen nicht aufgerufen.
+`tolerances.py` ist Teil von `export_step`: Der Export nutzt sie für die Einhaltung im Bericht und mit `variant="mid"` für den Aufbau auf den Toleranzmitten (8.1); dafür muss sie die Tabellen lesen können.
 
 - **Grenzabmaße** eines Maßes, in dieser Reihenfolge: die gedruckten (`tol_upper` und `tol_lower`), die Passung nach ISO 286 (`fit`), die Allgemeintoleranz nach ISO 2768 (`general_tolerance`, nur für Längen, Durchmesser und Radien). Ohne Angabe sind beide Abmaße 0.
 - **Tabellen:** XML-Dateien im Ordner `D2C_TABLES`, `*isolim*.xml` für ISO 286 und `*toltabs*.xml` für ISO 2768. Liegt ein Maß außerhalb der Tabelle oder fehlt eine Klasse, meldet das Modul einen Fehler; es extrapoliert nicht.
@@ -265,10 +272,15 @@ Eine Fläche gehört zu einem Prüfeintrag, wenn sie höchstens 0,5 mm von einem
 ```
 results/<teil>/
   spec.json, ops.json        nach submit_spec und nach jedem übernommenen Modellaufbau
-  <teil>.step                nach erfolgreichem export_step: Modell
+  <teil>.step                nach erfolgreichem export_step: Modell (AP242 mit semantischem PMI)
+  <teil>.glb, marks.json     nach erfolgreichem export_step: 3D-Ansicht und Zuordnung der Farben zu Prüfeinträgen
+  pmi.json                   nach erfolgreichem export_step: Maße, die read_pmi in der STEP-Datei liest
   report.json                nach erfolgreichem export_step: Prüfbericht
   review.md, review.json     nach erfolgreichem export_step: Prüfliste
+  <teil>_mid.step, report_mid.json   nach export_step mit variant="mid"
 ```
+
+`results/EVAL.json` ordnet Teilen eine Zeile aus der Auswertung zu, die die Web-Oberfläche anzeigt.
 
 ## 12. Web-Oberfläche
 
@@ -279,6 +291,7 @@ Gestaltung und Verhalten der Oberfläche: `docs/web-design.md`.
 | Methode und Pfad | Zweck |
 | --- | --- |
 | `GET /` | Oberfläche (`static/index.html`) |
+| `GET /api/models` | Modellwahl: Werte wie `claude/<m>`, `ollama/<m>` und `custom/<m>`; ohne gefundene Claude-Anmeldung sind die Claude-Optionen gesperrt |
 | `GET /api/parts` | Alle Teile: Name, Titel, `all_ok`, Zahl der Prüfeinträge, Dateien, Zeile des Teils aus `results/EVAL.json`, falls vorhanden |
 | `GET /api/parts/{name}` | Ein Teil wie oben, dazu Spec, Prüfliste und Bericht |
 | `GET /api/parts/{name}/drawing.png` | Erste Seite der Zeichnung des Teils, 100 dpi |
@@ -286,11 +299,12 @@ Gestaltung und Verhalten der Oberfläche: `docs/web-design.md`.
 | `POST /api/runs` | Zeichnung hochladen und Lauf starten |
 | `GET /api/runs/{run_id}/events` | Ereignisse eines Laufs als Server-Sent Events |
 
-- **Hochladen:** Formularfelder `pdf`, `part` und optional `model` (sonst `D2C_LLM_MODEL`). Angenommen werden nur PDF-Dateien (Signatur `%PDF`). Die Datei wird unter `<D2C_DATA>/uploads/<part>.pdf` gespeichert, die Antwort ist `{"run_id": ...}`. Ohne `D2C_LLM_BASE_URL` antwortet der Endpunkt mit 503, bei fehlender Datei, ungültigem Teilnamen, anderem Dateityp oder fehlendem Modell mit 400.
-- **Ereignisse:** Je Ereignis eine Zeile `data: <JSON>`. Das letzte Ereignis hat den Typ `done`: vom Agenten selbst, sonst aus seinem Rückgabewert, bei einer Ausnahme mit `ok = false` und `reason`. Danach endet der Strom. Läufe und Ereignisse liegen im Speicher des Prozesses; jede Verbindung erhält alle Ereignisse ab dem ersten.
-- **Agent-Schnittstelle:** Ein Lauf ruft `d2c.agent.run_agent(pdf, part, model, base_url, api_key, build_model, server, on_event)` als Coroutine auf. `on_event` erhält jedes Ereignis als Objekt. Das Modul `d2c.agent` ist nicht Teil dieses Repositorys.
+- **Hochladen:** Formularfelder `pdf`, `part` und optional `model` (sonst `D2C_LLM_MODEL`). Angenommen werden PDF (Signatur `%PDF`) sowie PNG und JPG (an der Dateisignatur, nicht an der Endung); ein Bild wird zu einer einseitigen PDF-Datei umgewandelt. Die Datei wird unter `<D2C_DATA>/uploads/<part>.pdf` gespeichert, die Antwort ist `{"run_id": ...}`. Größer als 20 MB antwortet der Endpunkt mit 413, bei fehlender Datei, ungültigem Teilnamen, anderem Dateityp oder fehlendem Modell bei gesetztem `D2C_LLM_BASE_URL` mit 400.
+- **Modellwahl (`GET /api/models`):** Claude-Modelle (Sonnet, Opus, Haiku) als `claude/<m>`, die Modelle der Ollama an `D2C_OLLAMA_URL` als `ollama/<m>` und das Modell aus `D2C_LLM_BASE_URL` und `D2C_LLM_MODEL` als `custom/<m>`. Eine Claude-Anmeldung ist gefunden, wenn `ANTHROPIC_API_KEY` oder `CLAUDE_CODE_OAUTH_TOKEN` gesetzt ist oder die Anmeldung von Claude Code auf diesem Rechner existiert; sonst sind die Claude-Optionen gesperrt.
+- **Agent:** Ein Lauf ruft `d2c.agent.run_agent(pdf, part, model, base_url, api_key, build_model, server, on_event)` als Coroutine auf; `on_event` erhält jedes Ereignis als Objekt. Das Modul `d2c.agent` läuft auf dem Claude Agent SDK (4.4) und erreicht das Modell über den Claude-Login oder einen Anthropic-Schlüssel (`claude/<m>`), über die Ollama an `D2C_OLLAMA_URL` (`ollama/<m>`) oder über den Anthropic-kompatiblen Endpunkt `D2C_LLM_BASE_URL`, etwa OpenRouter (`custom/<m>` oder freier Modellname). Ohne Modellwahl wird der Wert von `D2C_LLM_API_KEY` als Anthropic-Schlüssel verwendet, sonst die Anmeldung von Claude Code.
+- **Ereignisse:** Je Ereignis eine Zeile `data: <JSON>`, Typen sind `phase`, `tool_call`, `tool_result`, `message` und `done`. Das letzte Ereignis hat den Typ `done`: vom Agenten selbst, sonst aus seinem Rückgabewert, bei einer Ausnahme mit `ok = false` und `reason`. Danach endet der Strom. Läufe und Ereignisse liegen im Speicher des Prozesses; jede Verbindung erhält alle Ereignisse ab dem ersten.
 - **Dateinamen** in Pfaden dürfen weder `/`, `\`, `..` noch NUL enthalten.
-- **Statische Dateien** unter `/static/`: `index.html`, `style.css` und `vendor/model-viewer.min.js` (Lizenz in `vendor/model-viewer.LICENSE`). Das in `index.html` eingebundene Skript `static/app.js` ist nicht enthalten.
+- **Statische Dateien** unter `/static/`: `index.html`, `style.css` und `app.js`, dazu `vendor/model-viewer.min.js` (Lizenz in `vendor/model-viewer.LICENSE`) und die Schriften `InterTight` und `JetBrains Mono` unter `vendor/fonts` mit deren Lizenzen.
 
 ## 13. Konfiguration
 
@@ -300,12 +314,14 @@ Gestaltung und Verhalten der Oberfläche: `docs/web-design.md`.
 | --- | --- | --- |
 | `D2C_DATA` | `/data` | Ordner der Zeichnungen |
 | `D2C_RESULTS` | `/app/results` | Ergebnisordner |
-| `D2C_TABLES` | `/tables` | Toleranztabellen (nur `tolerances.py`) |
+| `D2C_TABLES` | `/tables` | Toleranztabellen (`tolerances.py`) |
 | `D2C_TIMEOUT` | `60` | Zeitlimit eines Modellaufbaus in Sekunden |
-| `D2C_LLM_BASE_URL`, `D2C_LLM_API_KEY`, `D2C_LLM_MODEL`, `D2C_LLM_BUILD_MODEL` | leer | Einstellungen für Läufe aus der Web-Oberfläche |
+| `D2C_LLM_BASE_URL`, `D2C_LLM_API_KEY`, `D2C_LLM_MODEL`, `D2C_LLM_BUILD_MODEL` | leer | Endpunkt und Modelle für Läufe aus der Web-Oberfläche und der Kommandozeile |
+| `D2C_OLLAMA_URL` | `http://localhost:11434` | Ollama, dessen Modelle die Modellwahl listet und das `ollama/<m>`-Läufe erreicht |
 | `D2C_MCP_URL` | `stdio` | Verbindung des Laufs zum MCP-Server |
+| `ANTHROPIC_API_KEY`, `CLAUDE_CODE_OAUTH_TOKEN` | leer | Zugang des Agenten zum Claude-Backend; ohne beide zählt die Anmeldung von Claude Code auf diesem Rechner |
 
-Alle Variablen werden bei jedem Aufruf neu gelesen.
+Alle D2C-Variablen werden bei jedem Aufruf neu gelesen.
 
 ### 13.2 Datenordner
 
@@ -315,20 +331,26 @@ Die Ordner liegen außerhalb des Container-Images und werden beim Start eingehä
 | --- | --- | --- |
 | `drawings/` | `/data` | PDF-Zeichnungen, Unterordner `uploads/` für hochgeladene Zeichnungen |
 | `results/` | `/app/results` | Ergebnisse |
-| `tables/` | `/tables` | Toleranztabellen für `tolerances.py` |
+| `tables/` | `/tables` | Toleranztabellen für `tolerances.py` (im Container nur lesend eingehängt) |
 
 ## 14. Sicherheit und Isolation
 
-- **Netzwerk:** Standard ist stdio; mit `docker run --network none` hat der Server keinen Netzwerkzugang. Der HTTP-Modus ist optional. Gebunden an `127.0.0.1`, `localhost` oder `::1` nimmt er nur Loopback-Werte in den Headern `Host` und `Origin` an und antwortet sonst mit 421, im Container wird er deshalb an `0.0.0.0` gebunden.
+- **Netzwerk:** Der Agent erreicht den Server über `D2C_MCP_URL`: `stdio` (Standard), eine http(s)-URL oder eine Befehlszeile wie ein `docker run --network none` je Lauf. Mit `docker run --network none` hat der Server keinen Netzwerkzugang. Der HTTP-Modus ist optional. Gebunden an `127.0.0.1`, `localhost` oder `::1` nimmt er nur Loopback-Werte in den Headern `Host` und `Origin` an und antwortet sonst mit 421, im Container wird er deshalb an `0.0.0.0` gebunden.
 - **Modellaufbau:** Jeder Durchlauf läuft in einem eigenen Prozess `python -I -m d2c.worker` in einer eigenen Prozessgruppe, mit temporärem Arbeitsordner und nur der Umgebungsvariablen `PATH`. Grenzen: Zeitlimit `D2C_TIMEOUT`, danach wird die Prozessgruppe beendet; Adressraum 4 GiB; Dateigröße 200 MiB; CPU-Zeit 4 · ⌈Zeitlimit⌉ + 10 s.
 - **Skripte:** `run_script` lehnt Importe, die Namen `open`, `exec`, `eval`, `compile`, `__import__`, `globals`, `locals`, `vars`, `getattr`, `setattr`, `delattr`, `input` und `breakpoint` sowie Namen und Attribute mit führendem Unterstrich ab. Das Skript sieht nur `cq`, `math`, `result` und 15 einfache Builtins.
 - **Pfade:** Zeichnungen nur als `.pdf` unterhalb von `D2C_DATA`, aufgelöst über ihr tatsächliches Ziel. Teilnamen nur aus Buchstaben, Ziffern, `_` und `-`.
 - **Web-Oberfläche:** Sie hat keine Anmeldung und lauscht standardmäßig auf allen Schnittstellen (0.0.0.0).
-- **Geheimnisse:** Zugangsdaten nur über Umgebungsvariablen, nie im Repository.
+- **Geheimnisse:** Zugangsdaten nur über Umgebungsvariablen, nie im Repository. An einen stdio-Server reicht der Agent die D2C-Einstellungen ohne LLM- und Schlüsselvariablen weiter, Schlüssel und Token bleiben leer.
 
 ## 15. Betrieb
 
 ```
+# Lokal: Web-App auf 127.0.0.1, MCP-Server je Lauf ohne Netzwerk im Docker-Container
+./start.sh              # baut das Image und startet die Web-Oberfläche, Standard-Port 8080
+
+# Alles in Containern: der MCP-Dienst liegt im internen Netz sandbox, die Web-App bedient Port 8080
+docker compose up --build
+
 # Container-Image bauen und Tests ausführen
 docker build -t d2c .
 docker run --rm d2c pytest -q
@@ -346,15 +368,14 @@ docker run --rm -p 8765:8765 d2c python -m d2c.server --http 0.0.0.0:8765
 docker run --rm -p 8080:8080 -v "$PWD/results":/app/results -v "$PWD/drawings":/data d2c python -m d2c.web
 ```
 
-Die Demo schreibt nach `/tmp/d2c-demo` im Container; mit `-v "$PWD/out":/out` und `--out /out` bleiben die Dateien erhalten. Sie gibt je Prüfung eine Zeile `PASS` oder `FAIL` aus, dann die Annahmen, die geschriebenen Dateien und `All checks passed: yes` oder `no`. Der Exit-Code ist 0 nur bei erfolgreichem Export.
+`start.sh` setzt `D2C_DATA`, `D2C_RESULTS` und `D2C_TABLES` auf die Repo-Ordner und `D2C_MCP_URL` auf eine Befehlszeile mit `docker run -i --rm --network none`, die die Ordner als Volumes einhängt; die Web-Oberfläche läuft mit `uv` auf dem eigenen Rechner und nutzt die Anmeldung von Claude Code. Die Demo liest die Toleranztabellen der Test-Fixtures (`D2C_TABLES`) und schreibt nach `/tmp/d2c-demo` im Container; mit `-v "$PWD/out":/out` und `--out /out` bleiben die Dateien erhalten. Sie gibt je Prüfung eine Zeile `PASS` oder `FAIL` aus, dann die Annahmen, die geschriebenen Dateien und `All checks passed: yes` oder `no`. Der Exit-Code ist 0 nur bei erfolgreichem Export.
 
-Tests mit dem Marker `bct` brauchen Beispieldaten unter `/app/data` und werden sonst übersprungen. Die CI (`.github/workflows/ci.yml`) baut das Image und führt Tests und Demo auf x86_64 und arm64 aus.
+Tests mit dem Marker `bct` brauchen Beispieldaten unter `/app/data` und werden sonst übersprungen.
 
 ## 16. Grenzen
 
 - Maße werden nur aus Vektorgeometrie gemessen. Bei gescannten Zeichnungen liest das Modell die Maße aus dem gerenderten Bild.
 - Gewinde werden als Kernlochbohrung modelliert, Form- und Lagetoleranzen nicht als semantisches PMI.
-- `export.py` und `tolerances.py` sind nicht an die MCP-Werkzeuge angebunden. Das STEP aus `export_step` ist AP214 mit Farben und benannten Flächen, ohne semantisches PMI und ohne GLB.
-- Das Modul `d2c.agent` ist nicht enthalten. Läufe aus der Web-Oberfläche brauchen es.
-- Die Browser-Oberfläche ist ein Gerüst: Das Skript `static/app.js` fehlt. Nutzbar ist die JSON-API.
+- Das GLB enthält Farben, aber keine Namen, kein PMI und keine Ebenen; die Zuordnung der Farbe zu den Prüfeinträgen steht in `marks.json`.
+- `variant="mid"` und die Einhaltung im Bericht brauchen die Toleranztabellen; ohne sie bleibt `compliance` null und der Aufbau auf Toleranzmitte entfällt.
 - Der Server verwaltet alle Teile in einer Sitzung ohne Sperren. Gleichzeitige Aufrufe für dasselbe Teil sind nicht vorgesehen.
