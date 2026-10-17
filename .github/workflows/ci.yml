@@ -1,0 +1,22 @@
+name: CI
+
+on: [push, pull_request]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, ubuntu-24.04-arm]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+      - name: Build the image
+        run: docker build -t d2c .
+      - name: Run the tests
+        run: docker run --rm --network none d2c pytest -q
+      - name: Run the demo
+        run: docker run --rm --network none d2c python -m d2c.demo
