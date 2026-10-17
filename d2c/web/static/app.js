@@ -563,7 +563,7 @@ function reset3D(message = "Das 3D-Modell erscheint nach dem Export, mit Farben.
   state.marks = null;
   viewer.hidden = true;
   viewer.classList.remove("is-pending");
-  viewer.removeAttribute("src");
+  viewer.src = null; // model-viewer spiegelt src nicht ins Attribut: die Eigenschaft setzen, nicht das Attribut
   $("#view-buttons").hidden = true;
   $("#step-link").hidden = true;
   const hint = $("#view-hint");
@@ -597,8 +597,8 @@ async function setup3D(detail, token) {
   hint.hidden = false;
   hint.textContent = "3D-Modell wird geladen …";
   const url = `/files/${enc(detail.name)}/${enc(glb)}`;
-  if (viewer.getAttribute("src") === url) { // dieselbe Datei erneut feuert kein load: erst leeren
-    viewer.removeAttribute("src");
+  if (viewer.src === url) { // dieselbe Datei erneut feuert kein load: erst leeren
+    viewer.src = null;
     await new Promise(requestAnimationFrame);
     if (token !== openToken) return;
   }
@@ -744,7 +744,7 @@ function renderValidation(detail) {
   const passed = rows.filter((r) => r.ok).length;
   const status = (ok) => ok
     ? h("span", { class: "ok" }, icon("check", 14), " ", sr("bestanden"))
-    : h("span", { class: "fail" }, icon("cross", 14), " FEHLGESCHLAGEN");
+    : h("span", { class: "fail" }, icon("cross", 14), " FEHLER");
   fill(panel,
     h("div", { class: "kpi" }, h("span", { class: "kpi-number" }, `${passed}/${rows.length}`), h("span", { class: "label" }, "bestandene Prüfungen")),
     table(["Prüfung", "Soll", "Ist", "Ergebnis"], rows.map((r) => h("tr", {},
@@ -1036,7 +1036,7 @@ function logRow(entry) {
   const detail = entry.detail ? h("details", {}, h("summary", {}, entry.kind === "CALL" ? "Argumente" : "Text"), h("pre", {}, entry.detail)) : null;
   return h("tr", { class: `log-${entry.kind.toLowerCase()}` },
     h("td", { class: "mono t" }, clock(entry.at)),
-    h("td", { class: "mono kind" }, entry.kind === "FAIL" ? h("span", { class: "fail" }, icon("cross", 12), " FEHLGESCHLAGEN") : entry.kind),
+    h("td", { class: "mono kind" }, entry.kind === "FAIL" ? h("span", { class: "fail" }, icon("cross", 12), " FEHLER") : entry.kind),
     h("td", { class: "mono tool" }, entry.label),
     h("td", { class: "mono what" }, entry.dur != null ? `${(entry.dur / 1000).toFixed(1)} s  ` : "", entry.summary, detail));
 }
