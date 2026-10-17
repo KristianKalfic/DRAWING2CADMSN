@@ -1,0 +1,37 @@
+# The MCP server builds the models and has no way out: it sits on an internal network that only the web app joins.
+# The web app serves the results, takes uploads and starts agent runs.
+# LLM settings go into an optional .env next to this file (see .env.example); without it the app starts anyway
+# and an upload answers with a hint instead of starting a run.
+services:
+  mcp:
+    build: .
+    image: d2c:latest
+    command: python -m d2c.server --http 0.0.0.0:8765
+    networks: [sandbox]
+    volumes:
+      - ./drawings:/data:ro
+      - ./tables:/tables:ro
+      - ./results:/app/results
+
+  app:
+    build: .
+    image: d2c:latest
+    command: python -m d2c.web --port 8080
+    depends_on: [mcp]
+    networks: [sandbox, default]
+    ports:
+      - "8080:8080"
+    environment:
+      D2C_MCP_URL: http://mcp:8765/mcp
+    env_file:
+      - path: .env
+        required: false
+    extra_hosts:
+      - "host.docker.internal:host-gateway" # an Ollama on the host
+    volumes:
+      - ./results:/app/results
+      - ./drawings:/data # writable: uploads land in uploads/
+
+networks:
+  sandbox:
+    internal: true
