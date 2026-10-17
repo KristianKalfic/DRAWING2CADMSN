@@ -87,11 +87,11 @@ def solid_check(wp: cq.Workplane) -> dict:
     }
 
 
-def _check_hole(cylinders: list[tuple[gp_Cylinder, bool]], hole: ExpectedHole) -> dict:
+def _check_hole(cylinders: list[tuple[gp_Cylinder, bool]], hole: ExpectedHole, tol: float) -> dict:
     """The dimension_check entry of one expected hole.
 
-    A cylinder is the hole if it is concave and its diameter, the distance of hole.at from its axis
-    and the direction of its axis are all within tolerance. `actual` is that cylinder, or else the
+    A cylinder is the hole if it is concave and its diameter and the distance of hole.at from its axis
+    are within tol and the direction of its axis is parallel. `actual` is that cylinder, or else the
     one (concave or not) whose axis runs closest to hole.at; None if the shape has no cylindrical face.
     """
     point, direction = gp_Pnt(*hole.at), gp_Dir(*hole.axis)
@@ -108,8 +108,8 @@ def _check_hole(cylinders: list[tuple[gp_Cylinder, bool]], hole: ExpectedHole) -
         f
         for f in found
         if f["concave"]
-        and abs(f["d"] - hole.d) <= LINEAR_TOL
-        and f["dist"] <= LINEAR_TOL
+        and abs(f["d"] - hole.d) <= tol
+        and f["dist"] <= tol
         and f["cos"] >= AXIS_COS
     ]
     nearest = min(hits or found, key=lambda f: f["dist"], default=None)
@@ -124,10 +124,11 @@ def _check_hole(cylinders: list[tuple[gp_Cylinder, bool]], hole: ExpectedHole) -
     }
 
 
-def dimension_check(wp: cq.Workplane, expected: Expected) -> list[dict]:
+def dimension_check(wp: cq.Workplane, expected: Expected, tol: float = LINEAR_TOL) -> list[dict]:
     """R8b: overall size and every expected hole against the model, one entry per check.
 
-    The size compares the edge lengths of the bounding box in model coordinates.
+    The size compares the edge lengths of the bounding box in model coordinates. tol (mm) is how far
+    a size, a hole diameter and a hole position may be off; a model built on the tolerance mid needs more.
     """
     shape = wp.val()
     box = _bbox(shape)
@@ -137,13 +138,13 @@ def dimension_check(wp: cq.Workplane, expected: Expected) -> list[dict]:
             "check": f"bbox_{axis}",
             "expected": want,
             "actual": got,
-            "ok": abs(got - want) <= LINEAR_TOL,
+            "ok": abs(got - want) <= tol,
             "dim_ids": [],
         }
         for axis, want, got in zip("xyz", expected.bbox, sizes)
     ]
     cylinders = _cylinders(shape)
-    return checks + [_check_hole(cylinders, hole) for hole in expected.holes]
+    return checks + [_check_hole(cylinders, hole, tol) for hole in expected.holes]
 
 
 def select_faces(shape: cq.Shape, near: Sequence[Point], tol: float = 0.5) -> list[cq.Face]:
@@ -152,37 +153,36 @@ def select_faces(shape: cq.Shape, near: Sequence[Point], tol: float = 0.5) -> li
     return [face for face in shape.Faces() if any(face.distance(p) <= tol for p in points)]
 
 
-def _export_step(shape: cq.Shape, path: str, marked: Sequence[tuple[str, Sequence[cq.Face]]]) -> None:
-    """Write the shape as STEP with a steel-colored body and orange faces named after their mark."""
-    asm = cq.Assembly(shape, name=Path(path).stem, color=cq.Color(0.6, 0.67, 0.69))
-    for mark_id, faces in marked:
-        for face in faces:
-            asm.addSubshape(face, name=mark_id, color=cq.Color(1.0, 0.5, 0.0))
-    asm.export(path, exportType="STEP")  # explicit: a *.stp name would not be recognized
-
-
-def step_roundtrip(wp: cq.Workplane, path: str, marks: Sequence[dict] = ()) -> dict:
-    """R8c: write the model as STEP, read it back and compare.
+def step_roundtrip(
+    wp: cq.Workplane, path: str, marks: Sequence[dict] = (), pmi: Sequence[dict] = (), threads: Sequence[dict] = ()
+) -> dict:
+    """R8c: write the model as STEP AP242, read it back and compare.
 
     marks are {"id": str, "near": [(x, y, z), ...]}: the faces near a mark's points are colored and
-    named after its id. A mark that finds no face makes the result not ok.
+    named after its id. A mark that finds no face makes the result not ok. pmi and threads go to
+    export.write_step (green thread faces, semantic dimensions); the dimensions read back from the
+    file must be as many as were written.
     """
+    from d2c.export import read_pmi, write_step  # imported here: export imports this module
+
     shape = wp.val()
     selected = [(m["id"], select_faces(shape, m["near"])) for m in marks]
-    _export_step(shape, path, selected)
+    written = write_step(shape, path, name=Path(path).stem, marks=marks, pmi=pmi, threads=threads)["pmi_written"]
 
     back = cq.Compound.makeCompound(cq.importers.importStep(path).vals())
     valid, solids = back.isValid(), len(back.Solids())
     volume = shape.Volume()
     volume_rel_diff = abs(back.Volume() - volume) / abs(volume)
     mark_report = [{"id": mark_id, "faces": len(faces)} for mark_id, faces in selected]
-    ok = valid and solids == 1 and volume_rel_diff <= VOLUME_REL_TOL
+    pmi_report = {"written": written, "read_back": len(read_pmi(path)["dimensions"])}
+    ok = valid and solids == 1 and volume_rel_diff <= VOLUME_REL_TOL and pmi_report["read_back"] == written
     return {
         "path": path,
         "reimport_valid": valid,
         "solids": solids,
         "volume_rel_diff": volume_rel_diff,
         "marks": mark_report,
+        "pmi": pmi_report,
         "ok": ok and all(m["faces"] > 0 for m in mark_report),
     }
 

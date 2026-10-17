@@ -103,7 +103,8 @@ def _limits(cpu_seconds: int) -> None:
 def run_worker(payload: dict, timeout: float | None = None) -> dict:
     """Build and check the ops of the payload in a fresh worker process and return its report.
 
-    The payload is {"ops": [...], "expected": {...} | None, "marks": [...], "export_path": str | None}.
+    The payload is {"ops": [...], "expected": {...} | None, "marks": [...], "export_path": str | None} and
+    optionally "pmi_spec", "glb_path" and "tol" (see d2c.worker).
     timeout is the wall clock limit in seconds, by default D2C_TIMEOUT (60). The result always has the
     keys ok, error, solid, dims, build_notes and roundtrip; a timeout, a crash or a rejected script
     is a report with `error` set.

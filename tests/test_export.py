@@ -191,6 +191,20 @@ def test_pmi_from_skips_what_it_cannot_place(demo):
     assert distances(mark_near=[(35, 0, 10), (12, 0, 25)]) == []  # z=10 and z=25 are 15 apart, not the assumed 10
 
 
+def test_pmi_from_tolerance_follows_the_build():
+    """A hole 0.05 over its drawn size gets its diameter only if the caller allows that much, as for a mid build."""
+    spec = PartSpec.model_validate({
+        "name": "plate", "drawing": "Demo/plate.pdf", "title": "Plate", "scale": "1:1", "views": [], "features": [],
+        "dimensions": [dimension("d10", "diameter", 10, "Ø10")],
+        "expected": {"bbox": [30, 20, 10],
+                     "holes": [{"d": 10, "at": [0, 0, 0], "axis": [0, 0, 1], "dim_ids": ["d10"]}]},
+        "review": [],
+    })
+    shape = drilled(d=10.05)
+    assert pmi_from(spec, [], shape, report(spec)) == []
+    assert [e["value"] for e in pmi_from(spec, [], shape, report(spec), tol=0.1)] == [10]
+
+
 def test_mark_and_thread_colors(demo, tmp_path):
     info = read_pmi(demo.path)
     assert info["colors"] == {STEEL: 1, ORANGE: 2}

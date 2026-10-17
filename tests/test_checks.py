@@ -8,6 +8,7 @@ from OCP.BRepBuilderAPI import BRepBuilderAPI_MakeFace
 from OCP.Geom import Geom_CylindricalSurface, Geom_RectangularTrimmedSurface
 from OCP.gp import gp_Ax3
 
+from d2c import export
 from d2c.checks import dimension_check, metrics, solid_check, step_roundtrip
 from d2c.spec import Expected, ExpectedHole
 
@@ -168,6 +169,7 @@ def test_roundtrip_ok(tmp_path, monkeypatch):
         "solids": 1,
         "volume_rel_diff": pytest.approx(0, abs=1e-6),
         "marks": [],
+        "pmi": {"written": 0, "read_back": 0},
         "ok": True,
     }
     assert (tmp_path / "plate.step").stat().st_size > 0
@@ -195,10 +197,32 @@ def test_marked_faces_colored(tmp_path):
     assert result["ok"] is True
     text = path.read_text()
     assert text.count("COLOUR_RGB") >= 2  # steel body and the orange face
-    assert "ADVANCED_FACE('rv1'" in text
+    assert "ADVANCED_FACE('CHECK rv1'" in text
+    assert "AP242_MANAGED_MODEL_BASED_3D_ENGINEERING_MIM_LF" in text
     back = cq.importers.importStep(str(path)).val()
     assert back.isValid()
     assert len(back.Solids()) == 1
+
+
+def test_roundtrip_fails_when_pmi_is_lost(tmp_path, monkeypatch):
+    plate = plate_with_hole()
+    bore = next(f for f in plate.val().Faces() if f.geomType() == "CYLINDER")
+    entry = {"type": "diameter", "face": bore, "value": 5.0, "tol_upper": None, "tol_lower": None, "fit": "H7"}
+    result = step_roundtrip(plate, str(tmp_path / "plate.step"), pmi=[entry])
+    assert (result["pmi"], result["ok"]) == ({"written": 1, "read_back": 1}, True)
+
+    # a dimension that does not come back from the file fails the round trip while the solid is fine
+    monkeypatch.setattr(export, "read_pmi", lambda _: {"dimensions": []})
+    result = step_roundtrip(plate, str(tmp_path / "plate.step"), pmi=[entry])
+    assert (result["pmi"], result["reimport_valid"], result["ok"]) == ({"written": 1, "read_back": 0}, True, False)
+
+
+def test_roundtrip_colors_thread_faces(tmp_path):
+    tapped = cq.Workplane().box(*PLATE).faces(">Z").workplane().pushPoints([(10, 5)]).hole(4.2)
+    thread = {"at": (10.0, 5.0, 0.0), "axis": (0.0, 0.0, 1.0), "d": 4.2}
+    path = str(tmp_path / "tapped.step")
+    assert step_roundtrip(tapped, path, threads=[thread])["ok"] is True
+    assert export.read_pmi(path)["colors"] == {"#99abb0": 1, "#65f073": 1}  # steel body, green thread
 
 
 def test_mark_without_face_not_ok(tmp_path):

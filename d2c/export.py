@@ -106,8 +106,11 @@ def _labels(sequence: TDF_LabelSequence) -> list[TDF_Label]:
     return [sequence.Value(i) for i in range(1, sequence.Length() + 1)]
 
 
-def _cylinder_faces(shape: cq.Shape, hole: dict) -> list[cq.Face]:
-    """The cylindrical faces of the hole {"d", "at", "axis"}: its diameter, an axis through `at`, its direction."""
+def _cylinder_faces(shape: cq.Shape, hole: dict, tol: float = LINEAR_TOL) -> list[cq.Face]:
+    """The cylindrical faces of the hole {"d", "at", "axis"}: its diameter, an axis through `at`, its direction.
+
+    The diameter and the distance of the axis from `at` may be off by tol.
+    """
     point, direction = gp_Pnt(*hole["at"]), gp_Dir(*hole["axis"])
     faces = []
     for face in shape.Faces():
@@ -116,8 +119,8 @@ def _cylinder_faces(shape: cq.Shape, hole: dict) -> list[cq.Face]:
             continue
         cylinder = surface.Cylinder()
         if (
-            abs(2 * cylinder.Radius() - hole["d"]) <= LINEAR_TOL
-            and gp_Lin(cylinder.Axis()).Distance(point) <= LINEAR_TOL
+            abs(2 * cylinder.Radius() - hole["d"]) <= tol
+            and gp_Lin(cylinder.Axis()).Distance(point) <= tol
             and abs(cylinder.Axis().Direction().Dot(direction)) >= AXIS_COS
         ):
             faces.append(face)
@@ -262,13 +265,13 @@ def _size(dim: Dimension) -> dict:
     return {"value": dim.value, "tol_upper": dim.tol_upper, "tol_lower": dim.tol_lower}
 
 
-def _hole_pmi(dims: dict[str, Dimension], shape: cq.Shape, report: dict) -> list[dict]:
+def _hole_pmi(dims: dict[str, Dimension], shape: cq.Shape, report: dict, tol: float) -> list[dict]:
     entries = []
     for check in report["dims"]:
         if check["check"] != "hole" or not check["ok"]:
             continue
         diameters = [dims[i] for i in check["dim_ids"] if i in dims and dims[i].kind == "diameter"]
-        faces = _cylinder_faces(shape, check["expected"])
+        faces = _cylinder_faces(shape, check["expected"], tol)
         if diameters and faces:
             face = max(faces, key=lambda f: f.Area())
             entries.append({"type": "diameter", "face": face, **_size(diameters[0]), "fit": diameters[0].fit,
@@ -276,31 +279,31 @@ def _hole_pmi(dims: dict[str, Dimension], shape: cq.Shape, report: dict) -> list
     return entries
 
 
-def _parallel_planes(faces: list[cq.Face], length: float) -> list[cq.Face] | None:
-    """The two planar faces among `faces` if they are parallel and `length` apart, else None."""
+def _parallel_planes(faces: list[cq.Face], length: float, tol: float) -> list[cq.Face] | None:
+    """The two planar faces among `faces` if they are parallel and `length` (give or take tol) apart, else None."""
     planes = [face for face in faces if face.geomType() == "PLANE"]
     if len(planes) != 2:
         return None
     first, second = planes
     parallel = abs(first.normalAt().dot(second.normalAt())) >= AXIS_COS
     gap = abs((second.Center() - first.Center()).dot(first.normalAt()))
-    return planes if parallel and abs(gap - length) <= LINEAR_TOL else None
+    return planes if parallel and abs(gap - length) <= tol else None
 
 
-def _assumed_pmi(spec: PartSpec, dims: dict[str, Dimension], shape: cq.Shape) -> list[dict]:
+def _assumed_pmi(spec: PartSpec, dims: dict[str, Dimension], shape: cq.Shape, tol: float) -> list[dict]:
     entries = []
     for item in spec.review:
         lengths = [dims[i] for i in item.refs if i in dims and dims[i].assumed and dims[i].kind == "length"]
         if item.issue != "missing" or len(lengths) != 1:
             continue
-        planes = _parallel_planes(select_faces(shape, item.mark_near), lengths[0].value)
+        planes = _parallel_planes(select_faces(shape, item.mark_near), lengths[0].value, tol)
         if planes:
             note = f"ANNAHME: {item.assumption} - {item.reason} - bitte prüfen"
             entries.append({"type": "distance", "faces": planes, **_size(lengths[0]), "description": note})
     return entries
 
 
-def pmi_from(spec: PartSpec, ops: Sequence[Op], shape: cq.Shape, report: dict) -> list[dict]:
+def pmi_from(spec: PartSpec, ops: Sequence[Op], shape: cq.Shape, report: dict, tol: float = LINEAR_TOL) -> list[dict]:
     """The PMI entries for write_step: a diameter per found hole and a distance per assumed length.
 
     A hole counts when its check in report["dims"] is ok and one of its dimensions is a diameter. The
@@ -311,10 +314,12 @@ def pmi_from(spec: PartSpec, ops: Sequence[Op], shape: cq.Shape, report: dict) -
     parallel planes its mark_near hits, if they are that length apart, with the note
     "ANNAHME: <assumption> - <reason> - bitte prüfen". That is how BCT carries the missing width of the Sensoraufnahme.
 
+    tol is how far the shape may be off the drawn diameters, hole positions and lengths, as in
+    checks.dimension_check: a shape built on the tolerance mid needs more than the default.
     `ops` is part of the planned call and not used: the spec and the report hold everything needed.
     """
     dims = {d.id: d for d in spec.dimensions}
-    return _hole_pmi(dims, shape, report) + _assumed_pmi(spec, dims, shape)
+    return _hole_pmi(dims, shape, report, tol) + _assumed_pmi(spec, dims, shape, tol)
 
 
 def _patch_materials(path: str) -> None:

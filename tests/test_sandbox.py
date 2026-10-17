@@ -2,6 +2,7 @@
 import json
 import math
 import os
+import struct
 import subprocess
 import sys
 import time
@@ -11,6 +12,7 @@ import cadquery as cq
 import pytest
 
 from d2c import worker
+from d2c.export import read_pmi
 from d2c.sandbox import check_script, run_worker
 
 KEYS = {"ok", "error", "solid", "dims", "build_notes", "roundtrip"}
@@ -222,6 +224,8 @@ def test_export_roundtrip_via_worker(tmp_path, monkeypatch):
     assert roundtrip["marks"] == [{"id": "rv1", "faces": 1}]
     back = cq.importers.importStep(str(path)).val()
     assert back.isValid() and back.Volume() == pytest.approx(1000)
+    assert read_pmi(str(path))["schema"] == "AP242_MANAGED_MODEL_BASED_3D_ENGINEERING_MIM_LF"
+    assert roundtrip["pmi"] == {"written": 0, "read_back": 0}  # no spec in the payload, so no dimensions to carry
 
     # without export_path the worker still exports and re-imports: into model.step in its own scratch directory
     monkeypatch.chdir(tmp_path)
@@ -233,3 +237,63 @@ def test_export_roundtrip_via_worker(tmp_path, monkeypatch):
     lost_mark = run_worker(payload(box(), marks=[{"id": "far", "near": [[100, 0, 0]]}]))
     assert (lost_mark["solid"]["ok"], lost_mark["roundtrip"]["ok"], lost_mark["ok"]) == (True, False, False)
     assert lost_mark["error"] is None
+
+
+def pmi_spec() -> dict:
+    """A spec for the 20 x 10 x 5 block with one hole: a diameter with a fit and an assumed thickness."""
+    return {
+        "name": "plate", "drawing": "Demo/plate.pdf", "title": "Plate", "scale": "1:1", "views": [], "features": [],
+        "dimensions": [
+            {"id": "d4", "kind": "diameter", "value": 4, "text": "Ø4 H7", "source": None, "confidence": 0.95,
+             "fit": "H7"},
+            {"id": "t", "kind": "length", "value": 5, "text": "", "source": None, "confidence": 0.6,
+             "assumed": True, "assumption_basis": "side view"},
+        ],
+        "expected": {"bbox": [20, 10, 5], "holes": [{"d": 4, "at": [5, 2, 0], "axis": [0, 0, 1], "dim_ids": ["d4"]}]},
+        "review": [{"id": "rv1", "refs": ["t"], "issue": "missing", "assumption": "thickness 5 mm",
+                    "reason": "not dimensioned", "mark_near": [[0, 0, 0], [0, 0, 5]]}],
+    }
+
+
+def test_worker_writes_pmi_and_glb(tmp_path):
+    spec = pmi_spec()
+    hole = {"op": "holes", "plane": {"name": "XY", "offset": 5}, "positions": [[5, 2]], "d": 4}
+    marks = [{"id": "rv1", "near": spec["review"][0]["mark_near"]}]
+    step, glb = tmp_path / "plate.step", tmp_path / "plate.glb"
+    report = run_worker(payload(
+        box(), hole, expected=spec["expected"], marks=marks, export_path=str(step), pmi_spec=spec, glb_path=str(glb)))
+    assert (report["ok"], report["roundtrip"]["pmi"]) == (True, {"written": 2, "read_back": 2})
+    assert sorted((d["type"], d["value"], d["fit"]) for d in read_pmi(str(step))["dimensions"]) == [
+        ("diameter", 4.0, "H7"), ("distance", 5.0, None)]
+    assert glb.read_bytes()[:4] == b"glTF"
+    assert json.loads((tmp_path / "marks.json").read_text()) == {"#ff8000": ["rv1"]}
+    assert json.loads((tmp_path / "pmi.json").read_text()) == read_pmi(str(step))
+
+    # without a spec there is no PMI, without a glb path no mesh and no JSON files; the colors are written all the same
+    plain = tmp_path / "plain"
+    plain.mkdir()
+    again = run_worker(payload(box(), hole, marks=marks, export_path=str(plain / "plate.step")))
+    assert again["roundtrip"]["pmi"] == {"written": 0, "read_back": 0}
+    assert read_pmi(str(plain / "plate.step"))["colors"] == {"#99abb0": 1, "#ff8000": 2}
+    assert [p.name for p in plain.iterdir()] == ["plate.step"]
+
+
+def test_worker_marks_tapped_holes_green(tmp_path):
+    tapped = {"op": "holes", "plane": {"name": "XY", "offset": 5}, "positions": [[5, 2]], "d": 5, "kind": "tapped",
+              "thread": "M5"}
+    path, glb = tmp_path / "tapped.step", tmp_path / "tapped.glb"
+    assert run_worker(payload(box(), tapped, export_path=str(path), glb_path=str(glb)))["ok"] is True
+    assert read_pmi(str(path))["colors"] == {"#99abb0": 1, "#65f073": 1}  # the tap drill of M5 is O4.2
+    blob = glb.read_bytes()
+    assert len(json.loads(blob[20:20 + struct.unpack_from("<I", blob, 12)[0]])["materials"]) == 2  # steel, green
+    (thread,) = worker.thread_holes(worker.OPS.validate_python([box(), tapped]))
+    assert thread["at"] == pytest.approx((5, 2, 5)) and thread["axis"] == pytest.approx((0, 0, -1))
+    assert thread["d"] == 4.2
+
+
+def test_worker_tolerance_widens_the_dimension_checks():
+    """A build moved to the tolerance mid is not 20.0 wide any more: the caller says how far it may be off."""
+    mid = box(w=19.9)
+    narrow = run_worker(payload(mid, expected={"bbox": [20, 10, 5]}))
+    assert ([d["ok"] for d in narrow["dims"]], narrow["ok"]) == ([False, True, True], False)
+    assert run_worker(payload(mid, expected={"bbox": [20, 10, 5]}, tol=0.2))["ok"] is True
