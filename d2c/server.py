@@ -4,6 +4,7 @@ import argparse
 import functools
 import inspect
 import json
+import re
 from collections.abc import Callable
 from pathlib import Path
 from typing import Annotated, Any, get_args
@@ -24,6 +25,9 @@ MAX_TEXT_ITEMS = 300
 MAX_SHAPES = 12  # Anzahl der von measure_drawing ausgegebenen Kreise und Bögen.
 SCALE_TOL = 0.005  # Relative Abweichung, ab der zwei Maßstäbe als verschieden gelten.
 MIN_PRINTED_DIMS = 6  # Mit weniger gedruckten Werten lässt sich der echte Maßstab nicht von Zufallstreffern unterscheiden.
+CLEAR_SHARE = 0.4  # Anteil der gedruckten Werte, um den ein anderer Maßstab den Schriftfeld-Maßstab übertreffen muss.
+PRINTED_KINDS = ("length", "diameter", "radius")  # Maße, die über den Maßstab abstimmen.
+RATIO = re.compile(r"(\d+(?:[.,]\d+)?)\s*:\s*(\d+(?:[.,]\d+)?)")
 
 server = MCPServer("drawing2cad", instructions=Path(__file__).with_name("instructions.md").read_text("utf-8"))
 session = Session()
@@ -170,7 +174,57 @@ def measure_drawing(
     out |= {"extent_mm": res["extent_mm"], "circles": res["circles"][:MAX_SHAPES], "arcs": res["arcs"][:MAX_SHAPES]}
     if expect:
         out["verify"] = vector.verify(res, expect)
+    session.note_measured(path, page)
     return out | {"notes": _scale_notes(scale, suggestion, len(printed_dims))}
+
+
+def _title_scale(text: str) -> float | None:
+    """Zeichnung:Modell eines Schriftfeld-Maßstabs wie "2:1" oder "1:2,5"; None, wenn der Text kein solches Verhältnis enthält."""
+    match = RATIO.search(text)
+    if match is None:
+        return None
+    drawn, model = (float(n.replace(",", ".")) for n in match.groups())
+    return drawn / model if drawn > 0 and model > 0 else None
+
+
+def _require_measured(spec: PartSpec) -> None:
+    """ValueError, wenn die Spezifikation angenommene Maße hat und measure_drawing nicht auf ihrer Zeichnungsseite lief."""
+    assumed = [d.id for d in spec.dimensions if d.assumed]
+    if assumed and not session.was_measured(drawing.resolve_drawing(spec.drawing), spec.page):
+        raise ValueError(
+            f"Die Maße {assumed} sind angenommen, aber measure_drawing lief nicht auf Seite {spec.page} von "
+            f"{spec.drawing!r}: rufe measure_drawing(pdf={spec.drawing!r}, page={spec.page}, region=<die Ansicht "
+            "mit dem Maß>, scale=<Maßstab im Schriftfeld, 2 für 2:1>) auf, entnimm den Wert aus `extent_mm`, "
+            "`circles` oder `arcs` und rufe submit_spec erneut auf.")
+
+
+def _scale_check(spec: PartSpec) -> dict:
+    """Vergleicht den Schriftfeld-Maßstab der Spezifikation mit dem Maßstab, zu dem die Geometrie ihrer Seite passt.
+
+    Die gedruckten Längen, Durchmesser und Radien der Spezifikation stimmen über vector.suggest_scale ab. Das
+    Ergebnis ist {"title_block", "best", "votes", "conflict", "note"}; conflict bedeutet, dass ein anderer Maßstab
+    mindestens CLEAR_SHARE der gedruckten Werte mehr trifft als der Schriftfeld-Maßstab. Weniger als
+    MIN_PRINTED_DIMS verschiedene Werte, ein Schriftfeld ohne Verhältnis oder eine Seite ohne Vektorgeometrie
+    werden nicht geprüft.
+    """
+    title = _title_scale(spec.scale)
+    printed = sorted({d.value for d in spec.dimensions if d.kind in PRINTED_KINDS and not d.assumed and d.value > 0})
+    check = {"title_block": title, "best": None, "votes": 0, "conflict": False}
+    if title is None:
+        return check | {"note": f"Maßstab {spec.scale!r} im Schriftfeld ist kein Verhältnis wie 2:1: Maßstab nicht geprüft"}
+    if len(printed) < MIN_PRINTED_DIMS:
+        return check | {"note": f"nur {len(printed)} verschiedene gedruckte Längen, Durchmesser und Radien, "
+                                f"{MIN_PRINTED_DIMS} sind nötig: Maßstab nicht geprüft"}
+    ranked = vector.suggest_scale(drawing.resolve_drawing(spec.drawing), printed, spec.page, top=None)
+    if not ranked:
+        return check | {"note": "keine Vektorgeometrie auf der Seite: Maßstab nicht geprüft"}
+    on_title = [e for e in ranked if abs(e["scale"] - title) <= SCALE_TOL * title]
+    title_votes = max((e["votes"] for e in on_title), default=0)
+    best = ranked[0] if ranked[0]["votes"] > title_votes else max(on_title, key=lambda e: e["votes"])
+    conflict = best["votes"] - title_votes >= CLEAR_SHARE * len(printed)
+    note = (f"{title_votes} von {len(printed)} gedruckten Werten passen zum Schriftfeld-Maßstab {title:g}, "
+            f"{best['votes']} passen zum Maßstab {best['scale']:g}")
+    return check | {"best": best["scale"], "votes": best["votes"], "conflict": conflict, "note": note}
 
 
 @_tool
@@ -193,21 +247,33 @@ def check_spec(spec: PartSpec, second: PartSpec | None = None) -> dict:
 
 
 @_tool
-def submit_spec(spec: PartSpec) -> dict:
+def submit_spec(spec: PartSpec, keep_ops: bool = False) -> dict:
     """Übernimm die Auswertung einer Zeichnungsseite (Maße, Ansichten, Merkmale, Hinweise, expected, review).
 
-    Damit beginnt ein Bauteil; vorhandene ops eines gleichnamigen Bauteils werden zurückgesetzt. Längen
-    sind in mm und Winkel in Grad; `expected.bbox` und Lochpositionen sind in Modellkoordinaten (Z nach
-    oben). Jedes angenommene Maß sowie jedes Maß mit `confidence` unter 0.8 muss in `refs` eines
-    Prüfeintrags aufgeführt sein. Verfasse alle selbst formulierten Freitexte in der Spezifikation auf
-    Deutsch; übernimm `text` und direkte Zitate aus der Zeichnung exakt wie abgedruckt.
+    Damit beginnt ein Bauteil; vorhandene ops eines gleichnamigen Bauteils werden zurückgesetzt. Mit
+    keep_ops=True bleiben die ops erhalten: Ihre refs werden gegen die neue Spezifikation geprüft und das
+    Bauteil wird neu aufgebaut; der Aufbau-Bericht kommt als "report" zurück (für eine Korrektur an
+    expected, review oder mark_near). Längen sind in mm und Winkel in Grad; `expected.bbox` und
+    Lochpositionen sind in Modellkoordinaten (Z nach oben). Jedes angenommene Maß sowie jedes Maß mit
+    `confidence` unter 0.8 muss in `refs` eines Prüfeintrags aufgeführt sein. Angenommene Maße setzen
+    voraus, dass measure_drawing auf `spec.drawing` und `spec.page` lief. Das Ergebnis enthält `scale_check`,
+    den Vergleich von `scale` (Schriftfeld) mit der Geometrie; ein klarer Unterschied wird abgelehnt, sofern
+    kein Prüfeintrag `issue="conflict"` hat. Verfasse alle selbst formulierten Freitexte in der Spezifikation
+    auf Deutsch; übernimm `text` und direkte Zitate aus der Zeichnung exakt wie abgedruckt.
 
     Beispiel: submit_spec(spec={"name": "plate", "drawing": "A/p.pdf", "title": "Platte", "scale": "1:1",
     "views": [{"id": "v1", "kind": "top", "scale": "1:1"}], "dimensions": [{"id": "d1", "kind": "length",
     "value": 80, "text": "80", "source": null, "confidence": 0.95}], "features": [{"id": "f1", "type":
     "base", "dim_ids": ["d1"]}], "expected": {"bbox": [80, 50, 10]}, "review": []})
     """
-    return session.submit_spec(spec)
+    _require_measured(spec)
+    check = _scale_check(spec)
+    if check["conflict"] and not any(item.issue == "conflict" for item in spec.review):
+        raise ValueError(
+            f"Maßstabskonflikt: {check['note']}. Füge einen Prüfeintrag mit issue 'conflict' hinzu, der beide "
+            f"Maßstäbe nennt, miss mit dem Maßstab der Geometrie (measure_drawing, scale={check['best']:g}) und "
+            "rufe submit_spec erneut auf.")
+    return session.submit_spec(spec, keep_ops) | {"scale_check": check}
 
 
 @_op_tool(ExtrudeOp)

@@ -1016,6 +1016,7 @@ def suggest_scale(
     printed_values: Sequence[float],
     page: int = 1,
     region: Sequence[float] | None = None,
+    top: int | None = 5,
 ) -> list[dict]:
     """Ermittelt anhand der aufgedruckten Maße den tatsächlichen Maßstab einer Zeichnung und macht einen falschen Maßstab im Schriftfeld sichtbar.
 
@@ -1023,11 +1024,11 @@ def suggest_scale(
         Maßstab. Jeder gedruckte Wert gibt einmal je unterstütztem Maßstab eine Stimme ab. Mindestens sechs Maße aus den
         Ansichten angeben: Bei wenigen Werten lassen sich Zufallstreffer nicht vom tatsächlichen Maßstab unterscheiden.
 
-        Gibt höchstens fünf Wörterbücher {"scale", "votes", "standard"} zurück, sortiert nach den meisten Stimmen,
+        Gibt höchstens `top` Wörterbücher {"scale", "votes", "standard"} zurück, sortiert nach den meisten Stimmen,
         danach nach einem Standardmaßstab vor einem nicht standardisierten Wert und schließlich nach dem Verhältnis
         am nächsten zu 1:1 (verwandte Maßreihen können zwei Verhältnisse mit allen Stimmen ergeben, z. B.
         0.3 = 0.4 * 0.75). "standard" ist der Standardmaßstab innerhalb von 0,5 % von "scale", andernfalls None:
-        Ein Maßstab von 0.75 muss als nicht standardisierter Wert sichtbar bleiben.
+        Ein Maßstab von 0.75 muss als nicht standardisierter Wert sichtbar bleiben. `top=None` gibt jedes Verhältnis zurück.
     """
     if any(v <= 0 for v in printed_values):
         raise ValueError(f"`printed_values` müssen positiv sein; erhalten: {list(printed_values)}.")
@@ -1040,4 +1041,4 @@ def suggest_scale(
     ranked.sort(
         key=lambda e: (-e["votes"], e["standard"] is None, abs(math.log(e["scale"])), e["scale"])
     )
-    return ranked[:5]
+    return ranked[:top]

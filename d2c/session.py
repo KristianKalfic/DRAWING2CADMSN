@@ -28,6 +28,18 @@ def _write_json(path: Path, data: object) -> None:
     path.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
 
 
+def _plain_thread_holes(spec: PartSpec, ops: list[dict]) -> list[dict]:
+    """build_notes für glatte Bohrungen, die mit dem Nenndurchmesser eines Gewindemaßes der Spezifikation gebohrt wurden."""
+    threads = [d for d in spec.dimensions if d.kind == "thread"]
+    return [
+        {"op_index": i, "warning": f"Die glatte Bohrung d={op['d']:g} hat den Nenndurchmesser des Gewindemaßes "
+                                   f"{d.text!r} ({d.id}): ein Gewinde ist add_holes mit kind='tapped' und thread, "
+                                   "keine glatte Bohrung"}
+        for i, op in enumerate(ops) if op.get("op") == "holes" and op.get("kind", "plain") == "plain"
+        for d in threads if abs(op["d"] - d.value) < 1e-6
+    ]
+
+
 def _tolerance_rows(spec: PartSpec, ops: list[dict], nominal: list[dict]) -> list[dict]:
     """The rows of the review's tolerance table: the nominal compliance entries, the tolerance mid of each
     dimension and whether a model on the mid keeps its tolerance. That verdict is taken from the values the ops
@@ -43,12 +55,24 @@ def _tolerance_rows(spec: PartSpec, ops: list[dict], nominal: list[dict]) -> lis
 
 
 class Session:
-    """Spezifikationen, Vorgangslisten und letzte Aufbau-Berichte der Bauteile in diesem Serverlauf."""
+    """Spezifikationen, Vorgangslisten und letzte Aufbau-Berichte der Bauteile in diesem Serverlauf samt der gemessenen Zeichnungsseiten."""
 
     def __init__(self) -> None:
         self.specs: dict[str, PartSpec] = {}
         self.ops: dict[str, list[dict]] = {}
         self.last: dict[str, dict] = {}
+        self.measured: set[tuple[str, int]] = set()
+
+    @staticmethod
+    def _page_key(path: Path, page: int) -> tuple[str, int]:
+        return unicodedata.normalize("NFC", str(path)), page
+
+    def note_measured(self, path: Path, page: int) -> None:
+        """Merkt, dass measure_drawing auf dieser Seite der (aufgelösten) Zeichnung lief."""
+        self.measured.add(self._page_key(path, page))
+
+    def was_measured(self, path: Path, page: int) -> bool:
+        return self._page_key(path, page) in self.measured
 
     def _folder(self, part: str) -> Path:
         return results_root() / part
@@ -105,6 +129,7 @@ class Session:
         """Baut die neue Vorgangsliste auf und übernimmt sie, sofern kein Aufbaufehler auftritt (`ok=false` wird übernommen)."""
         report = self._build(part, ops) | {"op_index": op_index}
         if not report["error"]:
+            report["build_notes"] += _plain_thread_holes(self.specs[part], ops)
             self.ops[part] = ops
             self.last[part] = report
             self._write_state(part)
@@ -114,14 +139,36 @@ class Session:
         if not 0 <= index < len(self.ops[part]):
             raise IndexError(f"`index` {index} liegt außerhalb der {len(self.ops[part])} Vorgänge.")
 
-    def submit_spec(self, spec: PartSpec) -> dict:
-        """Registriert eine Spezifikation, setzt die Vorgänge des Bauteils zurück und schreibt results/<name>/spec.json."""
+    def submit_spec(self, spec: PartSpec, keep_ops: bool = False) -> dict:
+        """Registriert eine Spezifikation, setzt die Vorgänge des Bauteils zurück und schreibt results/<name>/spec.json.
+
+        Mit keep_ops bleiben die Vorgänge eines vorhandenen Bauteils erhalten: Sie werden gegen die neue
+        Spezifikation erneut aufgebaut und der Aufbau-Bericht kommt als "report" zurück. Eine unbekannte
+        Maß-ID in ihren refs ist ein Fehler und nichts wird geändert.
+        """
         part = unicodedata.normalize("NFC", spec.name)
-        self.specs[part] = spec.model_copy(update={"name": part})
-        self.ops[part] = []
+        spec = spec.model_copy(update={"name": part})
+        ops, report = [], None
+        if keep_ops:
+            try:
+                ops = self.ops[self._load(part)]
+            except KeyError:  # no such part yet: nothing to keep
+                pass
+        if ops:
+            probe = Session()  # _build liest die Spezifikation aus seiner Sitzung; unsere bleibt unverändert
+            probe.specs[part] = spec
+            report = probe._build(part, ops)
+        self.specs[part], self.ops[part] = spec, ops
         self.last.pop(part, None)
+        if report and not report["error"]:
+            self.last[part] = report
         self._write_state(part)
-        return {"ok": True, "part": part, "dimensions": len(spec.dimensions), "review_items": len(spec.review)}
+        result = {"ok": True, "part": part, "dimensions": len(spec.dimensions), "review_items": len(spec.review)}
+        if keep_ops:
+            result["ops"] = len(ops)
+        if report:
+            result["report"] = report
+        return result
 
     def apply(self, part: str, op: dict) -> dict:
         part = self._load(part)

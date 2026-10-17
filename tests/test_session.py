@@ -285,9 +285,73 @@ def test_move_op_index_out_of_range(session):
 
 def test_resubmitted_spec_resets_ops(session):
     session.apply("plate", box())
-    session.submit_spec(make_spec())
+    result = session.submit_spec(make_spec())
+    assert set(result) == {"ok", "part", "dimensions", "review_items"}
     assert session.state("plate")["ops"] == []
     assert Session().state("plate")["ops"] == []
+
+
+def with_mark(point) -> PartSpec:
+    """Die Platten-Spezifikation, deren Prüfeintrag die Fläche nahe `point` markiert."""
+    spec = make_spec()
+    item = spec.review[0].model_copy(update={"mark_near": [point]})
+    return spec.model_copy(update={"review": [item]})
+
+
+def test_keep_ops_rebuilds_against_the_new_spec(session):
+    ops = [box(refs={"profile.w": "w"}), hole(3)]
+    for op in ops:
+        session.apply("plate", op)
+    result = session.submit_spec(with_mark((100, 100, 100)), keep_ops=True)  # die Markierung verfehlt das Bauteil
+    assert (result["ok"], result["ops"], result["review_items"]) == (True, 2, 1)
+    assert result["report"]["error"] is None and result["report"]["ok"] is False
+    assert session.state("plate")["ops"] == ops
+    assert session.state("plate")["last_report"] == result["report"]
+    assert session.specs["plate"].review[0].mark_near == [(100, 100, 100)]
+
+    result = session.submit_spec(with_mark((0, 0, 5)), keep_ops=True)  # eine Korrektur ohne neuen Aufbau der Ops
+    assert result["report"]["ok"] is True
+    reloaded = Session().state("plate")
+    assert reloaded["ops"] == ops and reloaded["spec_summary"]["review_items"] == 1
+
+
+def test_keep_ops_unknown_ref_changes_nothing(session):
+    session.apply("plate", box(refs={"profile.w": "w"}))
+    before = session.last["plate"]
+    spec = make_spec()
+    spec = spec.model_copy(update={"dimensions": [d for d in spec.dimensions if d.id != "w"]})
+    with pytest.raises(ValueError, match="Unbekannte Maß-ID 'w' in `refs`"):
+        session.submit_spec(spec, keep_ops=True)
+    assert len(session.specs["plate"].dimensions) == 3
+    assert session.state("plate")["ops"] == [box(refs={"profile.w": "w"})]
+    assert session.last["plate"] is before
+    assert Session().state("plate")["spec_summary"]["dimensions"] == 3
+
+
+def test_keep_ops_without_a_part_is_a_plain_submit():
+    session = Session()
+    assert session.submit_spec(make_spec(), keep_ops=True) == {
+        "ok": True, "part": "plate", "dimensions": 3, "review_items": 1, "ops": 0}
+    assert session.state("plate")["ops"] == []
+
+
+def test_keep_ops_loads_the_part_from_disk(session):
+    session.apply("plate", box())
+    result = Session().submit_spec(make_spec(), keep_ops=True)
+    assert result["ops"] == 1 and result["report"]["ok"] is True
+
+
+def test_plain_hole_of_a_thread_nominal_is_flagged(session):
+    thread = Dimension.model_validate(dimension("th", "thread", 8, "M8"))
+    spec = make_spec()
+    session.submit_spec(spec.model_copy(update={"dimensions": [*spec.dimensions, thread]}))
+    session.apply("plate", box())
+    plain = session.apply("plate", hole(8, positions=[[0, 0]]))
+    (warning,) = [n for n in plain["build_notes"] if "warning" in n]
+    assert warning["op_index"] == 1 and "kind='tapped'" in warning["warning"] and "th" in warning["warning"]
+    tapped = session.edit_op("plate", 1, hole(8, positions=[[0, 0]], kind="tapped", thread="M8"))
+    assert tapped["error"] is None and not any("warning" in n for n in tapped["build_notes"])
+    assert not any("warning" in n for n in session.apply("plate", hole(3))["build_notes"])
 
 
 def test_review_lists_revolve_radii(session):
