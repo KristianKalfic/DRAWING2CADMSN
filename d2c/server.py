@@ -1,5 +1,6 @@
 """The MCP server: render and read drawings, submit a spec, build the part op by op, export the STEP."""
 
+import argparse
 import functools
 import inspect
 import json
@@ -316,5 +317,19 @@ def export_step(part: str) -> dict:
     return session.export(part)
 
 
+def main() -> None:
+    parser = argparse.ArgumentParser(prog="python -m d2c.server", description=__doc__)
+    parser.add_argument("--http", metavar="HOST:PORT", help="serve streamable HTTP at /mcp instead of stdio")
+    args = parser.parse_args()
+    if args.http is None:
+        server.run("stdio")
+        return
+    host, _, port = args.http.rpartition(":")
+    if not host or not port.isdigit():
+        parser.error("--http expects HOST:PORT, e.g. 0.0.0.0:8765")
+    # On 127.0.0.1 or localhost mcp accepts only those two Host headers; bind 0.0.0.0 in a container.
+    server.run("streamable-http", host=host, port=int(port))
+
+
 if __name__ == "__main__":
-    server.run("stdio")
+    main()
