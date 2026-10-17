@@ -3,6 +3,7 @@ import json
 import shutil
 from pathlib import Path
 
+import pymupdf
 import pytest
 from starlette.testclient import TestClient
 
@@ -13,6 +14,7 @@ from d2c.web.app import create_app
 FIXTURES = Path(__file__).parent / "fixtures"
 PDF = FIXTURES / "demo_drawing.pdf"
 LLM_ENV = {"D2C_LLM_BASE_URL": "http://llm.invalid/v1", "D2C_LLM_MODEL": "m"}
+LLM_VARS = ("D2C_LLM_BASE_URL", "D2C_LLM_MODEL", "ANTHROPIC_API_KEY", "CLAUDE_CODE_OAUTH_TOKEN")
 
 
 def _dimension(dim_id: str, kind: str, value: float, text: str, **more) -> dict:
@@ -68,6 +70,7 @@ def test_parts_list_and_detail(client):
     with client:
         (entry,) = client.get("/api/parts").json()
         assert (entry["name"], entry["title"], entry["review_count"]) == ("plate", "Plate 80x50", 1)
+        assert entry["issues"] == ["missing"]
         assert "plate.step" in entry["files"] and entry["eval"] is None
         detail = client.get("/api/parts/plate").json()
         assert detail["spec"]["name"] == "plate"
@@ -99,6 +102,18 @@ def test_drawing_png(client):
     with client:
         response = client.get("/api/parts/plate/drawing.png")
         assert response.status_code == 200 and response.content.startswith(b"\x89PNG")
+
+
+def test_drawing_png_renders_the_page_of_the_spec(client, monkeypatch, tmp_path):
+    results = tmp_path / "results"
+    for page in (1, 2, 3):
+        (results / f"p{page}").mkdir(parents=True)
+        (results / f"p{page}" / "spec.json").write_text(json.dumps({"drawing": "Demo/plate.pdf", "page": page}))
+    monkeypatch.setenv("D2C_RESULTS", str(results))
+    with client:
+        first, second, missing = (client.get(f"/api/parts/p{page}/drawing.png") for page in (1, 2, 3))
+    assert first.status_code == second.status_code == 200 and first.content != second.content
+    assert missing.status_code == 404 and "page 3" in missing.json()["error"]
 
 
 def fake_agent(events: list[dict], calls: list[dict] | None = None):
@@ -168,13 +183,98 @@ def test_upload_rejects_bad_input(monkeypatch, tmp_path, part, pdf):
     assert not (tmp_path / "uploads").exists()
 
 
-def test_run_without_llm_endpoint_is_503(monkeypatch, tmp_path):
+def set_llm_env(monkeypatch, tmp_path, **env):
+    """Only the given LLM variables are set."""
     monkeypatch.setenv("D2C_DATA", str(tmp_path))
-    monkeypatch.delenv("D2C_LLM_BASE_URL", raising=False)
+    for key in LLM_VARS:
+        monkeypatch.delenv(key, raising=False)
+    for key, value in env.items():
+        monkeypatch.setenv(key, value)
+
+
+def test_run_without_llm_settings_is_503(monkeypatch, tmp_path):
+    set_llm_env(monkeypatch, tmp_path)
     with TestClient(create_app(fake_agent([]))) as client:
         response = upload(client)
-    assert response.status_code == 503 and "D2C_LLM_BASE_URL" in response.json()["error"]
-    assert response.json()["error"].startswith("Kein Sprachmodell-Zugang konfiguriert")
+    message = response.json()["error"]
+    assert response.status_code == 503
+    assert all(name in message for name in ("D2C_LLM_BASE_URL", "ANTHROPIC_API_KEY", "CLAUDE_CODE_OAUTH_TOKEN", ".env.example"))
+    assert not (tmp_path / "uploads").exists()
+
+
+def test_run_with_oauth_token_only_starts_with_model_none(monkeypatch, tmp_path):
+    set_llm_env(monkeypatch, tmp_path, CLAUDE_CODE_OAUTH_TOKEN="token")
+    calls: list[dict] = []
+    with TestClient(create_app(fake_agent([], calls))) as client:
+        response = upload(client)
+        assert response.status_code == 200
+        client.get(f"/api/runs/{response.json()['run_id']}/events")
+    assert (calls[0]["model"], calls[0]["base_url"]) == (None, None)
+
+
+def test_run_with_base_url_and_no_model_is_400(monkeypatch, tmp_path):
+    set_llm_env(monkeypatch, tmp_path, D2C_LLM_BASE_URL="http://llm.invalid/v1")
+    with TestClient(create_app(fake_agent([]))) as client:
+        response = upload(client)
+    assert response.status_code == 400 and "model" in response.json()["error"]
+    assert not (tmp_path / "uploads").exists()
+
+
+def image_bytes(fmt: str) -> bytes:
+    pixmap = pymupdf.Pixmap(pymupdf.csRGB, pymupdf.IRect(0, 0, 64, 48), False)
+    pixmap.set_rect(pixmap.irect, (200, 200, 200))
+    return pixmap.tobytes(fmt)
+
+
+def stored_pdf_pages(monkeypatch, tmp_path, content: bytes, filename: str) -> int:
+    """Upload content under the given file name, return the page count of uploads/scan.pdf."""
+    set_llm_env(monkeypatch, tmp_path, **LLM_ENV)
+    with TestClient(create_app(fake_agent([]))) as client:
+        response = client.post("/api/runs", files={"pdf": (filename, content)}, data={"part": "scan"})
+        assert response.status_code == 200, response.text
+        client.get(f"/api/runs/{response.json()['run_id']}/events")
+    saved = (tmp_path / "uploads" / "scan.pdf").read_bytes()
+    assert saved.startswith(b"%PDF")
+    with pymupdf.open(stream=saved, filetype="pdf") as pdf:
+        return pdf.page_count
+
+
+def test_upload_png_converted_to_pdf(monkeypatch, tmp_path):
+    assert stored_pdf_pages(monkeypatch, tmp_path, image_bytes("png"), "scan.pdf") == 1  # the extension is not trusted
+
+
+def test_upload_jpg_converted_to_pdf(monkeypatch, tmp_path):
+    assert stored_pdf_pages(monkeypatch, tmp_path, image_bytes("jpeg"), "scan.png") == 1
+
+
+def test_upload_pdf_kept_whatever_its_extension(monkeypatch, tmp_path):
+    assert stored_pdf_pages(monkeypatch, tmp_path, PDF.read_bytes(), "drawing.png") == 2
+
+
+def test_upload_broken_image_is_400(monkeypatch, tmp_path):
+    set_llm_env(monkeypatch, tmp_path, **LLM_ENV)
+    with TestClient(create_app(fake_agent([]))) as client:
+        response = upload(client, pdf=b"\x89PNG\r\n\x1a\n" + b"not an image")
+    assert response.status_code == 400 and "image" in response.json()["error"]
+    assert not (tmp_path / "uploads").exists()
+
+
+def test_upload_too_large_is_413(monkeypatch, tmp_path):
+    set_llm_env(monkeypatch, tmp_path, **LLM_ENV)
+    with TestClient(create_app(fake_agent([]))) as client:
+        response = upload(client, pdf=b"%PDF" + bytes(20 * 1024 * 1024))
+    assert response.status_code == 413 and "20 MB" in response.json()["error"]
+    assert not (tmp_path / "uploads").exists()
+
+
+def test_fonts_served(client):
+    with client:
+        for name in ("InterTight-wght.woff2", "InterTight-wght-italic.woff2", "JetBrainsMono-wght.woff2"):
+            response = client.get(f"/static/vendor/fonts/{name}")
+            assert response.status_code == 200 and response.content.startswith(b"wOF2"), name
+            assert response.headers["content-type"] == "font/woff2"
+        assert client.get("/static/vendor/fonts/OFL-InterTight.txt").status_code == 200
+        assert client.get("/static/vendor/fonts/OFL-JetBrainsMono.txt").status_code == 200
 
 
 def test_index_and_vendored_viewer_served(client):
