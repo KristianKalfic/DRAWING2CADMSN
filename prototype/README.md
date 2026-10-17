@@ -6,7 +6,7 @@ Alles läuft lokal; der CAD-Kern ist CadQuery (OpenCascade, Open Source).
 ## Architektur
 
 ```
-Zeichnung ──► Claude liest sie, schreibt JSON (Schema unten, Beispiel: examples/beispiel_v2.json)
+Zeichnung ──► das Sprachmodell liest sie, schreibt JSON (Schema unten, Beispiel: examples/beispiel_v2.json)
           ──► MCP-Server server.py ── build_from_json
                  └─ json_builder.py: JSON ──► CadQuery-Code (deterministisch, nur validierte Zahlen
                                               + Selektor-Whitelist, keine Freitext-Einschleusung)
@@ -49,25 +49,9 @@ python issue_check.py A.json B.json out/teil.step --freecad "C:/Program Files/Fr
 `issue_check.py` gibt ohne FreeCAD den Blocker `FREECAD_NOT_FOUND` aus und gibt nicht frei (Exit 1).
 Der FreeCAD-Test in `tests/` wird übersprungen, wenn `FreeCADCmd` nicht im PATH ist.
 
-## Claude Desktop (Windows)
+## MCP clients
 
-`%APPDATA%\Claude\claude_desktop_config.json` – Vorlage: `claude_desktop_config.example.json`
-
-```json
-{
-  "mcpServers": {
-    "drawing2cad": {
-      "command": "C:\\Users\\DEIN_NAME\\miniconda3\\envs\\d2c\\python.exe",
-      "args": ["C:\\Pfad\\zu\\DRAWING2CADMSN\\server.py"],
-      "env": { "D2C_OUT": "C:\\Pfad\\zu\\DRAWING2CADMSN\\out" }
-    }
-  }
-}
-```
-
-Variante Docker: `"command": "docker"`, `"args": ["run", "-i", "--rm", "--network", "none",
-"-v", "C:\\Pfad\\zu\\DRAWING2CADMSN\\out:/data/out", "drawing2cad"]`.
-Den Python-Pfad liefert `conda activate d2c` + `where python`. Danach Claude Desktop neu starten.
+Setup for MCP clients: see the main README.
 
 ## JSON-Schema (Kurzreferenz)
 

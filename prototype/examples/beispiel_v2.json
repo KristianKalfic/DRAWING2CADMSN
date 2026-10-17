@@ -1,0 +1,21 @@
+{
+  "part_name": "Flanschplatte_4711",
+  "units": "mm",
+  "source": {"file": "4711_Rev_B.pdf", "views": ["Draufsicht", "Seitenansicht"]},
+  "base": {"shape": "box", "length": 100, "width": 60, "height": 20,
+           "evidence": {"length": "Draufsicht, Maß unten", "width": "Draufsicht, Maß rechts", "height": "Seitenansicht"},
+           "confidence": 0.95},
+  "features": [
+    {"type": "fillet", "edges": "|Z", "size": 5,
+     "evidence": "R5 an Ecke Draufsicht", "confidence": 0.8},
+    {"type": "hole", "x": 0, "y": 0, "diameter": 8.5, "through": true, "face": "top",
+     "pattern": {"type": "rect", "nx": 2, "ny": 2, "dx": 70, "dy": 40},
+     "evidence": "Draufsicht, '4x Ø8,5', Lochabstand 70/40, mittig", "confidence": 0.9},
+    {"type": "pocket", "x": 0, "y": 0, "length": 30, "width": 20, "depth": 5, "face": "top",
+     "evidence": "Draufsicht gestrichelt + Schnitt A-A", "confidence": 0.7}
+  ],
+  "review": [
+    {"feature": "fillet", "value": 5, "reason": "R5 nur an einer Ecke bemaßt, für alle 4 angenommen", "confidence": 0.6},
+    {"feature": "pocket depth", "value": 5, "reason": "Tiefe aus Schnitt A-A abgegriffen (Maßstab 1:1), nicht bemaßt", "confidence": 0.6}
+  ]
+}

@@ -2,7 +2,7 @@
 Issue-Kontrolle fuer Drawing2CAD (ungetestet, bitte lokal ausprobieren).
 
 Drei unabhaengige Pruefungen -> eine gemeinsame issues.json
-  1. compare   : zwei unabhaengige Opus-Extraktionen (A, B) werden verglichen
+  1. compare   : zwei unabhaengige Extraktionen (A, B) werden verglichen
   2. plausible : deterministische Regeln auf dem JSON (kein LLM)
   3. freecad   : STEP wird in FreeCAD (headless) geoeffnet und nachgemessen
 

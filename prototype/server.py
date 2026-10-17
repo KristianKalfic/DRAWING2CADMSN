@@ -3,7 +3,7 @@ Drawing2CAD MCP-Server (Prototyp)
 - Baut 3D-Modelle ausschließlich über strukturierte Tools (CadQuery/OpenCascade)
 - Validiert nach jedem Build (Solid gültig, Maße vs. Zeichnung, STEP-Reimport)
 - Freier Code nur als Fallback in isolierter Sandbox (Subprozess, Timeout, kein Netz im Container)
-Start:  python server.py   (stdio-Transport, z. B. für Claude Desktop / LM Studio / Ollama-Clients)
+Start:  python server.py   (stdio-Transport, z. B. für MCP-Clients wie LM Studio)
 """
 import json, os, re, subprocess, sys, tempfile, uuid
 import cadquery as cq
