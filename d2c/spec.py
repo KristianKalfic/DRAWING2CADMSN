@@ -1,7 +1,7 @@
-"""PartSpec: what a vision model reads from one drawing page, before any geometry is built.
+"""PartSpec: erfasste Angaben eines Vision-Modells zu einer Zeichnungsseite, bevor Geometrie aufgebaut wird.
 
-The validator enforces the review duty: every assumed or low-confidence dimension
-must be listed in a review item, so no assumption stays silent.
+Die Validierung setzt die Prüfpflicht durch: Jedes angenommene Maß und jedes Maß mit niedriger Konfidenz
+muss in einem Prüfeintrag aufgeführt sein, damit keine Annahme unbemerkt bleibt.
 """
 
 import re
@@ -10,17 +10,17 @@ from typing import Literal, Self
 
 from pydantic import BaseModel, ConfigDict, Field, PositiveFloat, model_validator
 
-# Plain numbers in a printed dimension text, with "." or "," as decimal separator.
+# Einfache Zahlen in einer gedruckten Maßangabe mit "." oder "," als Dezimaltrennzeichen.
 _NUMBER = re.compile(r"\d+(?:[.,]\d+)?")
 
 
 def _prints_value(text: str, value: float) -> bool:
-    """True if a number in the printed text equals value, so "76,2" cannot be read as 762."""
+    """True, wenn eine Zahl im gedruckten Text dem Wert entspricht, damit "76,2" nicht als 762 gelesen wird."""
     return any(abs(float(n.replace(",", ".")) - value) <= 1e-9 for n in _NUMBER.findall(text))
 
 
 class _Strict(BaseModel):
-    # NaN or inf in a bbox or hole position would make every later comparison pass silently.
+    # NaN oder inf in bbox oder Bohrungsposition ließe spätere Vergleiche unbemerkt bestehen.
     model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
 
 
@@ -28,7 +28,7 @@ class Source(_Strict):
     """Herkunft eines Werts: Ansicht und Rasterfeld der Zeichnung."""
 
     view: str
-    # A3: A-F/1-8, A4: A-F/1-4; null for drawings without a grid
+    # A3: A-F/1-8, A4: A-F/1-4; null bei Zeichnungen ohne Raster.
     cell: str | None = Field(pattern=r"^[A-F][1-8]$")
 
 
@@ -113,7 +113,7 @@ class PartSpec(_Strict):
     drawing ist relativ zu /data; die erste Pfadkomponente bezeichnet den Referenzordner.
     """
 
-    name: str = Field(pattern=r"^[\w-]+$")  # becomes a folder name
+    name: str = Field(pattern=r"^[\w-]+$")  # wird als Ordnername verwendet
     drawing: str
     page: int = 1
     title: str
@@ -125,19 +125,19 @@ class PartSpec(_Strict):
     notes: list[Note] = []
     expected: Expected
     review: list[ReviewItem]
-    general_tolerance: str | None = Field(None, pattern=r"^ISO 2768-[fmcv]$")  # from the title block
+    general_tolerance: str | None = Field(None, pattern=r"^ISO 2768-[fmcv]$")  # aus dem Schriftfeld
 
     @model_validator(mode="after")
     def _check_consistency(self) -> Self:
-        """Report every violation at once, each naming the affected id."""
+        """Meldet alle Verstöße auf einmal und nennt jeweils die betroffene ID."""
         errors: list[str] = []
 
-        # (a) ids are unique across views, dimensions, features, notes and review items
+        # (a) IDs sind über Ansichten, Maße, Merkmale, Hinweise und Prüfeinträge hinweg eindeutig.
         groups = (self.views, self.dimensions, self.features, self.notes, self.review)
         counts = Counter(item.id for group in groups for item in group)
         errors += [f"Doppelte ID {i!r}." for i, n in counts.items() if n > 1]
 
-        # (b) every ref, dim_id and source view exists
+        # (b) Alle Verweise in refs, dim_ids und source.view müssen existieren.
         view_ids = {v.id for v in self.views}
         dim_ids = {d.id for d in self.dimensions}
         ref_ids = dim_ids | {item.id for item in (*self.features, *self.notes)}
@@ -152,7 +152,7 @@ class PartSpec(_Strict):
                 kind = type(item).__name__.lower()
                 errors.append(f"{kind} {item.id!r}: Unbekannte Quellansicht {item.source.view!r}.")
 
-        # (e) a review item states what was assumed and why
+        # (e) Ein Prüfeintrag nennt die Annahme und deren Begründung.
         for r in self.review:
             if not r.assumption.strip():
                 errors.append(f"`review` {r.id!r}: `assumption` ist leer.")
@@ -161,28 +161,28 @@ class PartSpec(_Strict):
 
         reviewed = {ref for r in self.review for ref in r.refs}
         for d in self.dimensions:
-            # (c) assumed or low-confidence dimensions are under review
+            # (c) Angenommene Maße und Maße mit niedriger Konfidenz müssen geprüft werden.
             if (d.assumed or d.confidence < 0.8) and d.id not in reviewed:
                 cause = "`assumed=true`" if d.assumed else f"`confidence` {d.confidence} < 0.8"
                 errors.append(f"Maß {d.id!r}: {cause}; ein Prüfeintrag muss es in `refs` aufführen.")
-            # (d) an assumption needs its basis
+            # (d) Eine Annahme benötigt ihre Grundlage.
             if d.assumed and not (d.assumption_basis or "").strip():
                 errors.append(f"Maß {d.id!r}: `assumed=true` benötigt eine nicht leere `assumption_basis`.")
-            # (f) the printed text contains the value
+            # (f) Der gedruckte Text enthält den Wert.
             if not d.assumed and not _prints_value(d.text, d.value):
                 errors.append(f"Maß {d.id!r}: `text` {d.text!r} enthält keine Zahl, die `value` {d.value} entspricht.")
-            # (h) deviations come as a pair, lower <= upper
+            # (h) Abweichungen treten paarweise auf; lower <= upper.
             if (d.tol_upper is None) != (d.tol_lower is None):
                 errors.append(f"Maß {d.id!r}: `tol_upper` und `tol_lower` müssen gemeinsam gesetzt werden.")
             elif d.tol_upper is not None and d.tol_lower is not None and d.tol_lower > d.tol_upper:
                 errors.append(f"Maß {d.id!r}: `tol_lower` {d.tol_lower} ist größer als `tol_upper` {d.tol_upper}.")
 
-        # (g) a hole feature needs a hole to check against
+        # (g) Für ein Bohrungsmerkmal muss eine Bohrung zum Abgleich angegeben sein.
         hole_features = [f.id for f in self.features if f.type == "hole"]
         if hole_features and not self.expected.holes:
             errors.append(f"Bohrungsmerkmale {hole_features} benötigen mindestens einen Eintrag in `expected.holes`.")
 
-        # an expected hole needs an axis direction
+        # Für eine erwartete Bohrung muss eine Achsrichtung angegeben sein.
         for k, hole in enumerate(self.expected.holes):
             if not any(hole.axis):
                 errors.append(f"`expected.holes[{k}]`: `axis` darf nicht der Nullvektor sein.")

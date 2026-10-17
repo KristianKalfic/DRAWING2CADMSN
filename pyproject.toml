@@ -12,8 +12,8 @@ dependencies = ["cadquery==2.8.0", "mcp==2.3.0", "pydantic>=2,<3", "pymupdf==1.2
 [project.optional-dependencies]
 dev = ["pytest==8.*"]
 
-# Explicit package list: the repo root also holds data/, docs/, run/ ... and
-# flat-layout auto-discovery would count them as top-level packages.
+# Pakete ausdrücklich auflisten: Im Hauptordner liegen auch data/, docs/, run/ usw.,
+# die eine automatische Suche sonst als eigenständige Pakete aufnehmen würde.
 [tool.setuptools]
 packages = ["d2c"]
 

@@ -1,15 +1,14 @@
-"""Exact measurements from the vector geometry of technical PDF drawings.
+"""Exakte Messungen anhand der Vektorgeometrie technischer PDF-Zeichnungen.
 
-Most BCT drawings are vector PDFs (NX and CGM exports): circles and arcs are Bezier curves or
-tessellated polylines, so diameters, radii and edge lengths follow from the geometry without
-reading a printed number. That measures a dimension the drawing leaves out, cross-checks a
-dimension read from the image and shows when the scale in the title block is wrong.
+Die meisten BCT-Zeichnungen sind Vektor-PDFs (NX- und CGM-Exporte): Kreise und Bögen liegen als Bézierkurven oder
+aus Linien angenäherte Polylinien vor. Durchmesser, Radien und Kantenlängen lassen sich daher aus der Geometrie
+ermitteln, ohne gedruckte Zahlen abzulesen. So wird ein in der Zeichnung fehlendes Maß bestimmt, ein aus dem Bild
+gelesenes Maß geprüft und ein falscher Maßstab im Schriftfeld erkennbar.
 
-Pages are 1-based. A region is (x0, y0, x1, y1) as fractions of the displayed page, origin at the
-top left, like the crop of the renderer. Results are in model mm (sheet mm divided by the drawing
-scale), x to the right, y up, origin in the lower-left corner of the region (of the sheet if no
-region is given).
-"""
+Seiten sind 1-basiert. Ein Bereich ist (x0, y0, x1, y1) als Anteile der angezeigten Seite, Ursprung oben links,
+wie beim Zuschnitt des Seitendarstellers. Ergebnisse sind Modell-mm (Blatt-mm geteilt durch den Maßstab),
+x zeigt nach rechts, y nach oben. Der Ursprung liegt links unten im Bereich oder, wenn kein Bereich angegeben ist,
+links unten auf dem Blatt."""
 
 import collections
 import math
@@ -21,21 +20,21 @@ from os import PathLike
 import numpy as np
 import pymupdf
 
-_PT_MM = 25.4 / 72  # mm per PDF point
+_PT_MM = 25.4 / 72  # mm je PDF-Punkt
 _TAU = 2 * math.pi
-_FIT_TOL = 0.03  # pt: largest deviation of a vertex from a fitted line or arc
-_JOIN = 0.02  # pt: stream elements whose ends are this close are continuous
-_SNAP = 0.05  # pt: contour pieces whose ends are this close are connected
-_MIN_ARC_POINTS = 9  # fewer vertices cannot tell an ellipse of the iso view from a circle
+_FIT_TOL = 0.03  # pt: größte Abweichung eines Eckpunkts von einer angepassten Geraden oder einem Bogen
+_JOIN = 0.02  # pt: Endpunkte der Stream-Elemente gelten bis zu diesem Abstand als zusammenhängend
+_SNAP = 0.05  # pt: Endpunkte der Konturteile gelten bis zu diesem Abstand als verbunden
+_MIN_ARC_POINTS = 9  # Weniger Eckpunkte lassen die Ellipse der isometrischen Ansicht nicht von einem Kreis unterscheiden
 _MIN_ARC_SWEEP = math.radians(60)
-# Coordinate lattices (pt) of CGM-based exports. NX output is finer and fits none of them.
+# Koordinatenraster (pt) der CGM-basierten Exporte. Die feinere NX-Ausgabe passt zu keinem dieser Raster.
 _LATTICES = (1.0, 0.5, 0.25, 0.2, 0.12, 0.1, 0.06, 0.05, 0.025, 0.02, 0.01)
 STANDARD_SCALES = (0.05, 0.1, 0.2, 0.25, 0.5, 1.0, 2.0, 2.5, 4.0, 5.0, 10.0, 20.0)
 
 Point = tuple[float, float]
 Box = tuple[float, float, float, float]  # x0, y0, x1, y1
-Element = tuple  # ("l", p0, p1) or ("c", p0, p1, p2, p3): a stroked line or cubic Bezier
-Chain = list[Element]  # elements that follow each other end to end
+Element = tuple  # ("l", p0, p1) oder ("c", p0, p1, p2, p3): umrandete Gerade oder kubische Bézierkurve
+Chain = list[Element]  # Elemente, deren Enden direkt aufeinander folgen
 
 
 def _bounds(pts: Sequence[Point]) -> Box:
@@ -61,13 +60,13 @@ def _pt(a: np.ndarray) -> Point:
 
 
 # ---------------------------------------------------------------------------------------------
-# Primitives. Angles are in the y-down coordinates of the page, in radians.
+# Grundelemente. Winkel sind in den y-nach-unten-Koordinaten der Seite in Radiant angegeben.
 # ---------------------------------------------------------------------------------------------
 @dataclass(frozen=True, eq=False)
 class _Line:
     p0: Point
     p1: Point
-    single: bool = False  # one source edge: only runs of these can form a free curve
+    single: bool = False  # Eine Quellkante: Nur Folgen daraus können eine Freiformkurve bilden
 
     def mid(self) -> Point:
         return (self.p0[0] + self.p1[0]) / 2, (self.p0[1] + self.p1[1]) / 2
@@ -83,8 +82,8 @@ class _Line:
 class _Arc:
     c: Point
     r: float
-    a0: float  # start angle
-    sw: float  # signed sweep
+    a0: float  # Anfangswinkel
+    sw: float  # Vorzeichenbehafteter überstrichener Winkel
     p0: Point
     p1: Point
 
@@ -96,7 +95,7 @@ class _Arc:
         lo = min(self.a0, self.a0 + self.sw)
         hi = lo + abs(self.sw)
         pts = [self.p0, self.p1]
-        for k in range(-8, 9):  # the axis extremes inside the swept angle
+        for k in range(-8, 9):  # Extremwerte der Achse innerhalb des überstrichenen Winkels
             a = k * math.pi / 2
             if lo - 1e-9 <= a <= hi + 1e-9:
                 pts.append((self.c[0] + self.r * math.cos(a), self.c[1] + self.r * math.sin(a)))
@@ -124,7 +123,7 @@ class _Circle:
 
 @dataclass(frozen=True, eq=False)
 class _Curve:
-    """A free-form curve (ellipse of an iso view, spline) as a polyline through its points."""
+    """Freiformkurve (Ellipse einer isometrischen Ansicht, Spline) als Polylinie durch ihre Punkte."""
 
     pts: list[Point]
 
@@ -150,10 +149,10 @@ _Prim = _Line | _Arc | _Circle | _Curve
 
 
 # ---------------------------------------------------------------------------------------------
-# 1. Stroked geometry of the displayed page
+# 1. Umrandete Geometrie der angezeigten Seite
 # ---------------------------------------------------------------------------------------------
 def _corners(item: tuple) -> list[Point]:
-    """Corners of a stroked rectangle ("re") or quad ("qu") item in path order."""
+    """Eckpunkte eines umrandeten Rechtecks (re) oder Vierecks (qu), in Pfadreihenfolge."""
     if item[0] == "re":
         r = item[1]
         return [(r.x0, r.y0), (r.x1, r.y0), (r.x1, r.y1), (r.x0, r.y1)]
@@ -162,11 +161,10 @@ def _corners(item: tuple) -> list[Point]:
 
 
 def _collect(page: pymupdf.Page) -> list[tuple[float, Element]]:
-    """Stroked lines and cubic curves as (stroke width, element) in stream order, in points of
-    the displayed page (y down, page rotation applied)."""
+    """Umrandete Linien und kubische Kurven als (Strichstärke, Element) in der Reihenfolge des Datenstroms, angegeben in Punkten der angezeigten Seite (y nach unten, Seitendrehung angewendet)."""
     m = page.rotation_matrix
 
-    def pt(p) -> Point:  # in double precision: Point * Matrix rounds to 32 bit
+    def pt(p) -> Point:  # In doppelter Genauigkeit: Point * Matrix rundet auf 32 Bit
         return m.a * p[0] + m.c * p[1] + m.e, m.b * p[0] + m.d * p[1] + m.f
 
     flat = []
@@ -179,7 +177,7 @@ def _collect(page: pymupdf.Page) -> list[tuple[float, Element]]:
                 flat.append((width, ("l", pt(item[1]), pt(item[2]))))
             elif item[0] == "c":
                 flat.append((width, ("c", *map(pt, item[1:5]))))
-            elif item[0] in ("re", "qu"):  # a stroked rectangle is four lines
+            elif item[0] in ("re", "qu"):  # Ein umrandetes Rechteck besteht aus vier Linien
                 pts = [pt(c) for c in _corners(item)]
                 pts.append(pts[0])
                 flat += [(width, ("l", pts[i], pts[i + 1])) for i in range(4)]
@@ -187,8 +185,7 @@ def _collect(page: pymupdf.Page) -> list[tuple[float, Element]]:
 
 
 def _grid(flat: list[tuple[float, Element]]) -> float:
-    """Spacing (pt) of the lattice the coordinates of the file sit on, 0 if there is none. The fits
-    must tolerate that rounding noise."""
+    """Abstand (pt) des Koordinatenrasters der Datei; 0, wenn es keines gibt. Die Anpassungen müssen die Rundungsabweichung tolerieren."""
     if not flat:
         return 0.0
     xs = np.array([p[0] for _, el in flat for p in el[1:]])
@@ -199,7 +196,7 @@ def _grid(flat: list[tuple[float, Element]]) -> float:
 
 
 # ---------------------------------------------------------------------------------------------
-# 2. Chains: elements that follow each other end to end
+# 2. Ketten: Elemente, deren Enden direkt aufeinander folgen
 # ---------------------------------------------------------------------------------------------
 def _key(p: Point) -> tuple[int, int]:
     return round(p[0] * 100), round(p[1] * 100)
@@ -210,7 +207,7 @@ def _reversed(el: Element) -> Element:
 
 
 def _dedupe_elements(els: list[Element]) -> list[Element]:
-    """Drop elements that are drawn twice (same end points, either direction)."""
+    """Entfernt doppelt gezeichnete Elemente (dieselben Endpunkte, in beliebiger Richtung)."""
     seen, out = set(), []
     for el in els:
         key = (el[0], *sorted([_key(el[1]), _key(el[-1])]))
@@ -223,8 +220,7 @@ def _dedupe_elements(els: list[Element]) -> list[Element]:
 
 
 def _chains(els: list[Element]) -> list[Chain]:
-    """Split a stream wherever an element does not start where the last one ended. NX and cgm2pdf
-    polylines are exactly continuous (gaps are 0 or at least 0.05 pt)."""
+    """Teilt einen Datenstrom dort, wo ein Element nicht am Ende des vorherigen beginnt. NX- und cgm2pdf-Polylinien sind durchgehend (Lücken sind 0 oder mindestens 0,05 pt)."""
     out: list[Chain] = []
     for el in els:
         if out and math.dist(out[-1][-1][-1], el[1]) <= _JOIN:
@@ -235,7 +231,7 @@ def _chains(els: list[Element]) -> list[Chain]:
 
 
 class _Nodes:
-    """Points that lie within eps of each other share one node."""
+    """Punkte, die höchstens eps voneinander entfernt sind, teilen sich einen Knoten."""
 
     def __init__(self, eps: float) -> None:
         self.eps = eps
@@ -255,11 +251,10 @@ class _Nodes:
 
 
 def _stitch(chains: list[Chain]) -> list[Chain]:
-    """Join chains that meet at a node of degree 2, in whatever order the file lists them.
-    Junctions (three or more ends) are left alone."""
+    """Verbindet Ketten, die sich an einem Knoten mit Grad 2 treffen, unabhängig von ihrer Reihenfolge in der Datei. Verzweigungen (drei oder mehr Enden) bleiben getrennt."""
     nodes = _Nodes(_JOIN)
     ends = [(nodes.add(ch[0][1]), nodes.add(ch[-1][-1])) for ch in chains]
-    at: dict[int, list[tuple[int, int]]] = collections.defaultdict(list)  # node -> (chain, end)
+    at: dict[int, list[tuple[int, int]]] = collections.defaultdict(list)  # Knoten -> (chain, end)
     for ci, (n0, n1) in enumerate(ends):
         at[n0].append((ci, 0))
         at[n1].append((ci, 1))
@@ -269,7 +264,7 @@ def _stitch(chains: list[Chain]) -> list[Chain]:
             link[pair[0]], link[pair[1]] = pair[1], pair[0]
     used: set[int] = set()
 
-    def walk(ci: int, end_in: int) -> Chain:  # enter chain ci at end_in (0 start, 1 end)
+    def walk(ci: int, end_in: int) -> Chain:  # Kette ci am Ende end_in betreten (0 = Anfang, 1 = Ende)
         els: Chain = []
         while ci not in used:
             used.add(ci)
@@ -281,16 +276,16 @@ def _stitch(chains: list[Chain]) -> list[Chain]:
         return els
 
     out = []
-    for ci in range(len(chains)):  # open paths first: start at an end that nothing joins
+    for ci in range(len(chains)):  # Zuerst offene Pfade: am Ende beginnen, an das nichts anschließt
         free = [e for e in (0, 1) if (ci, e) not in link]
         if ci not in used and free:
             out.append(walk(ci, free[0]))
-    out += [walk(ci, 0) for ci in range(len(chains)) if ci not in used]  # the cycles
+    out += [walk(ci, 0) for ci in range(len(chains)) if ci not in used]  # Zyklen
     return out
 
 
 def _class_chains(flat: list[tuple[float, Element]]) -> dict[float, list[Chain]]:
-    """Continuous chains per stroke width."""
+    """Zusammenhängende Ketten je Strichstärke."""
     by_width: dict[float, list[Element]] = collections.defaultdict(list)
     for width, el in flat:
         by_width[width].append(el)
@@ -298,11 +293,10 @@ def _class_chains(flat: list[tuple[float, Element]]) -> dict[float, list[Chain]]
 
 
 # ---------------------------------------------------------------------------------------------
-# 3. Fitting lines, arcs and circles to chains
+# 3. Geraden, Bögen und Kreise an Ketten anpassen
 # ---------------------------------------------------------------------------------------------
 def _fit_circle(pts: np.ndarray) -> tuple[float, float, float, float]:
-    """Circle through the points: algebraic (Kasa) start, then Gauss-Newton on the geometric
-    distance. Returns centre x, centre y, radius and the largest residual."""
+    """Kreis durch die Punkte: algebraischer Startwert nach Kasa, danach Gauss-Newton anhand des geometrischen Abstands. Gibt Mittelpunkt x, Mittelpunkt y, Radius und den größten Restfehler zurück."""
     P = np.asarray(pts, float)
     m = P.mean(0)
     Q = P - m
@@ -327,7 +321,7 @@ def _unwrapped_angles(P: np.ndarray, c: Point) -> np.ndarray:
 
 
 def _on_line(P: np.ndarray, i: int, j: int, tol: float) -> bool:
-    """Do the vertices between i and j lie within tol of the line from P[i] to P[j]?"""
+    """Liegen die Eckpunkte zwischen i und j höchstens tol von der Geraden zwischen P[i] und P[j] entfernt?"""
     p, d = P[i], P[j] - P[i]
     length = math.hypot(*d)
     if length < 1e-9:
@@ -340,8 +334,7 @@ def _on_line(P: np.ndarray, i: int, j: int, tol: float) -> bool:
 
 
 def _arc_fit(W: np.ndarray, tol: float) -> _Arc | None:
-    """The arc through consecutive vertices W if they lie on one circle (residual <= tol) and
-    advance monotonically about its centre in small steps, as a tessellated arc does."""
+    """Bogen durch aufeinanderfolgende Eckpunkte W, falls sie auf einem Kreis liegen (Restfehler <= tol) und sich gleichmäßig in kleinen Schritten um dessen Mittelpunkt bewegen, wie bei einem aus Linien angenäherten Bogen."""
     d = np.diff(W, axis=0)
     turn = (np.diff(np.arctan2(d[:, 1], d[:, 0])) + math.pi) % _TAU - math.pi
     if np.abs(turn).max() > math.radians(50):
@@ -359,14 +352,14 @@ def _arc_fit(W: np.ndarray, tol: float) -> _Arc | None:
 
 
 def _turn(a: _Line, b: _Line) -> float:
-    """Angle between the directions of two lines."""
+    """Winkel zwischen den Richtungen zweier Linien."""
     v0, v1 = np.subtract(a.p1, a.p0), np.subtract(b.p1, b.p0)
     d = math.atan2(v1[1], v1[0]) - math.atan2(v0[1], v0[0])
     return abs((d + math.pi) % _TAU - math.pi)
 
 
 def _glue_curves(pieces: list[_Prim]) -> list[_Prim]:
-    """Runs of at least four short single-edge lines that turn smoothly are a free curve."""
+    """Folgen aus mindestens vier kurzen Einzellinien mit gleichmäßigem Richtungswechsel bilden eine Freiformkurve."""
     out: list[_Prim] = []
     run: list[_Line] = []
 
@@ -388,7 +381,7 @@ def _glue_curves(pieces: list[_Prim]) -> list[_Prim]:
 
 
 def _segment(P: np.ndarray, tol: float) -> list[_Prim]:
-    """Greedy maximal-window segmentation of polyline vertices into lines, arcs, free curves."""
+    """Zerlegt die Eckpunkte einer Polylinie jeweils mit möglichst großem Fenster aus Geraden, Bögen und Freiformkurven."""
     n = len(P)
     pieces: list[_Prim] = []
     i = 0
@@ -398,8 +391,8 @@ def _segment(P: np.ndarray, tol: float) -> list[_Prim]:
             jl += 1
         ja, arc = i, None
         if n - i >= _MIN_ARC_POINTS:
-            # Known limit: the first window of _MIN_ARC_POINTS vertices must already sweep
-            # _MIN_ARC_SWEEP, so arcs tessellated finer than 7.5 degrees per step stay lines.
+            # Bekannte Grenze: Das erste Fenster aus _MIN_ARC_POINTS Eckpunkten muss bereits mindestens
+            # _MIN_ARC_SWEEP überstreichen; Bögen mit feinerer Unterteilung als 7,5 Grad je Schritt bleiben Geraden.
             for j in range(i + _MIN_ARC_POINTS - 1, n):
                 fit = _arc_fit(P[i : j + 1], tol)
                 if fit is None:
@@ -415,7 +408,7 @@ def _segment(P: np.ndarray, tol: float) -> list[_Prim]:
 
 
 def _closed_circle(Q: np.ndarray, tol: float) -> _Circle | None:
-    """The circle if the vertices Q (without the repeated first one) are a tessellated circle."""
+    """Der Kreis, falls die Eckpunkte Q (ohne den wiederholten ersten Punkt) einen aus Linien angenäherten Kreis bilden."""
     cx, cy, r, res = _fit_circle(Q)
     if res > tol or r >= 1e5:
         return None
@@ -429,9 +422,9 @@ def _closed_circle(Q: np.ndarray, tol: float) -> _Circle | None:
 
 
 def _poly_prims(pts: list[Point], tol: float) -> list[_Prim]:
-    """Primitives of a polyline: a closed one that is a tessellated circle, else lines and arcs."""
+    """Grundelemente einer Polylinie: bei geschlossenem Verlauf ein aus Linien angenäherter Kreis, andernfalls Geraden und Bögen."""
     P = [pts[0]]
-    for p in pts[1:]:  # drop repeated vertices
+    for p in pts[1:]:  # Wiederholte Eckpunkte entfernen
         if math.dist(p, P[-1]) > 1e-4:
             P.append(p)
     if len(P) < 2:
@@ -446,14 +439,13 @@ def _poly_prims(pts: list[Point], tol: float) -> list[_Prim]:
 def _bezier_arc(
     p0: np.ndarray, p1: np.ndarray, p2: np.ndarray, p3: np.ndarray, mid: np.ndarray, tol: float
 ) -> _Arc | None:
-    """The arc a cubic Bezier draws: the normals at both ends meet in the centre, which is as far
-    from the middle of the curve as from its ends."""
+    """Der Bogen einer kubischen Bézierkurve: Die Normalen an beiden Enden schneiden sich im Mittelpunkt. Dieser liegt vom Kurvenmittelpunkt genauso weit entfernt wie von den Endpunkten."""
     d0 = p1 - p0 if np.linalg.norm(p1 - p0) > 1e-9 else p2 - p0
     d3 = p3 - p2 if np.linalg.norm(p3 - p2) > 1e-9 else p3 - p1
     n0, n3 = np.array([-d0[1], d0[0]]), np.array([-d3[1], d3[0]])
     M = np.array([[n0[0], -n3[0]], [n0[1], -n3[1]]])
     if abs(np.linalg.det(M)) <= 1e-6 * (np.linalg.norm(n0) * np.linalg.norm(n3)):
-        return None  # parallel tangents: no single centre
+        return None  # Parallele Tangenten: kein einzelner Mittelpunkt
     c = p0 + np.linalg.solve(M, p3 - p0)[0] * n0
     r0, r3 = np.linalg.norm(p0 - c), np.linalg.norm(p3 - c)
     if abs(r0 - r3) > tol or abs(np.linalg.norm(mid - c) - r0) > 1e-3 * r0 + tol:
@@ -462,17 +454,17 @@ def _bezier_arc(
     sweep = (a3 - a0 + math.pi) % _TAU - math.pi
     to_mid = (am - a0 + math.pi) % _TAU - math.pi
     if abs(to_mid) > abs(sweep) + 1e-6 or np.sign(to_mid) != np.sign(sweep):
-        sweep -= math.copysign(_TAU, sweep)  # a long arc: the middle is not on the short way round
+        sweep -= math.copysign(_TAU, sweep)  # Langer Bogen: Der Mittelpunkt liegt nicht auf dem kurzen Weg
     return _Arc(_pt(c), float((r0 + r3) / 2), a0, sweep, _pt(p0), _pt(p3))
 
 
 def _bezier_prim(el: Element, tol: float) -> _Prim:
-    """A cubic Bezier as a line (collinear control points), an arc or a free curve."""
+    """Kubische Bézierkurve als Gerade (kollineare Kontrollpunkte), Bogen oder Freiformkurve."""
     p0, p1, p2, p3 = (np.array(q, float) for q in el[1:5])
     chord = p3 - p0
     length = np.linalg.norm(chord)
 
-    def off(q: np.ndarray) -> float:  # distance of a control point from the chord
+    def off(q: np.ndarray) -> float:  # Abstand eines Kontrollpunkts von der Sehne
         if length <= 1e-9:
             return float(np.linalg.norm(q - p0))
         return abs(chord[0] * (q[1] - p0[1]) - chord[1] * (q[0] - p0[0])) / length
@@ -485,7 +477,7 @@ def _bezier_prim(el: Element, tol: float) -> _Prim:
 
 
 def _chain_prims(chain: Chain, tol: float) -> list[_Prim]:
-    """Primitives of one chain: a run of lines is fitted as one polyline, each Bezier on its own."""
+    """Grundelemente einer Kette: Eine Folge von Linien wird als eine Polylinie angepasst, jede Bézierkurve einzeln."""
     prims: list[_Prim] = []
     run: list[Point] = []
     for el in chain:
@@ -503,10 +495,10 @@ def _chain_prims(chain: Chain, tol: float) -> list[_Prim]:
 
 
 # ---------------------------------------------------------------------------------------------
-# 4. Merging: arcs of one circle become a circle or a longer arc, doubled lines are dropped
+# 4. Zusammenführen: Bögen eines Kreises ergeben einen Kreis oder längeren Bogen; doppelte Linien entfallen
 # ---------------------------------------------------------------------------------------------
 def _cluster(rounds: list[_Arc | _Circle]) -> list[list[_Arc | _Circle]]:
-    """Group arcs and circles that share centre and radius within a tolerance."""
+    """Gruppiert Bögen und Kreise, deren Mittelpunkt und Radius innerhalb einer Toleranz übereinstimmen."""
     clusters: list[list[_Arc | _Circle]] = []
     for p in rounds:
         tol = 0.05 + 5e-4 * p.r
@@ -521,7 +513,7 @@ def _cluster(rounds: list[_Arc | _Circle]) -> list[list[_Arc | _Circle]]:
 
 
 def _covered(arcs: list[_Arc]) -> list[list[float]]:
-    """The angle intervals the arcs cover together, overlapping or touching ones joined."""
+    """Winkelintervalle, die die Bögen gemeinsam abdecken; überlappende oder angrenzende Intervalle werden verbunden."""
     ivs = []
     for a in arcs:
         lo = min(a.a0, a.a0 + a.sw) % _TAU
@@ -535,14 +527,13 @@ def _covered(arcs: list[_Arc]) -> list[list[float]]:
         else:
             merged.append([lo, hi])
     if len(merged) > 1 and merged[0][0] <= 0.012 and merged[-1][1] >= _TAU - 0.012:
-        merged[0][0] = merged[-1][0] - _TAU  # one interval across the 0 degree direction
+        merged[0][0] = merged[-1][0] - _TAU  # Ein Intervall über die Richtung 0 Grad
         merged.pop()
     return merged
 
 
 def _merge_arcs(rounds: list[_Arc | _Circle]) -> list[_Arc | _Circle]:
-    """Merge the arcs and circles of one circle: together they cover the full angle (a circle) or
-    leave gaps (longer arcs). Centre and radius are averaged, weighted by the swept angle."""
+    """Führt Bögen und Kreise desselben Kreises zusammen: Sie decken gemeinsam den Vollwinkel (Kreis) ab oder lassen Lücken (längere Bögen). Mittelpunkt und Radius werden nach dem überstrichenen Winkel gewichtet gemittelt."""
     out: list[_Arc | _Circle] = []
     for members in _cluster(rounds):
         w = [max(abs(p.sw), 1e-3) if isinstance(p, _Arc) else _TAU for p in members]
@@ -562,9 +553,9 @@ def _merge_arcs(rounds: list[_Arc | _Circle]) -> list[_Arc | _Circle]:
 
 
 def _class_prims(chains: list[Chain], tol: float) -> list[_Prim]:
-    """Circles, arcs, lines and free curves of one stroke class. Collinear lines are not joined:
-    a dimension extension line continues a contour edge and must stay a separate piece, or the
-    contour no longer closes."""
+    """Kreise, Bögen, Linien und Freiformkurven einer Strichklasse. Kollineare Linien werden nicht zusammengefügt:
+        Eine Maßhilfslinie kann eine Konturkante fortsetzen und muss getrennt bleiben, sonst schließt sich die Kontur nicht.
+    """
     prims = [p for ch in chains for p in _chain_prims(ch, tol)]
     rounds = _merge_arcs([p for p in prims if isinstance(p, (_Arc, _Circle))])
     return [
@@ -576,11 +567,11 @@ def _class_prims(chains: list[Chain], tol: float) -> list[_Prim]:
 
 
 # ---------------------------------------------------------------------------------------------
-# 5. Contours: connected pieces of the visible edges
+# 5. Konturen: zusammenhängende Teile der sichtbaren Kanten
 # ---------------------------------------------------------------------------------------------
 @dataclass
 class _Contour:
-    """A connected piece of the visible edges. The area is set if it is exactly one closed loop."""
+    """Zusammenhängender Teil der sichtbaren Kanten. Ein Flächeninhalt ist nur gesetzt, wenn genau eine geschlossene Schleife vorliegt."""
 
     prims: list[_Prim]
     bbox: Box
@@ -593,12 +584,11 @@ class _Contour:
         return (self.bbox[2] - self.bbox[0]) * (self.bbox[3] - self.bbox[1])
 
 
-Adjacency = dict[int, list[int]]  # node -> indices of the pieces or circles touching it
+Adjacency = dict[int, list[int]]  # Knoten -> Indizes der dort zusammentreffenden Teile oder Kreise
 
 
 def _prune_dangling(ends: list[tuple[int, int]], on: Adjacency) -> set[int]:
-    """Indices of the pieces left once those hanging on the rest at one end only are removed
-    again and again (extension lines, leaders, dimension lines). An end on a circle is connected."""
+    """Gibt die Indizes der verbleibenden Teile zurück, nachdem wiederholt alle Teile entfernt wurden, die nur an einem Ende mit dem Rest verbunden sind (Maßhilfslinien, Hinweislinien, Maßlinien). Ein Endpunkt auf einem Kreis gilt als verbunden."""
     alive = set(range(len(ends)))
     while True:
         deg: collections.Counter[int] = collections.Counter()
@@ -617,7 +607,7 @@ def _prune_dangling(ends: list[tuple[int, int]], on: Adjacency) -> set[int]:
 def _components(
     n: int, n_circles: int, at: Adjacency, on: Adjacency, alive: list[int]
 ) -> list[list[int]]:
-    """Group the live pieces (0..n-1) and circles (n..) that share a node. Union-find."""
+    """Gruppiert die aktiven Teile (0..n-1) und Kreise (n..), die einen Knoten teilen. Union-Find."""
     parent = list(range(n + n_circles))
 
     def find(x: int) -> int:
@@ -640,8 +630,7 @@ def _components(
 def _loop_area(
     idx: list[int], pieces: list[_Prim], ends: list[tuple[int, int]], at: Adjacency
 ) -> float | None:
-    """Area enclosed by the pieces idx if they form one closed loop, else None. Every node joins
-    exactly two of them, so walking from the first piece comes back to it."""
+    """Von den Teilen idx eingeschlossene Fläche, wenn sie eine geschlossene Schleife bilden, sonst None. Jeder Knoten verbindet genau zwei Teile; der Rundgang vom ersten Teil führt daher wieder zu ihm zurück."""
     order, cur, node = [], idx[0], ends[idx[0]][0]
     while True:
         a, b = ends[cur]
@@ -658,19 +647,18 @@ def _loop_area(
 
 
 def _contours(prims: list[_Prim]) -> list[_Contour]:
-    """Connected pieces of the visible edges. A line end that lies on a full circle counts as
-    connected to it (tangent belt lines between lugs)."""
+    """Zusammenhängende Teile der sichtbaren Kanten. Ein Linienende auf einem vollständigen Kreis gilt als verbunden (tangentiale Gurtlinien zwischen Laschen)."""
     circles = [p for p in prims if isinstance(p, _Circle)]
     pieces = [p for p in prims if not isinstance(p, _Circle)]
     nodes = _Nodes(_SNAP)
     ends = [(nodes.add(p.p0), nodes.add(p.p1)) for p in pieces]
-    on: Adjacency = collections.defaultdict(list)  # node -> circles it lies on
+    on: Adjacency = collections.defaultdict(list)  # Knoten -> Kreise, auf denen er liegt
     for ni, pt in enumerate(nodes.points):
         for ci, c in enumerate(circles):
             if abs(math.dist(pt, c.c) - c.r) <= _SNAP + 1e-4 * c.r:
                 on[ni].append(ci)
     alive = sorted(_prune_dangling(ends, on))
-    at: Adjacency = collections.defaultdict(list)  # node -> live pieces ending there
+    at: Adjacency = collections.defaultdict(list)  # Knoten -> aktive Teile, die an ihm enden
     for i in alive:
         at[ends[i][0]].append(i)
         at[ends[i][1]].append(i)
@@ -690,16 +678,16 @@ def _contours(prims: list[_Prim]) -> list[_Contour]:
 
 
 # ---------------------------------------------------------------------------------------------
-# 6. Stroke classes: which width carries the visible edges?
+# 6. Strichklassen: Welche Stärke trägt die sichtbaren Kanten?
 # ---------------------------------------------------------------------------------------------
 def _span(chain: Chain) -> tuple[float, float]:
-    """Width and height (pt) of the box around a chain."""
+    """Breite und Höhe (pt) des Rahmens um eine Kette."""
     x0, y0, x1, y1 = _bounds([q for el in chain for q in el[1:]])
     return x1 - x0, y1 - y0
 
 
 def _is_frame(chain: Chain, width: float, height: float) -> bool:
-    """Sheet border: a closed rectangle, or a single straight edge spanning the sheet."""
+    """Blattrahmen: ein geschlossenes Rechteck oder eine einzelne gerade Kante, die über das Blatt verläuft."""
     bw, bh = _span(chain)
     return (bw >= 0.8 * width and bh >= 0.8 * height) or (
         len(chain) == 1 and max(bw, bh) >= 0.8 * min(width, height)
@@ -707,7 +695,7 @@ def _is_frame(chain: Chain, width: float, height: float) -> bool:
 
 
 def _score(chains: list[Chain], width: float, height: float) -> float:
-    """Drawn length (pt) of the chains long enough to be part of a view."""
+    """Gezeichnete Länge (pt) der Ketten, die lang genug sind, um Teil einer Ansicht zu sein."""
     diagonal = math.hypot(width, height)
     return sum(
         math.dist(el[1], el[-1])
@@ -718,7 +706,7 @@ def _score(chains: list[Chain], width: float, height: float) -> float:
 
 
 def _visible_widths(scores: dict[float, float], edge_width: str | float) -> list[float]:
-    """The stroke widths taken as visible edges."""
+    """Die als sichtbare Kanten berücksichtigten Strichstärken."""
     if edge_width == "all":
         return list(scores)
     if edge_width == "auto":
@@ -734,15 +722,15 @@ def _visible_widths(scores: dict[float, float], edge_width: str | float) -> list
 
 
 # ---------------------------------------------------------------------------------------------
-# 7. Public API
+# 7. Öffentliche API
 # ---------------------------------------------------------------------------------------------
 @dataclass(frozen=True)
 class _Frame:
-    """Sheet points (y down) to model mm (y up) with the origin at the region's lower-left."""
+    """Abbildung von Blattpunkten (y nach unten) auf Modell-mm (y nach oben), mit Ursprung links unten im Bereich."""
 
     ox: float
     oy: float
-    k: float  # mm per point
+    k: float  # mm je Punkt
 
     def x(self, v: float) -> float:
         return float(round((v - self.ox) * self.k, 4))
@@ -765,7 +753,7 @@ def _check_region(region: Sequence[float] | None) -> Box:
 
 
 def _read_page(pdf_path: str | PathLike[str], page: int) -> tuple[float, float, list]:
-    """Size (pt) of the displayed page and its stroked elements."""
+    """Größe (pt) der angezeigten Seite und ihrer umrandeten Elemente."""
     with pymupdf.open(pdf_path) as doc:
         if not 1 <= page <= len(doc):
             raise ValueError(f"`page` muss zwischen 1 und {len(doc)} liegen; erhalten: {page}.")
@@ -779,7 +767,7 @@ def _inside(p: _Prim, box: Box) -> bool:
 
 
 def _line_row(p: _Line, f: _Frame, in_contour: bool) -> dict:
-    dx, dy = p.p1[0] - p.p0[0], -(p.p1[1] - p.p0[1])  # y up
+    dx, dy = p.p1[0] - p.p0[0], -(p.p1[1] - p.p0[1])  # y nach oben
     angle = math.degrees(math.atan2(dy, dx)) % 180
     return {
         "x0": f.x(p.p0[0]),
@@ -806,7 +794,7 @@ def _contour_row(c: _Contour, f: _Frame) -> dict:
 def _extent(
     prims: list[_Prim], contours: list[_Contour], f: _Frame
 ) -> tuple[list[float] | None, str | None]:
-    """Width and height of the largest contour, else of all primitives; None if there are none."""
+    """Breite und Höhe der größten Kontur oder, falls es keine gibt, aller Grundelemente; None, wenn keine vorhanden sind."""
     if contours:
         box, basis = contours[0].bbox, "größte Kontur"
     elif prims:
@@ -817,7 +805,7 @@ def _extent(
 
 
 def _rows(prims: list[_Prim], contours: list[_Contour], f: _Frame) -> dict:
-    """The circles, arcs, lines and contours of a result, largest first."""
+    """Kreise, Bögen, Linien und Konturen eines Ergebnisses, absteigend nach Größe."""
     in_contour = {id(p) for c in contours for p in c.prims}
     circles = [
         {"cx": f.x(p.c[0]), "cy": f.y(p.c[1]), "d_mm": f.mm(2 * p.r)}
@@ -850,25 +838,25 @@ def extract(
     scale: float = 1.0,
     edge_width: str | float = "auto",
 ) -> dict:
-    """Measure the vector geometry of one page, or of a region of it.
+    """Misst die Vektorgeometrie einer Seite oder eines Bereichs davon.
 
-    Args:
-        pdf_path: the drawing.
-        page: page number, 1-based.
-        region: (x0, y0, x1, y1) as fractions of the displayed page, origin top left. A piece of
-            geometry belongs to the region when its midpoint does.
-        scale: drawing scale as drawing:model (2 is 2:1, 0.5 is 1:2). Model mm = sheet mm / scale.
-        edge_width: stroke width of the visible edges. "auto" takes the widest class that holds a
-            substantial share of the drawn length, "all" every class, a number the nearest width.
+        Argumente:
+            pdf_path: Zeichnung.
+            page: Seitennummer, 1-basiert.
+            region: (x0, y0, x1, y1) als Anteile der angezeigten Seite, Ursprung oben links. Ein Geometrieelement
+                gehört zum Bereich, wenn sein Mittelpunkt darin liegt.
+            scale: Zeichnungsmaßstab im Verhältnis Zeichnung:Modell (2 entspricht 2:1, 0.5 entspricht 1:2).
+                Modell-mm = Blatt-mm / scale.
+            edge_width: Strichstärke sichtbarer Kanten. "auto" wählt die Klasse mit dem größten Anteil an der
+                gezeichneten Länge, "all" alle Klassen, eine Zahl die nächstliegende Strichstärke.
 
-    Returns:
-        scale_used; styles (stroke classes: width in pt, drawn length score, visible), widest
-        first; extent_mm [width, height] with extent_basis ("größte Kontur" or "all visible
-        primitives", None if the region holds no geometry); circles (cx, cy, d_mm) and arcs (cx,
-        cy, r_mm, sweep in degrees), largest first; lines (x0, y0, x1, y1, length_mm, angle_deg,
-        in_contour), longest first; contours (bbox_mm [x0, y0, x1, y1], w_mm, h_mm, closed_loop,
-        area_mm2), largest first. Coordinates and sizes are model mm, y up, origin at the
-        lower-left corner of the region.
+        Rückgabe:
+            scale_used; styles (Strichklassen: width in pt, score = Bewertung der gezeichneten Länge, visible), zuerst die mit dem
+            höchsten Anteil; extent_mm [width, height] mit extent_basis ("größte Kontur" oder "alle sichtbaren Grundelemente", None, wenn der Bereich keine Geometrie enthält); circles (cx, cy, d_mm) und arcs (cx,
+            cy, r_mm, sweep in Grad), absteigend nach Größe; lines (x0, y0, x1, y1, length_mm, angle_deg,
+            in_contour), absteigend nach Länge; contours (bbox_mm [x0, y0, x1, y1], w_mm, h_mm, closed_loop,
+            area_mm2), absteigend nach Größe. Koordinaten und Maße sind Modell-mm, y zeigt nach oben, Ursprung
+            links unten im Bereich.
     """
     if not scale > 0:
         raise ValueError(f"`scale` muss positiv sein; erhalten: {scale}.")
@@ -882,7 +870,7 @@ def extract(
     visible = _visible_widths(scores, edge_width)
 
     tol = max(_FIT_TOL, 0.75 * _grid(flat))
-    box = (rx0 * width, ry0 * height, rx1 * width, ry1 * height)  # pt, y down
+    box = (rx0 * width, ry0 * height, rx1 * width, ry1 * height)  # pt, y nach unten
     prims = [p for w in visible for p in _class_prims(classes[w], tol) if _inside(p, box)]
     contours = sorted(_contours(prims), key=lambda c: c.rank, reverse=True)
     f = _Frame(ox=box[0], oy=box[3], k=_PT_MM / scale)
@@ -900,9 +888,9 @@ def extract(
 
 
 # ---------------------------------------------------------------------------------------------
-# 8. Checking read dimensions and the drawing scale against the geometry
+# 8. Aus der Zeichnung gelesene Maße und Maßstab mit der Geometrie abgleichen
 # ---------------------------------------------------------------------------------------------
-Candidates = dict[str, list[tuple[float, str]]]  # kind (d, r, L) -> (value in mm, where from)
+Candidates = dict[str, list[tuple[float, str]]]  # Art (d, r, L) -> (Wert in mm, Herkunft)
 
 
 def _round_candidates(res: dict, pool: Candidates) -> None:
@@ -929,7 +917,7 @@ def _edge_candidates(res: dict, pool: Candidates) -> None:
 
 
 def _centre_candidates(res: dict, pool: Candidates) -> None:
-    """Distances between centres, and from a centre to a line of 3 mm or more."""
+    """Abstände zwischen Mittelpunkten sowie zwischen einem Mittelpunkt und einer mindestens 3 mm langen Linie."""
     centres = sorted({(p["cx"], p["cy"]) for p in res["circles"] + res["arcs"]})
     for i, a in enumerate(centres):
         for b in centres[i + 1 :]:
@@ -949,7 +937,7 @@ def _centre_candidates(res: dict, pool: Candidates) -> None:
 
 
 def _parallel_candidates(res: dict, pool: Candidates) -> None:
-    """Spacing of parallel lines longer than 1 mm."""
+    """Abstand zwischen parallelen Linien, die länger als 1 mm sind."""
     lines = [ln for ln in res["lines"] if ln["length_mm"] > 1]
     for i, a in enumerate(lines):
         for b in lines[i + 1 :]:
@@ -963,8 +951,7 @@ def _parallel_candidates(res: dict, pool: Candidates) -> None:
 
 
 def _candidates(res: dict) -> Candidates:
-    """Every diameter (d), radius (r) and length (L) the measured geometry offers: edges, contour
-    sizes, centre distances, centre-to-line and line-to-line distances."""
+    """Alle Durchmesser (d), Radien (r) und Längen (L), die sich aus der Geometrie messen lassen: Kanten, Konturmaße, Mittelpunktabstände sowie Abstände zwischen Mittelpunkten und Linien oder zwischen Linien."""
     pool: Candidates = {"d": [], "r": [], "L": []}
     _round_candidates(res, pool)
     _edge_candidates(res, pool)
@@ -984,13 +971,13 @@ def _parse_claim(claim: str) -> tuple[str, float]:
 
 
 def verify(res: dict, claims: Sequence[str], tol: float = 0.05) -> list[dict]:
-    """Check dimensions read from the drawing against the geometry measured by `extract`.
+    """Prüft aus der Zeichnung gelesene Maße anhand der mit extract gemessenen Geometrie.
 
-    A claim is "d=19" (diameter), "r=10" (radius) or "L=49" (length) in mm, decimal comma allowed.
-    Per claim: the measured value closest to it (measured_mm, deviation_mm = measured - claimed,
-    matched = where it comes from), status "ok" within tol, "MISMATCH" beyond, "no_candidates"
-    if the geometry has no value of that kind, and n_candidates_within_tol. A dense view offers
-    many lengths, so an L claim can agree by chance: restrict the region to the view.
+        Ein Prüfwert lautet in mm "d=19" (Durchmesser), "r=10" (Radius) oder "L=49" (Länge); ein Dezimalkomma ist
+        zulässig. Je Prüfwert werden der nächstliegende Messwert (measured_mm, deviation_mm = Messwert - Sollwert,
+        matched = Herkunft), der Status "ok" innerhalb tol, "MISMATCH" außerhalb oder "no_candidates", wenn es
+        keinen Messwert dieser Art gibt, sowie n_candidates_within_tol zurückgegeben. Eine dichte Ansicht enthält viele
+        Längen; ein L-Maß kann dort zufällig passen. Dafür den Bereich auf die Ansicht begrenzen.
     """
     pool = _candidates(res)
     verdicts = []
@@ -1019,7 +1006,7 @@ def verify(res: dict, claims: Sequence[str], tol: float = 0.05) -> list[dict]:
 
 
 def _standard(scale: float) -> float | None:
-    """The standard scale within 0.5 % of `scale`, if there is one."""
+    """Der Standardmaßstab innerhalb von 0,5 % von scale, falls vorhanden."""
     near = min(STANDARD_SCALES, key=lambda t: abs(t - scale) / t)
     return near if abs(near - scale) / near < 0.005 else None
 
@@ -1030,18 +1017,17 @@ def suggest_scale(
     page: int = 1,
     region: Sequence[float] | None = None,
 ) -> list[dict]:
-    """Find the scale a drawing is really drawn at from dimensions printed on it, which shows a
-    wrong scale in the title block.
+    """Ermittelt anhand der aufgedruckten Maße den tatsächlichen Maßstab einer Zeichnung und macht einen falschen Maßstab im Schriftfeld sichtbar.
 
-    Every measured quantity of the page (in sheet mm) divided by a printed value is a candidate
-    scale; each printed value votes once for each candidate it supports. Give dimensions of the
-    views, six or more: with few values chance hits cannot be told from the real scale.
+        Jede gemessene Größe der Seite (in Blatt-mm), geteilt durch einen gedruckten Wert, ergibt einen möglichen
+        Maßstab. Jeder gedruckte Wert gibt einmal je unterstütztem Maßstab eine Stimme ab. Mindestens sechs Maße aus den
+        Ansichten angeben: Bei wenigen Werten lassen sich Zufallstreffer nicht vom tatsächlichen Maßstab unterscheiden.
 
-    Returns up to five dicts {"scale", "votes", "standard"}, best first: most votes, then a
-    standard scale before a non-standard one, then the ratio closest to 1:1 (related dimension
-    sets can give two ratios all votes, e.g. 0.3 = 0.4 * 0.75). "standard" is the standard scale
-    within 0.5 % of "scale", else None: a drawing at 0.75 gives a non-standard ratio that must
-    stay visible.
+        Gibt höchstens fünf Wörterbücher {"scale", "votes", "standard"} zurück, sortiert nach den meisten Stimmen,
+        danach nach einem Standardmaßstab vor einem nicht standardisierten Wert und schließlich nach dem Verhältnis
+        am nächsten zu 1:1 (verwandte Maßreihen können zwei Verhältnisse mit allen Stimmen ergeben, z. B.
+        0.3 = 0.4 * 0.75). "standard" ist der Standardmaßstab innerhalb von 0,5 % von "scale", andernfalls None:
+        Ein Maßstab von 0.75 muss als nicht standardisierter Wert sichtbar bleiben.
     """
     if any(v <= 0 for v in printed_values):
         raise ValueError(f"`printed_values` müssen positiv sein; erhalten: {list(printed_values)}.")

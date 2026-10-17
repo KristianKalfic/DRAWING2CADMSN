@@ -1,7 +1,7 @@
-"""Build worker: the process `python -I -m d2c.worker` that d2c.sandbox.run_worker starts.
+"""Aufbau-Worker: Prozess `python -I -m d2c.worker`, den d2c.sandbox.run_worker startet.
 
-stdin holds one JSON payload {"ops": [...], "expected": {...} | null, "marks": [...], "export_path": str | null}.
-stdout gets exactly one JSON line, the report with the keys ok, error, solid, dims, build_notes, roundtrip.
+stdin enthält die JSON-Nutzlast `payload` {"ops": [...], "expected": {...} | null, "marks": [...], "export_path": str | null}.
+stdout erhält genau eine JSON-Zeile: den Bericht mit den Schlüsseln ok, error, solid, dims, build_notes und roundtrip.
 """
 import json
 import os
@@ -15,24 +15,24 @@ from d2c.sandbox import error_report, validation_error_message
 from d2c.spec import Expected
 
 OPS = TypeAdapter(list[Op])
-SCRATCH_STEP = "model.step"  # where the model is exported when the payload names no path: the scratch cwd
+SCRATCH_STEP = "model.step"  # Exportpfad des Modells, wenn im payload keiner angegeben ist: das temporäre Arbeitsverzeichnis.
 
 
 def make_report(payload: dict) -> dict:
-    """Build, check and export the model of the payload. Whatever fails on the way becomes `error`."""
+    """Baut, prüft und exportiert das Modell aus dem payload. Jeder Fehler auf dem Weg wird als `error` zurückgegeben."""
     try:
         ops = OPS.validate_python(payload["ops"])
         want = payload.get("expected")
         expected = Expected.model_validate(want) if want is not None else None
         wp, notes = build(ops)
-        if not wp.objects:  # CadQuery keeps no object for an empty compound, and the checks cannot read that
+        if not wp.objects:  # CadQuery speichert für ein leeres Compound kein Objekt, das die Prüfungen lesen könnten.
             raise BuildError("Das Modell ist leer. Prüfe, ob ein Schnitt das gesamte Material entfernt hat.")
         solid = solid_check(wp)
         dims = dimension_check(wp, expected) if expected is not None else []
         roundtrip = step_roundtrip(wp, payload.get("export_path") or SCRATCH_STEP, payload.get("marks", []))
     except ValidationError as e:
         return error_report(f"ValidationError: {validation_error_message(e)}")
-    except Exception as e:  # invalid input, build, check and export errors alike: the caller always gets a report
+    except Exception as e:  # Auch bei ungültigen Eingaben sowie Aufbau-, Prüf- und Exportfehlern erhält der Aufrufer einen Bericht.
         return error_report(f"{type(e).__name__}: {e}")
     return {
         "ok": solid["ok"] and all(d["ok"] for d in dims) and roundtrip["ok"],
@@ -45,9 +45,9 @@ def make_report(payload: dict) -> dict:
 
 
 def main() -> None:
-    """Read the payload from stdin and write the report as one JSON line to the real stdout."""
-    with os.fdopen(os.dup(1), "w") as report_out:  # the real stdout, kept for the report
-        os.dup2(2, 1)  # print() in scripts and OpenCascade's own messages now land on stderr
+    """Liest das payload aus stdin und schreibt den Bericht als einzelne JSON-Zeile auf stdout."""
+    with os.fdopen(os.dup(1), "w") as report_out:  # Echte stdout-Ausgabe für den Bericht sichern.
+        os.dup2(2, 1)  # print() in Skripten und Meldungen von OpenCascade gehen nun auf stderr.
         report_out.write(json.dumps(make_report(json.load(sys.stdin))) + "\n")
 
 

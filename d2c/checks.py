@@ -1,8 +1,7 @@
-"""Checks run after every build: valid solid (R8a), size and holes (R8b), STEP round trip (R8c).
+"""Prüfungen nach jedem Aufbau: gültiger Festkörper (R8a), Maße und Bohrungen (R8b), STEP-Export mit Rückimport (R8c).
 
-The tolerances are the project-wide ones: 0.01 mm linear, |cos| >= 0.9999 for parallel axes and
-1e-6 relative volume change through a STEP export and re-import.
-"""
+Die projektweiten Toleranzen betragen linear 0,01 mm, |cos| >= 0,9999 für parallele Achsen und eine relative
+Volumenänderung von höchstens 1e-6 nach STEP-Export und -Rückimport."""
 
 from collections.abc import Sequence
 from pathlib import Path
@@ -18,17 +17,17 @@ from OCP.ShapeAnalysis import ShapeAnalysis_FreeBounds
 from d2c.spec import Expected, ExpectedHole
 
 LINEAR_TOL = 0.01  # mm
-AXIS_COS = 0.9999  # smallest |cos| of the angle between two axes that count as parallel
-VOLUME_REL_TOL = 1e-6  # largest relative volume change through the STEP round trip
+AXIS_COS = 0.9999  # Kleinster |cos|-Wert des Winkels zwischen zwei Achsen, damit sie als parallel gelten
+VOLUME_REL_TOL = 1e-6  # Größte relative Volumenänderung beim STEP-Export mit Rückimport
 
 Point = tuple[float, float, float]
 
 
 def _bbox(shape: cq.Shape) -> cq.BoundBox:
-    """Bounding box of the exact geometry.
+    """Begrenzungsrahmen der exakten Geometrie.
 
-    Shape.BoundingBox() also reads a mesh left on the shape (by a GLB export, say) and then
-    overshoots curved parts by up to the mesh deflection.
+        Shape.BoundingBox() berücksichtigt auch ein am Körper verbliebenes Netz (zum Beispiel nach GLB-Export) und
+        überschätzt gekrümmte Teile dann um bis zur Netzabweichung.
     """
     box = Bnd_Box()
     BRepBndLib.AddOptimal_s(shape.wrapped, box, False, False)
@@ -36,9 +35,9 @@ def _bbox(shape: cq.Shape) -> cq.BoundBox:
 
 
 def _free_edges(shape: cq.Shape) -> int:
-    """Edges that border only one face, i.e. the gaps in the skin of the shape.
+    """Kanten, die nur an eine Fläche grenzen, also Lücken in der Hülle des Körpers.
 
-    The constructor without a tolerance is the one that also finds the boundary of a single face.
+        Der Konstruktor ohne Toleranz findet auch den Rand einer einzelnen Fläche.
     """
     bounds = ShapeAnalysis_FreeBounds(shape.wrapped, False, True)
     wires = (bounds.GetClosedWires(), bounds.GetOpenWires())
@@ -46,9 +45,10 @@ def _free_edges(shape: cq.Shape) -> int:
 
 
 def _is_concave(face: cq.Face, cylinder: gp_Cylinder) -> bool:
-    """Whether the material of the cylindrical face lies outside, as around a hole.
+    """Gibt an, ob das Material außerhalb der zylindrischen Fläche liegt, wie bei einer Bohrung.
 
-    The oriented normal of a hole surface points to the axis, that of a pin or convex round away from it.
+        Die orientierte Normale einer Bohrungsfläche weist zur Achse; bei einem Zapfen oder einer konvexen Rundung weist
+        sie von der Achse weg.
     """
     axis = cylinder.Axis()
     direction = cq.Vector(axis.Direction().X(), axis.Direction().Y(), axis.Direction().Z())
@@ -59,7 +59,7 @@ def _is_concave(face: cq.Face, cylinder: gp_Cylinder) -> bool:
 
 
 def _cylinders(shape: cq.Shape) -> list[tuple[gp_Cylinder, bool]]:
-    """Every cylindrical face of the shape as a cylinder in global coordinates, with its concavity."""
+    """Alle zylindrischen Flächen des Körpers als Zylinder in globalen Koordinaten, jeweils mit ihrer Konkavität."""
     found = []
     for face in shape.Faces():
         surface = BRepAdaptor_Surface(face.wrapped)
@@ -70,7 +70,7 @@ def _cylinders(shape: cq.Shape) -> list[tuple[gp_Cylinder, bool]]:
 
 
 def solid_check(wp: cq.Workplane) -> dict:
-    """R8a: the model is one valid closed solid with positive volume."""
+    """R8a: Das Modell ist ein gültiger, geschlossener Festkörper mit positivem Volumen."""
     shape = wp.val()
     box = _bbox(shape)
     valid, solids = shape.isValid(), len(shape.Solids())
@@ -86,11 +86,11 @@ def solid_check(wp: cq.Workplane) -> dict:
 
 
 def _check_hole(cylinders: list[tuple[gp_Cylinder, bool]], hole: ExpectedHole) -> dict:
-    """The dimension_check entry of one expected hole.
+    """Ein Eintrag von dimension_check für eine erwartete Bohrung.
 
-    A cylinder is the hole if it is concave and its diameter, the distance of hole.at from its axis
-    and the direction of its axis are all within tolerance. `actual` is that cylinder, or else the
-    one (concave or not) whose axis runs closest to hole.at; None if the shape has no cylindrical face.
+        Ein Zylinder gilt als Bohrung, wenn er konkav ist und sein Durchmesser, der Abstand von hole.at zu seiner Achse
+        sowie die Achsrichtung innerhalb der Toleranz liegen. actual ist dieser Zylinder oder andernfalls derjenige
+        (konkav oder nicht), dessen Achse am nächsten an hole.at verläuft; None, wenn der Körper keine Zylinderfläche hat.
     """
     point, direction = gp_Pnt(*hole.at), gp_Dir(*hole.axis)
     found = [
@@ -123,9 +123,9 @@ def _check_hole(cylinders: list[tuple[gp_Cylinder, bool]], hole: ExpectedHole) -
 
 
 def dimension_check(wp: cq.Workplane, expected: Expected) -> list[dict]:
-    """R8b: overall size and every expected hole against the model, one entry per check.
+    """Vergleicht die Gesamtmaße und jede erwartete Bohrung mit dem Modell; ein Eintrag je Prüfung.
 
-    The size compares the edge lengths of the bounding box in model coordinates.
+        Bei den Maßen werden die Kantenlängen des Begrenzungsrahmens in Modellkoordinaten verglichen.
     """
     shape = wp.val()
     box = _bbox(shape)
@@ -145,25 +145,25 @@ def dimension_check(wp: cq.Workplane, expected: Expected) -> list[dict]:
 
 
 def select_faces(shape: cq.Shape, near: Sequence[Point], tol: float = 0.5) -> list[cq.Face]:
-    """The faces of the shape that lie within tol of any of the points."""
+    """Die Flächen des Körpers, die höchstens tol von einem der Punkte entfernt liegen."""
     points = [cq.Vertex.makeVertex(*p) for p in near]
     return [face for face in shape.Faces() if any(face.distance(p) <= tol for p in points)]
 
 
 def _export_step(shape: cq.Shape, path: str, marked: Sequence[tuple[str, Sequence[cq.Face]]]) -> None:
-    """Write the shape as STEP with a steel-colored body and orange faces named after their mark."""
+    """Schreibt den Körper als STEP mit stahlfarbenem Grundkörper und orangefarbenen, nach ihrer Markierung benannten Flächen."""
     asm = cq.Assembly(shape, name=Path(path).stem, color=cq.Color(0.6, 0.67, 0.69))
     for mark_id, faces in marked:
         for face in faces:
             asm.addSubshape(face, name=mark_id, color=cq.Color(1.0, 0.5, 0.0))
-    asm.export(path, exportType="STEP")  # explicit: a *.stp name would not be recognized
+    asm.export(path, exportType="STEP")  # Explizit: Ein Name mit *.stp würde nicht erkannt
 
 
 def step_roundtrip(wp: cq.Workplane, path: str, marks: Sequence[dict] = ()) -> dict:
-    """R8c: write the model as STEP, read it back and compare.
+    """Schreibt das Modell als STEP, liest es beim Rückimport wieder ein und vergleicht das Ergebnis.
 
-    marks are {"id": str, "near": [(x, y, z), ...]}: the faces near a mark's points are colored and
-    named after its id. A mark that finds no face makes the result not ok.
+        marks hat die Form {"id": str, "near": [(x, y, z), ...]}: Die Flächen in der Nähe der Punkte einer Markierung
+        werden eingefärbt und nach ihrer id benannt. Findet eine Markierung keine Fläche, ist das Ergebnis nicht ok.
     """
     shape = wp.val()
     selected = [(m["id"], select_faces(shape, m["near"])) for m in marks]
@@ -186,7 +186,7 @@ def step_roundtrip(wp: cq.Workplane, path: str, marks: Sequence[dict] = ()) -> d
 
 
 def metrics(shape: cq.Shape) -> dict:
-    """Figures that do not depend on where the part sits in space, to compare a model with a reference."""
+    """Kennwerte, die unabhängig von der Lage des Bauteils im Raum sind und den Vergleich mit einem Referenzmodell ermöglichen."""
     box = _bbox(shape)
     return {
         "volume": shape.Volume(),

@@ -1,4 +1,4 @@
-"""Op-list sessions: one PartSpec and its list of ops per part, kept in memory and in results/<name>/."""
+"""Vorgangssitzungen: je Bauteil eine PartSpec und Vorgangsliste, im Speicher und unter results/<name>/ abgelegt."""
 
 import json
 import os
@@ -11,11 +11,11 @@ from d2c.sandbox import run_worker
 from d2c.spec import PartSpec
 
 
-PART_NAME = re.compile(r"[\w-]+")  # the same rule as PartSpec.name
+PART_NAME = re.compile(r"[\w-]+")  # dieselbe Regel wie für PartSpec.name
 
 
 def results_root() -> Path:
-    """The results folder, read from D2C_RESULTS on every call."""
+    """Ergebnisordner; D2C_RESULTS wird bei jedem Aufruf neu gelesen."""
     return Path(os.environ.get("D2C_RESULTS", "/app/results"))
 
 
@@ -24,7 +24,7 @@ def _write_json(path: Path, data: object) -> None:
 
 
 class Session:
-    """The specs, op lists and last build reports of the parts of this server run."""
+    """Spezifikationen, Vorgangslisten und letzte Aufbau-Berichte der Bauteile in diesem Serverlauf."""
 
     def __init__(self) -> None:
         self.specs: dict[str, PartSpec] = {}
@@ -35,7 +35,7 @@ class Session:
         return results_root() / part
 
     def _load(self, part: str) -> str:
-        """The normalized name of a known part; a part only on disk is loaded first."""
+        """Normalisierter Name eines bekannten Bauteils; ein nur auf Datenträger vorhandenes Bauteil wird zuerst geladen."""
         part = unicodedata.normalize("NFC", part)
         if not PART_NAME.fullmatch(part):
             raise KeyError(f"Unbekanntes Bauteil '{part}'; rufe zuerst `submit_spec` auf.")
@@ -48,7 +48,7 @@ class Session:
 
     @staticmethod
     def _read(folder: Path) -> tuple[PartSpec, list[dict]]:
-        """The spec and op list stored in a part folder; an unreadable file is named in the error."""
+        """Spezifikation und Vorgangsliste aus dem Bauteilordner; eine nicht lesbare Datei wird in der Fehlermeldung genannt."""
         name = "spec.json"
         try:
             spec = PartSpec.model_validate_json((folder / name).read_text(encoding="utf-8"))
@@ -82,7 +82,7 @@ class Session:
         })
 
     def _commit(self, part: str, ops: list[dict], op_index: int) -> dict:
-        """Build the new op list and adopt it unless the build has an error (ok=false is adopted)."""
+        """Baut die neue Vorgangsliste auf und übernimmt sie, sofern kein Aufbaufehler auftritt (`ok=false` wird übernommen)."""
         report = self._build(part, ops) | {"op_index": op_index}
         if not report["error"]:
             self.ops[part] = ops
@@ -95,7 +95,7 @@ class Session:
             raise IndexError(f"`index` {index} liegt außerhalb der {len(self.ops[part])} Vorgänge.")
 
     def submit_spec(self, spec: PartSpec) -> dict:
-        """Register a spec, reset the ops of the part and write results/<name>/spec.json."""
+        """Registriert eine Spezifikation, setzt die Vorgänge des Bauteils zurück und schreibt results/<name>/spec.json."""
         part = unicodedata.normalize("NFC", spec.name)
         self.specs[part] = spec.model_copy(update={"name": part})
         self.ops[part] = []
@@ -135,7 +135,7 @@ class Session:
         return {"spec_summary": summary, "ops": self.ops[part], "last_report": self.last.get(part)}
 
     def export(self, part: str) -> dict:
-        """Build with the STEP export and write the result files; a model that is not ok writes none."""
+        """Baut das Bauteil samt STEP-Export und schreibt die Ergebnisdateien; bei einem ungültigen Modell wird nichts geschrieben."""
         part = self._load(part)
         folder = self._folder(part)
         folder.mkdir(parents=True, exist_ok=True)

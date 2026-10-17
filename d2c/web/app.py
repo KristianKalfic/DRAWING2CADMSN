@@ -1,4 +1,4 @@
-"""The web app: results of every part, drawing render, and agent runs streamed as server-sent events."""
+"""Web-App mit Ergebnissen aller Bauteile, Zeichnungsansicht und Agentenläufen als Server-Sent Events."""
 
 import asyncio
 import json
@@ -20,7 +20,7 @@ from d2c.session import PART_NAME, results_root
 
 STATIC = Path(__file__).parent / "static"
 MEDIA_TYPES = {".glb": "model/gltf-binary", ".step": "model/step", ".stp": "model/step", ".md": "text/markdown"}
-SSE_POLL_SECONDS = 0.05  # ponytail: polling a list, a per-run queue only if many viewers matter
+SSE_POLL_SECONDS = 0.05  # ponytail: Eine Liste abfragen; eine Queue pro Lauf erst bei vielen Betrachtern.
 
 Agent = Callable[..., Awaitable[dict]]
 
@@ -30,7 +30,7 @@ def _error(status: int, message: str) -> JSONResponse:
 
 
 def _safe_name(name: str) -> bool:
-    """A single path component: no separator, no "..", no NUL, not empty."""
+    """Ein einzelner Pfadbestandteil: kein Trennzeichen, kein "..", kein NUL und nicht leer."""
     return bool(name) and not any(bad in name for bad in ("/", "\\", "\0")) and ".." not in name
 
 
@@ -104,7 +104,7 @@ async def drawing_png(request: Request) -> Response:
 
 
 class Run:
-    """One agent run: its events so far and whether it has ended."""
+    """Ein Agentenlauf mit den bisherigen Ereignissen und seinem Abschlussstatus."""
 
     def __init__(self) -> None:
         self.events: list[dict] = []
@@ -116,14 +116,14 @@ class Run:
             result = await agent(**kwargs, on_event=self.events.append)
             if not self.events or self.events[-1].get("type") != "done":
                 self.events.append({"type": "done"} | result)
-        except Exception as e:  # the viewer must see why a run died
+        except Exception as e:  # Die Webansicht muss den Grund für einen abgebrochenen Lauf anzeigen.
             self.events.append({"type": "done", "ok": False, "reason": f"{type(e).__name__}: {e}"})
         finally:
             self.finished = True
 
 
 def _default_agent(**kwargs: object) -> Awaitable[dict]:
-    from d2c.agent import run_agent  # lazy: the web app starts without the agent module
+    from d2c.agent import run_agent  # Erst bei Bedarf importieren, damit die Webansicht auch ohne das Agentenmodul startet.
 
     return run_agent(**kwargs)
 
@@ -167,7 +167,7 @@ async def start_run(request: Request) -> Response:
 async def _stream(run: Run) -> AsyncIterator[str]:
     sent = 0
     while True:
-        finished = run.finished  # read before the events: nothing can arrive after it
+        finished = run.finished  # Zuerst lesen, dann Ereignisse senden: Danach kann nichts mehr eintreffen.
         while sent < len(run.events):
             yield f"data: {json.dumps(run.events[sent], ensure_ascii=False)}\n\n"
             sent += 1
@@ -184,7 +184,7 @@ async def run_events(request: Request) -> Response:
 
 
 def create_app(agent: Agent | None = None) -> Starlette:
-    """The app; `agent` replaces d2c.agent.run_agent (tests inject a fake)."""
+    """Die App; `agent` ersetzt d2c.agent.run_agent (Tests setzen einen Ersatz ein)."""
     app = Starlette(routes=[
         Route("/", index),
         Route("/api/parts", parts),

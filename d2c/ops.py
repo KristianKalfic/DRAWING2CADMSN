@@ -1,11 +1,11 @@
-"""Operation models and the CadQuery build.
+"""Modelle der Vorgänge und Aufbau mit CadQuery.
 
-A part is a list of operations. Each one makes its own solid, which is united with the
-result so far (mode "add"), cut from it (mode "cut") or intersected with it (mode "intersect").
-Units are mm and degrees.
-Sketch planes: XY has normal +Z (u=X, v=Y), XZ has normal -Y (u=X, v=Z),
-YZ has normal +X (u=Y, v=Z).
-"""
+Ein Bauteil besteht aus einer Liste von Vorgängen. Jeder erzeugt einen eigenen Körper,
+der mit dem bisherigen Ergebnis vereinigt (Modus "add"), davon abgezogen (Modus "cut")
+oder damit geschnitten wird (Modus "intersect").
+Einheiten: mm und Grad.
+Skizzenebenen: XY mit Normale +Z (u=X, v=Y), XZ mit Normale -Y (u=X, v=Z),
+YZ mit Normale +X (u=Y, v=Z)."""
 import builtins
 import functools
 import itertools
@@ -25,13 +25,13 @@ Mode = Literal["add", "cut", "intersect"]
 COARSE_PITCH = {2.0: 0.4, 2.5: 0.45, 3.0: 0.5, 4.0: 0.7, 5.0: 0.8, 6.0: 1.0, 8.0: 1.25, 10.0: 1.5, 12.0: 1.75,
                 16.0: 2.0, 20.0: 2.5}
 TAP_DRILL = {2.0: 1.6, 2.5: 2.05, 3.0: 2.5, 4.0: 3.3, 5.0: 4.2, 6.0: 5.0, 8.0: 6.8, 10.0: 8.5, 12.0: 10.2}
-MINOR_FACTOR = 1.082532  # ISO 68-1: minor diameter = d - 1.082532 * pitch
-CORNER_TOL = 0.5  # mm: a fillet finds its corner within this distance of `at`
-MIN_TAPER = 0.001  # degrees, smaller drafts crash OCC
-TAPER_LENGTH_TOL = 0.01  # mm, allowed difference between requested and built length of a tapered extrusion
-HULL_SAMPLES = 7200  # directions at which the support function of a circle hull is sampled
+MINOR_FACTOR = 1.082532  # ISO 68-1: Kerndurchmesser = d - 1.082532 * Gewindesteigung
+CORNER_TOL = 0.5  # mm: In diesem Abstand zu at wird die Ecke für eine Rundung gefunden
+MIN_TAPER = 0.001  # Grad; kleinere Verjüngungen bringen OCC zum Absturz
+TAPER_LENGTH_TOL = 0.01  # mm: zulässige Abweichung zwischen angeforderter und erzeugter Länge einer verjüngten Extrusion
+HULL_SAMPLES = 7200  # Richtungen, in denen die Stützfunktion einer Kreishülle abgetastet wird
 NO_EFFECT = "Kein Material entfernt: Prüfe Ebene, offset und Richtung."
-# What a ScriptOp may use. check_script (d2c/sandbox.py) rejects imports and names starting with "_" before it runs.
+# Erlaubte Funktionen für ScriptOp. check_script (d2c/sandbox.py) weist Imports und Namen mit führendem "_" vor der Ausführung zurück.
 SCRIPT_BUILTINS = {
     name: getattr(builtins, name)
     for name in "abs min max range len float int round sum enumerate zip list tuple dict print".split()
@@ -39,18 +39,18 @@ SCRIPT_BUILTINS = {
 
 
 class BuildError(Exception):
-    """An operation cannot be turned into geometry."""
+    """Ein Vorgang kann nicht in Geometrie umgewandelt werden."""
 
 
 def _index(key: str) -> int:
-    """A list index of a dotted path: a non-negative whole number."""
+    """Ein Listenindex in einem punktgetrennten Pfad: eine nicht negative ganze Zahl."""
     if not key.isdecimal():
         raise KeyError(key)
     return int(key)
 
 
 def get_path(d: dict, path: str) -> Any:
-    """Read the value at a dotted path in a dumped op, e.g. "profile.w" or "positions.1.0"."""
+    """Liest den Wert an einem punktgetrennten Pfad in einem serialisierten Vorgang, z. B. "profile.w" oder "positions.1.0"."""
     node: Any = d
     try:
         for key in path.split("."):
@@ -61,11 +61,11 @@ def get_path(d: dict, path: str) -> Any:
 
 
 def set_path(d: dict, path: str, value: float) -> None:
-    """Write a value at an existing dotted path of a dumped op, in place. Tuples on the way are rebuilt."""
+    """Schreibt einen Wert an einen vorhandenen punktgetrennten Pfad im serialisierten Vorgang. Tupel auf dem Pfad werden neu aufgebaut."""
 
     def put(node: Any, keys: list[str]) -> Any:
         key = _index(keys[0]) if isinstance(node, (list, tuple)) else keys[0]
-        old = node[key]  # raises when the path does not exist
+        old = node[key]  # Löst aus, wenn der Pfad nicht existiert
         child = value if len(keys) == 1 else put(old, keys[1:])
         if isinstance(node, tuple):
             return node[:key] + (child,) + node[key + 1:]
@@ -79,7 +79,7 @@ def set_path(d: dict, path: str, value: float) -> None:
 
 
 class _Model(BaseModel, extra="forbid", use_attribute_docstrings=True):
-    """Base of all op parts: unknown fields are errors, attribute docstrings become schema descriptions."""
+    """Basisklasse aller Vorgangsteile: Unbekannte Felder verursachen Fehler; Attribut-Docstrings werden zu Schema-Beschreibungen."""
 
 
 class SketchPlane(_Model):
@@ -104,11 +104,11 @@ class SketchPlane(_Model):
         elif self.origin is None or self.normal is None:
             raise ValueError("Die Ebene `custom` benötigt `origin` und `normal`.")
         else:
-            self._frame()  # rejects a zero normal and an xdir along the normal
+            self._frame()  # Weist eine Nullnormale und eine xdir entlang der Normalen zurück
         return self
 
     def _frame(self) -> tuple[cq.Vector, cq.Vector, cq.Vector]:
-        """Origin (offset applied), u axis and normal as global unit vectors."""
+        """Ursprung (mit angewendetem Versatz), u-Achse und Normale als globale Einheitsvektoren."""
         if self.name != "custom":
             base = cq.Plane.named(self.name)
             origin, u, n = base.origin, base.xDir, base.zDir
@@ -132,7 +132,7 @@ class SketchPlane(_Model):
 
 
 def _across(v: cq.Vector, n: cq.Vector) -> cq.Vector | None:
-    """Part of v perpendicular to the unit vector n, normalised; None if there is none."""
+    """Anteil von v senkrecht zum Einheitsvektor n, normiert; None, falls keiner vorhanden ist."""
     part = v - n * v.dot(n)
     return part.normalized() if part.Length > 1e-9 else None
 
@@ -186,7 +186,7 @@ class SlotProfile(_Model):
     """Drehwinkel der Langlochachse ausgehend von +u in Grad."""
 
     def face(self, wp: cq.Workplane) -> cq.Face:
-        # slot2D takes the overall length: arc centre distance plus one width
+        # slot2D erwartet die Gesamtlänge: Abstand der Bogenmittelpunkte plus eine Breite
         wire = wp.center(*self.center).slot2D(self.center_distance + self.width, self.width, self.angle).val()
         return cq.Face.makeFromWires(wire)
 
@@ -245,7 +245,7 @@ class CornerFillet(_Model):
 
 
 class PathProfile(_Model):
-    """Kontur, die bei `start` beginnt, den `segments` folgt und automatisch zu `start` geschlossen wird.
+    """Kontur, die bei `start` beginnt, die Segmente aus `segments` durchläuft und automatisch bei `start` geschlossen wird.
 
     Tangentiale Übergänge: Zeichne zuerst die scharfe Ecke und runde sie danach mit `fillets` ab.
     """
@@ -288,16 +288,16 @@ class HullProfile(_Model):
 
     @functools.cached_property
     def order(self) -> list[int]:
-        """Indices of the circles on the hull, counter-clockwise from direction +u (a circle may repeat)."""
+        """Indizes der Kreise auf der Hülle, gegen den Uhrzeigersinn ab +u (ein Kreis kann mehrfach vorkommen)."""
         best = []
         for k in range(HULL_SAMPLES):
             eu, ev = math.cos(2 * math.pi * k / HULL_SAMPLES), math.sin(2 * math.pi * k / HULL_SAMPLES)
-            support = [round(u * eu + v * ev + r, 9) for u, v, r in self.circles]  # rounding makes ties exact
-            best.append(support.index(max(support)))  # the lowest index wins a tie
+            support = [round(u * eu + v * ev + r, 9) for u, v, r in self.circles]  # Durch Rundung werden Gleichstände exakt
+            best.append(support.index(max(support)))  # Bei Gleichstand gewinnt der niedrigste Index
         runs = [(i, len(list(group))) for i, group in itertools.groupby(best)]
         if len(runs) > 1 and runs[0][0] == runs[-1][0]:
             runs[0] = (runs[0][0], runs[0][1] + runs.pop()[1])
-        # a one-sample run is a tie between circles, not an arc of the hull
+        # Eine Folge aus einem Musterpunkt ist ein Gleichstand zwischen Kreisen, kein Kreisbogen der Hülle
         order = [i for i, _ in itertools.groupby(i for i, n in runs if n > 1)]
         if len(order) > 1 and order[0] == order[-1]:
             order.pop()
@@ -308,17 +308,17 @@ class HullProfile(_Model):
         return u + r * math.cos(angle), v + r * math.sin(angle)
 
     def _normal(self, i: int, j: int) -> float:
-        """Angle of the outward normal of the outer tangent from circle i to circle j: n . (cj - ci) = ri - rj."""
+        """Winkel der nach außen gerichteten Normalen der äußeren Tangente von Kreis i nach Kreis j: n . (cj - ci) = ri - rj."""
         (ui, vi, ri), (uj, vj, rj) = self.circles[i], self.circles[j]
         return math.atan2(vj - vi, uj - ui) - math.acos((ri - rj) / math.hypot(uj - ui, vj - vi))
 
     def outline(self) -> CircleProfile | PathProfile:
-        """The hull as an exact profile: an arc on every circle of `order`, joined by tangent lines."""
+        """Die Hülle als exaktes Profil: ein Kreisbogen je Kreis aus order, verbunden durch Tangenten."""
         order = self.order
         if len(order) == 1:
             u, v, r = self.circles[order[0]]
             return CircleProfile(type="circle", center=(u, v), d=2 * r)
-        normals = [self._normal(i, j) for i, j in zip(order, order[1:] + order[:1])]  # normals[k] leaves order[k]
+        normals = [self._normal(i, j) for i, j in zip(order, order[1:] + order[:1])]  # normals[k] führt von order[k] weg
         segments: list[Arc3Segment | LineSegment] = []
         for k, i in enumerate(order):
             arrive, leave = normals[k - 1], normals[k]
@@ -370,7 +370,7 @@ def _combine(shape: cq.Shape | None, tool: cq.Shape, mode: Mode) -> cq.Shape:
 
 
 def _no_effect(before: cq.Shape | None, after: cq.Shape, mode: Mode) -> dict:
-    """Build-note fields warning about a cut or intersect that left the volume unchanged."""
+    """Hinweisfelder zum Aufbau, wenn ein cut- oder intersect-Vorgang das Volumen unverändert lässt."""
     if before is not None and mode != "add" and before.Volume() - after.Volume() <= 1e-9 * before.Volume():
         return {"warning": NO_EFFECT}
     return {}
@@ -383,7 +383,7 @@ def _require(shape: cq.Shape | None) -> cq.Shape:
 
 
 def _require_full_length(tool: cq.Solid, normal: cq.Vector, distance: float) -> None:
-    """A draft can collapse the profile early, OCC then returns a shorter solid without complaint."""
+    """Eine Verjüngung kann das Profil vorzeitig zusammenfallen lassen; OCC liefert dann kommentarlos einen kürzeren Körper."""
     heights = [v.Center().dot(normal) for v in tool.Vertices()]
     length = max(heights) - min(heights)
     if abs(length - abs(distance)) > TAPER_LENGTH_TOL:
@@ -419,7 +419,7 @@ class ExtrudeOp(OpBase):
     @field_validator("taper")
     @classmethod
     def _usable_taper(cls, taper: float) -> float:
-        if 0 < abs(taper) < MIN_TAPER:  # OCC crashes the interpreter on a draft this small
+        if 0 < abs(taper) < MIN_TAPER:  # OCC bringt den Interpreter bei einer so kleinen Verjüngung zum Absturz
             raise ValueError(f"`taper` muss 0 oder mindestens {MIN_TAPER} Grad sein.")
         return taper
 
@@ -491,7 +491,7 @@ class PolarPattern(_Model):
 
 
 def _thread(spec: str) -> tuple[float, float]:
-    """Nominal diameter and pitch of "M5" (coarse) or "M10x1"."""
+    """Nenndurchmesser und Gewindesteigung für M5 (Regelgewinde) oder M10x1."""
     match = re.fullmatch(r"M(\d+(?:\.\d+)?)(?:x(\d+(?:\.\d+)?))?", spec)
     if match is None:
         raise ValueError(f"`thread` {spec!r} muss wie M5 oder M10x1 aussehen.")
@@ -566,7 +566,7 @@ class HolesOp(OpBase):
         return (self.csk_d - self.d) / 2 / math.tan(math.radians(self.csk_angle) / 2)
 
     def _drilled_d(self) -> float:
-        """Diameter actually drilled: d, or for a tapped hole the tap drill or minor diameter."""
+        """Tatsächlich gebohrter Durchmesser: d; bei einem Gewindeloch der Vorbohr- oder Kerndurchmesser."""
         if self.kind != "tapped":
             return self.d
         nominal, pitch = _thread(self.thread)
@@ -587,7 +587,7 @@ class HolesOp(OpBase):
 
     @staticmethod
     def _through_length(shape: cq.Shape, origin: cq.Vector, drill: cq.Vector) -> float:
-        """Longer than the part: bounding box diagonal plus the gap between the plane and the box, plus 1 mm."""
+        """Länger als das Bauteil: Diagonale des Begrenzungsrahmens plus Abstand zwischen Ebene und Rahmen plus 1 mm."""
         box = shape.BoundingBox()
         corners = itertools.product((box.xmin, box.xmax), (box.ymin, box.ymax), (box.zmin, box.zmax))
         gap = min((cq.Vector(*c) - origin).dot(drill) for c in corners)
@@ -613,7 +613,7 @@ class HolesOp(OpBase):
 
 
 def _is_seam(edge: cq.Edge, shape: cq.Shape) -> bool:
-    """A seam edge borders the same face on both sides, like the cut line of a cylinder."""
+    """Eine Nahtkante grenzt auf beiden Seiten an dieselbe Fläche, etwa die Schnittlinie eines Zylinders."""
     return any(BRep_Tool.IsClosed_s(edge.wrapped, face.wrapped) for face in edge.ancestors(shape, "Face"))
 
 
@@ -635,7 +635,7 @@ class EdgeFinishOp(OpBase):
         edges = [e for e in shape.Edges() if min(e.distance(p) for p in points) <= self.tol and not _is_seam(e, shape)]
         if not edges:
             raise BuildError("Keine Kante liegt innerhalb von `tol` zu den `near`-Punkten.")
-        # the edges come from this very solid: edges of another instance make the fillet fail
+        # Die Kanten stammen genau aus diesem Körper; Kanten einer anderen Instanz lassen die Verrundung fehlschlagen
         selected = cq.Workplane(obj=shape).newObject(edges)
         try:
             result = selected.fillet(self.size) if self.kind == "fillet" else selected.chamfer(self.size)
@@ -669,7 +669,7 @@ Op = Annotated[Union[ExtrudeOp, RevolveOp, HolesOp, EdgeFinishOp, ScriptOp], Fie
 
 
 def build(ops: list[Op]) -> tuple[cq.Workplane, list[dict]]:
-    """Build the ops in order. Returns the model and notes like {"op_index": 2, "edges_selected": 1}."""
+    """Baut die Vorgänge der Reihe nach auf. Gibt das Modell und Hinweise zurück, zum Beispiel {"op_index": 2, "edges_selected": 1}."""
     shape: cq.Shape | None = None
     notes: list[dict] = []
     for index, op in enumerate(ops):
@@ -677,7 +677,7 @@ def build(ops: list[Op]) -> tuple[cq.Workplane, list[dict]]:
             shape, extra = op.apply(shape)
         except BuildError as e:
             raise BuildError(f"op {index} ({op.op}): {e}") from None
-        except Exception as e:  # CadQuery, OpenCascade or script errors: say which op failed
+        except Exception as e:  # CadQuery-, OpenCascade- oder Script-Fehler: angeben, welcher Vorgang fehlgeschlagen ist
             raise BuildError(f"op {index} ({op.op}): {type(e).__name__}: {e}") from e
         if extra:
             notes.append({"op_index": index, **extra})

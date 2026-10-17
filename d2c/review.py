@@ -1,7 +1,7 @@
-"""The review list of one part: what was assumed, where every value came from, what the checks found.
+"""Prüfliste eines Bauteils: getroffene Annahmen, Herkunft aller Werte und Ergebnisse der Prüfungen.
 
-Pure functions over the spec, the dumped ops and the worker report; the session writes the files.
-Each section of the Markdown is one function, render() joins them.
+Reine Funktionen über Spezifikation, serialisierte ops und Worker-Bericht; die Session schreibt die Dateien.
+Jeder Markdown-Abschnitt hat eine eigene Funktion; `render()` fügt sie zusammen.
 """
 
 from collections.abc import Iterator
@@ -10,10 +10,10 @@ from d2c.checks import VOLUME_REL_TOL
 from d2c.ops import get_path
 from d2c.spec import PartSpec
 
-# Op parameters that are sizes; revolve points count through the r of each (r, z) point.
+# Vorgangsparameter mit Längenmaß; bei `revolve` zählt der r-Wert jedes (r, z)-Punkts.
 SIZE_NAMES = frozenset(
     "d w h distance size corner_radius width center_distance depth pitch_d cbore_d cbore_depth csk_d".split())
-VALUE_TOL = 0.01  # mm: an op value this close to a Dimension.value counts as that dimension
+VALUE_TOL = 0.01  # mm: Ein Vorgangswert mit diesem Abstand zu Dimension.value gilt als dasselbe Maß.
 
 
 def _g(x: float) -> str:
@@ -33,7 +33,7 @@ def _table(headers: list[str], rows: list[list[object]]) -> str:
 
 
 def _numbers(node: object, path: tuple[str, ...] = ()) -> Iterator[tuple[str, float]]:
-    """Every number of a dumped op with its dotted path; the refs mapping is not a parameter."""
+    """Alle Zahlen eines serialisierten Vorgangs mit ihrem punktgetrennten Pfad; `refs` ist kein Parameter."""
     if isinstance(node, dict):
         for key, child in node.items():
             if key != "refs":
@@ -51,7 +51,7 @@ def _is_size(op: dict, path: str) -> bool:
 
 
 def assumptions(spec: PartSpec, report: dict) -> list[dict]:
-    """One entry per review item, with the source cells of its refs and the number of faces marked in the STEP."""
+    """Ein Eintrag je Prüfeintrag mit Rasterzellen der refs und der Anzahl markierter Flächen in der STEP-Datei."""
     dims = {d.id: d for d in spec.dimensions}
     faces = {m["id"]: m["faces"] for m in (report.get("roundtrip") or {}).get("marks", [])}
     return [
@@ -70,7 +70,7 @@ def assumptions(spec: PartSpec, report: dict) -> list[dict]:
 
 
 def traceability(spec: PartSpec, ops: list[dict]) -> list[dict]:
-    """One entry per refs mapping of an op: parameter path, its value and the dimension it came from."""
+    """Ein Eintrag je `refs`-Zuordnung eines Vorgangs: Parameterpfad, Wert und zugehöriges Maß."""
     dims = {d.id: d for d in spec.dimensions}
     return [
         {"op_index": i, "path": path, "value": get_path(op, path), "dimension": dim_id, "text": dims[dim_id].text}
@@ -80,7 +80,7 @@ def traceability(spec: PartSpec, ops: list[dict]) -> list[dict]:
 
 
 def unreferenced(spec: PartSpec, ops: list[dict]) -> list[dict]:
-    """Size parameters with neither a refs entry nor a dimension of the same value: derived or invented values."""
+    """Längenparameter ohne `refs`-Eintrag und ohne Maß mit demselben Wert: abgeleitete oder frei gewählte Werte."""
     values = [d.value for d in spec.dimensions]
     return [
         {"op_index": i, "path": path, "value": value}
@@ -103,7 +103,7 @@ def _check_row(entry: dict) -> dict:
 
 
 def validation(report: dict) -> list[dict]:
-    """The checks of the worker report as rows of check, expected, actual and ok."""
+    """Prüfungen aus dem Worker-Bericht als Zeilen mit Prüfung, Soll, Ist und Ergebnis."""
     if report["error"]:
         return [{"check": "Aufbau", "expected": "kein Fehler", "actual": report["error"], "ok": False}]
     solid, trip = report["solid"], report["roundtrip"]
@@ -125,7 +125,7 @@ def validation(report: dict) -> list[dict]:
 
 
 def to_json(spec: PartSpec, ops: list[dict], report: dict) -> dict:
-    """The review list as data, for the web view and the evaluation."""
+    """Die Prüfliste als Daten für Webansicht und Auswertung."""
     rows = validation(report)
     return {
         "assumptions": assumptions(spec, report),
