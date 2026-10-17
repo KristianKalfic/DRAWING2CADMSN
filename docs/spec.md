@@ -65,7 +65,7 @@ Quelle der Grafik: `architektur.excalidraw` (Excalidraw).
 
 | Modul | Aufgabe |
 | --- | --- |
-| `server.py`, `instructions.md` | MCP-Server mit 14 Werkzeugen, Arbeitsanleitung für das Modell |
+| `server.py`, `instructions.md` | MCP-Server mit 14 Werkzeugen über stdio oder HTTP, Arbeitsanleitung für das Modell |
 | `drawing.py` | Pfadprüfung, Seiteninformation, PDF-Seite oder Ausschnitt als PNG |
 | `text.py` | Textebene lesen, Maßtexte mit Toleranz, Passung und Symbolen zerlegen |
 | `vector.py` | Kreise, Bögen und Ausdehnung aus der Vektorgeometrie, Maßstabsvorschlag, Prüfung von Maßangaben |
@@ -78,6 +78,7 @@ Quelle der Grafik: `architektur.excalidraw` (Excalidraw).
 | `export.py` | Bibliothek: STEP AP242 mit semantischem PMI, GLB, PMI-Leser |
 | `tolerances.py` | Bibliothek: ISO 286, ISO 2768, Toleranzmitte, Einhaltung |
 | `web/` | Ergebnisansicht im Browser, Hochladen, Läufe per Server-Sent Events |
+| `demo.py` | Demo-Lauf ohne Sprachmodell: baut das Demo-Teil aus den Test-Fixtures und gibt alle Prüfungen aus |
 
 ### 4.5 Technologie
 
@@ -171,7 +172,7 @@ Jedes Werkzeug für den Modellaufbau gibt diesen Bericht zurück:
 
 ## 6. MCP-Schnittstelle
 
-Der Server heißt `drawing2cad`, spricht MCP über stdio und liefert `instructions.md` als Arbeitsanleitung an den Client. Er bietet 14 Werkzeuge, keine Ressourcen und keine Prompts.
+Der Server heißt `drawing2cad` und liefert `instructions.md` als Arbeitsanleitung an den Client. Er bietet 14 Werkzeuge, keine Ressourcen und keine Prompts. Transport ist stdio; mit `python -m d2c.server --http HOST:PORT` spricht er Streamable HTTP unter `/mcp`.
 
 ### 6.1 Werkzeuge
 
@@ -318,7 +319,7 @@ Die Ordner liegen außerhalb des Images und werden beim Start eingehängt.
 
 ## 14. Sicherheit und Isolation
 
-- **Netzwerk:** Der Server kommuniziert nur über stdio. Mit `docker run --network none` hat er keinen Netzwerkzugang.
+- **Netzwerk:** Standard ist stdio; mit `docker run --network none` hat der Server keinen Netzwerkzugang. Der HTTP-Modus ist optional. Gebunden an `127.0.0.1`, `localhost` oder `::1` nimmt er nur Loopback-Werte in den Headern `Host` und `Origin` an und antwortet sonst mit 421, im Container wird er deshalb an `0.0.0.0` gebunden.
 - **Modellaufbau:** Jeder Durchlauf läuft in einem eigenen Prozess `python -I -m d2c.worker` in einer eigenen Prozessgruppe, mit temporärem Arbeitsordner und nur der Umgebungsvariablen `PATH`. Grenzen: Zeitlimit `D2C_TIMEOUT`, danach wird die Prozessgruppe beendet; Adressraum 4 GiB; Dateigröße 200 MiB; CPU-Zeit 4 · ⌈Zeitlimit⌉ + 10 s.
 - **Skripte:** `run_script` lehnt Importe, die Namen `open`, `exec`, `eval`, `compile`, `__import__`, `globals`, `locals`, `vars`, `getattr`, `setattr`, `delattr`, `input` und `breakpoint` sowie Namen und Attribute mit führendem Unterstrich ab. Das Skript sieht nur `cq`, `math`, `result` und 15 einfache Builtins.
 - **Pfade:** Zeichnungen nur als `.pdf` unterhalb von `D2C_DATA`, aufgelöst über ihr tatsächliches Ziel. Teilnamen nur aus Buchstaben, Ziffern, `_` und `-`.
@@ -332,14 +333,22 @@ Die Ordner liegen außerhalb des Images und werden beim Start eingehängt.
 docker build -t d2c .
 docker run --rm d2c pytest -q
 
+# Demo ohne Sprachmodell: alle Prüfungen am Demo-Teil
+docker run --rm --network none d2c python -m d2c.demo
+
 # MCP-Server über stdio, ohne Netzwerk
 docker run -i --rm --network none -v "$PWD/drawings":/data:ro -v "$PWD/results":/app/results d2c
+
+# MCP-Server über HTTP, Endpunkt http://localhost:8765/mcp
+docker run --rm -p 8765:8765 d2c python -m d2c.server --http 0.0.0.0:8765
 
 # Web-Oberfläche auf Port 8080
 docker run --rm -p 8080:8080 -v "$PWD/results":/app/results -v "$PWD/drawings":/data d2c python -m d2c.web
 ```
 
-Tests mit dem Marker `bct` brauchen Beispieldaten unter `/app/data` und werden sonst übersprungen.
+Die Demo schreibt nach `/tmp/d2c-demo` im Container; mit `-v "$PWD/out":/out` und `--out /out` bleiben die Dateien erhalten. Sie gibt je Prüfung eine Zeile `PASS` oder `FAIL` aus, dann die Annahmen, die geschriebenen Dateien und `All checks passed: yes` oder `no`. Der Exit-Code ist 0 nur bei erfolgreichem Export.
+
+Tests mit dem Marker `bct` brauchen Beispieldaten unter `/app/data` und werden sonst übersprungen. Die CI (`.github/workflows/ci.yml`) baut das Image und führt Tests und Demo auf x86_64 und arm64 aus.
 
 ## 16. Grenzen
 

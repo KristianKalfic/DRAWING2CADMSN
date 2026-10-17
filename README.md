@@ -7,7 +7,10 @@ Drawing2CAD erzeugt aus einer technischen 2D-Zeichnung ein geprüftes 3D-Volumen
 ```
 docker build -t d2c .
 docker run --rm d2c pytest -q
+docker run --rm d2c python -m d2c.demo
 ```
+
+Die Demo baut ein Beispielteil ohne Sprachmodell und zeigt jede Prüfung mit Soll und Ist.
 
 ## MCP-Server
 
@@ -20,7 +23,7 @@ docker run -i --rm --network none \
   d2c
 ```
 
-`drawings/` enthält die PDF-Zeichnungen, `results/` nimmt die Ergebnisse auf. Unter Windows PowerShell steht `${PWD}` statt `$PWD`.
+`drawings/` enthält die PDF-Zeichnungen, `results/` nimmt die Ergebnisse auf. Unter Windows PowerShell steht `${PWD}` statt `$PWD`. Über HTTP: `python -m d2c.server --http 0.0.0.0:8765`, Endpunkt `/mcp`.
 
 ## Ergebnisansicht
 
