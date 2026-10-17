@@ -10,13 +10,34 @@ from pathlib import Path
 
 import cadquery as cq
 import pytest
+from pydantic import TypeAdapter, ValidationError
 
 from d2c import worker
 from d2c.export import read_pmi
-from d2c.sandbox import check_script, run_worker
+from d2c.ops import Op
+from d2c.sandbox import check_script, run_worker, validation_error_message
 
 KEYS = {"ok", "error", "solid", "dims", "build_notes", "roundtrip"}
 FORBIDDEN_NAMES = "open exec eval compile __import__ globals locals vars getattr setattr delattr input breakpoint"
+
+
+@pytest.mark.parametrize("changes, details", [
+    ({"profile": {"type": "path", "start": [0, 0], "segments": []}},
+     ("segments", "mindestens 1", "too_short")),
+    ({"profile": {"type": "hull", "circles": [[0, 0, 2]]}},
+     ("circles", "mindestens 2", "too_short")),
+    ({"profile": {"type": "circle", "center": [0, 0, 0], "d": 5}},
+     ("center", "höchstens 2", "too_long")),
+    ({"profile": {"type": "triangle"}},
+     ("triangle", "type", "rect", "circle", "slot", "path", "hull", "union_tag_invalid")),
+    ({"profile": {}}, ("profile", "Typangabe", "type", "union_tag_not_found")),
+    ({"both": "vielleicht"}, ("both", "true", "false", "bool_parsing")),
+])
+def test_validation_errors_keep_repair_details(changes, details):
+    with pytest.raises(ValidationError) as caught:
+        TypeAdapter(list[Op]).validate_python([box() | changes])
+    message = validation_error_message(caught.value)
+    assert all(detail in message for detail in details), message
 
 
 def box(w=20.0, h=10.0, t=5.0, center=(0, 0), mode="add"):
@@ -106,7 +127,7 @@ def test_worker_reports_build_error(monkeypatch):
     syntax = run_worker(payload(box(), script("def (")))
     assert syntax == failed(syntax["error"]) and syntax["error"].startswith("BuildError: op 1 (script): SyntaxError")
     empty = run_worker(payload(box(), box(mode="cut")))  # the cut removes the whole block
-    assert empty == failed("BuildError: Das Modell ist leer (hat ein Schnitt das gesamte Material entfernt?).")
+    assert empty == failed("BuildError: Das Modell ist leer. Prüfe, ob ein Schnitt das gesamte Material entfernt hat.")
     assert run_worker(payload()) == failed("BuildError: Keine Vorgänge angegeben.")
 
     # so is an exception from the checks or the export, whatever its type
@@ -176,14 +197,14 @@ def test_timeout_kills(monkeypatch):
 
 def test_script_import_os_rejected(monkeypatch):
     for code in ("import os", "from os import path", "import math", "def f():\n    import cadquery"):
-        with pytest.raises(ValueError, match="Imports sind in scripts nicht zulässig"):
+        with pytest.raises(ValueError, match="Importanweisungen sind in Skripten nicht zulässig"):
             check_script(code)
 
     # run_worker reports the rejection and never starts a process
     monkeypatch.setattr(subprocess, "Popen", lambda *args, **kwargs: pytest.fail("the worker was started"))
     report = run_worker(payload(box(), script("x = 1"), script("import os")))
     assert report == failed(
-        "ValueError: op 2 (script): Imports sind in scripts nicht zulässig (cq und math sind bereits verfügbar).")
+        "ValueError: op 2 (script): Importanweisungen sind in Skripten nicht zulässig (cq und math sind bereits verfügbar).")
 
 
 def test_script_open_rejected():

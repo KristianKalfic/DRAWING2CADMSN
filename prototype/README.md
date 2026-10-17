@@ -11,7 +11,7 @@ Zeichnung ──► das Sprachmodell liest sie, schreibt JSON (Schema unten, Bei
                  └─ json_builder.py: JSON ──► CadQuery-Code (deterministisch, nur validierte Zahlen
                                               + Selektor-Whitelist, keine Freitext-Einschleusung)
           ──► Validierung (Volumenkörper gültig, genau 1 Körper, Maße + Lage, Bohrungen)
-          ──► export_step: STEP schreiben, re-importieren, Volumen vergleichen
+          ──► export_step: STEP schreiben, erneut einlesen, Volumen vergleichen
           ──► issue_check.py: 2 Extraktionen vergleichen, Plausibilität, Nachmessen in FreeCAD
 ```
 
@@ -90,9 +90,9 @@ Muster nur als Text (`"pattern": "4x"`) wird **nicht** vervielfacht, sondern als
 - Profil: Nullpunkt wird nicht automatisch zentriert (nur Warnung); `plausible()` prüft
   Bohrungslage nur bei Box und Zylinder.
 - `compare()` vergleicht nur Grundkörper und Bohrungen, nicht Taschen/Kanten.
-- FreeCAD-Teil von `issue_check.py` ist ungetestet (FreeCAD war in der Testumgebung nicht installiert).
+- Der FreeCAD-Teil von `issue_check.py` wurde nicht getestet, weil FreeCAD in der Testumgebung nicht installiert war.
 - Frühere Werkzeuge (`create_base_body`, `add_hole`, …, `revolve_profile`): nur Basisfälle geprüft;
   Bedeutung von x/y auf Seitenflächen (`>X` usw.) ist undefiniert.
 - Einlesen der Zeichnung (PDF/Bild) ist nicht Teil des Servers; `pymupdf`/`pillow` sind
   installiert, werden aber noch nicht verwendet.
-- Windows-Betrieb (lokal und Docker Desktop) ist ungetestet.
+- Der Betrieb unter Windows (lokal und mit Docker Desktop) wurde nicht geprüft.

@@ -162,7 +162,7 @@ def _header(spec: PartSpec) -> str:
 
 
 def _assumptions_section(data: dict) -> str:
-    issues = {"missing": "fehlt", "ambiguous": "mehrdeutig", "low_confidence": "geringe Konfidenz",
+    issues = {"missing": "fehlt", "ambiguous": "mehrdeutig", "low_confidence": "geringe Sicherheit",
               "conflict": "Konflikt", "convention": "Konvention"}
     rows = [
         [a["id"], ", ".join(f"{r['id']} ({r['text']})" if r["text"] else r["id"] for r in a["refs"]) or "-",
@@ -170,7 +170,7 @@ def _assumptions_section(data: dict) -> str:
          "-" if a["marked_faces"] is None else f"Flächen: {a['marked_faces']}"]
         for a in data["assumptions"]
     ]
-    headers = ["ID", "Maß / Merkmal", "Anliegen", "Annahme", "Begründung", "Quelle", "Markierte Flächen in STEP"]
+    headers = ["ID", "Maß / Merkmal", "Problem", "Annahme", "Begründung", "Quelle", "Markierte Flächen in STEP"]
     return "## Annahmen und offene Punkte\n" + _table(headers, rows)
 
 
@@ -230,7 +230,7 @@ def _validation_section(data: dict) -> str:
     for v in data["validation"]:
         name, separator, refs = v["check"].partition(" ")
         rows.append([labels.get(name, name) + separator + refs, v["expected"], v["actual"], "ja" if v["ok"] else "nein"])
-    return "## Prüfungen\n" + _table(["Prüfung", "Erwartet", "Tatsächlich", "in Ordnung"], rows)
+    return "## Prüfungen\n" + _table(["Prüfung", "Soll", "Ist", "Bestanden"], rows)
 
 
 def render(

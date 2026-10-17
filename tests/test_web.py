@@ -172,13 +172,14 @@ def test_run_appends_done_and_reports_agent_crash(monkeypatch, tmp_path):
     assert last["type"] == "done" and not last["ok"] and "endpoint unreachable" in last["reason"]
 
 
-def test_upload_saved_under_uploads(monkeypatch, tmp_path):
+@pytest.mark.parametrize("part_name", ["Träger-1", "Tra\u0308ger-1"])
+def test_upload_saved_under_uploads(monkeypatch, tmp_path, part_name):
     monkeypatch.setenv("D2C_DATA", str(tmp_path))
     for key, value in LLM_ENV.items():
         monkeypatch.setenv(key, value)
     calls: list[dict] = []
     with TestClient(create_app(fake_agent([], calls))) as client:
-        run_id = upload(client, "Träger-1", model="big-model").json()["run_id"]
+        run_id = upload(client, part_name, model="big-model").json()["run_id"]
         client.get(f"/api/runs/{run_id}/events")
     assert (tmp_path / "uploads" / "Träger-1.pdf").read_bytes() == PDF.read_bytes()
     assert (calls[0]["pdf"], calls[0]["part"], calls[0]["model"]) == ("uploads/Träger-1.pdf", "Träger-1", "big-model")

@@ -27,7 +27,7 @@
         <input type="file" id="file" name="pdf" accept=".pdf,.png,.jpg,.jpeg" aria-label="Zeichnungsdatei" aria-describedby="file-error">
         <p id="file-error" class="field-error" role="alert"></p>
         <label for="part">Teilname</label>
-        <input type="text" id="part" name="part" pattern="[\w\-]+" autocomplete="off" spellcheck="false" aria-describedby="part-error">
+        <input type="text" id="part" name="part" pattern="(?:[\p{L}\p{N}_\-]|[AaOoUu]\u0308)+" autocomplete="off" spellcheck="false" aria-describedby="part-error">
         <p id="part-error" class="field-error" role="alert"></p>
         <label for="model">Modell</label>
         <select id="model" name="model" aria-describedby="model-error">

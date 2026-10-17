@@ -45,7 +45,7 @@ def make_report(payload: dict) -> dict:
         tol, marks = payload.get("tol", LINEAR_TOL), payload.get("marks", [])
         wp, notes = build(ops)
         if not wp.objects:  # CadQuery keeps no object for an empty compound, and the checks cannot read that
-            raise BuildError("Das Modell ist leer (hat ein Schnitt das gesamte Material entfernt?).")
+            raise BuildError("Das Modell ist leer. Prüfe, ob ein Schnitt das gesamte Material entfernt hat.")
         solid = solid_check(wp)
         dims = dimension_check(wp, expected, tol) if expected is not None else []
         pmi = pmi_from(spec, ops, wp.val(), {"dims": dims}, tol) if spec is not None else []
