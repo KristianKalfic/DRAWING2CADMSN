@@ -242,14 +242,14 @@ def test_check_spec_tool_registers_nothing():
     check(spec=demo())
     assert srv.session.specs == {}
     assert not (Path(os.environ["D2C_RESULTS"]) / "demo_bracket").exists()
-    with pytest.raises(ToolError, match="call submit_spec first"):
+    with pytest.raises(ToolError, match="rufe zuerst `submit_spec` auf"):
         asyncio.run(srv.server.call_tool("get_state", {"part": "demo_bracket"}))
 
 
 def test_check_spec_tool_rejects_invalid_spec():
     raw = demo()
     raw["dimensions"][0]["id"] = "d50"  # duplicate id
-    with pytest.raises(ToolError, match="duplicate id"):
+    with pytest.raises(ToolError, match="Doppelte ID"):
         check(spec=raw)
 
 

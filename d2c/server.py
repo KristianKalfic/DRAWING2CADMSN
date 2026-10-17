@@ -174,16 +174,16 @@ def measure_drawing(
 
 @_tool
 def check_spec(spec: PartSpec, second: PartSpec | None = None) -> dict:
-    """Check a spec for values that cannot be right, before `submit_spec`. Nothing is registered.
+    """Prüfe eine Spezifikation vor `submit_spec` auf Werte, die nicht stimmen können. Es wird nichts übernommen.
 
-    Returns {"findings": [...], "count": n}; count 0 means nothing was found. A finding has `code`, `message`,
-    `where` and `suggested_review`, the draft of a review item (issue, refs, assumption, reason). Rules: a hole
-    that cannot sit inside the expected bbox (HOLE_OUTSIDE_BBOX), overlapping holes (HOLES_OVERLAP), a fillet
-    radius above half the middle bbox edge (FILLET_TOO_BIG). With `second`, an independent second reading of
-    the same page, every difference to `spec` is a finding too (A is `spec`, B is `second`): EXTRACTION_MISMATCH,
-    ONLY_IN_A, ONLY_IN_B, HOLE_COUNT.
+    Liefert {"findings": [...], "count": n}; count 0 bedeutet, dass nichts gefunden wurde. Ein Befund hat `code`, `message`,
+    `where` und `suggested_review`, den Entwurf eines Prüfeintrags (issue, refs, assumption, reason). Regeln: ein Loch, das
+    in keiner Lage in den erwarteten Begrenzungsrahmen passt (HOLE_OUTSIDE_BBOX), überlappende Löcher (HOLES_OVERLAP), ein
+    Rundungsradius über der halben mittleren Kante des Begrenzungsrahmens (FILLET_TOO_BIG). Mit `second`, einer unabhängigen
+    zweiten Auswertung derselben Seite, ist auch jeder Unterschied zu `spec` ein Befund (A ist `spec`, B ist `second`):
+    EXTRACTION_MISMATCH, ONLY_IN_A, ONLY_IN_B, HOLE_COUNT.
 
-    Example: check_spec(spec=<the spec as for submit_spec>, second=<another reading of the page, optional>)
+    Beispiel: check_spec(spec=<die Spezifikation wie für submit_spec>, second=<eine zweite Auswertung der Seite, optional>)
     """
     findings = crosscheck.plausibility(spec)
     if second is not None:
