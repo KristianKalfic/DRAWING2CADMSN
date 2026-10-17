@@ -23,6 +23,7 @@
       </div>
       <form id="upload" class="dropzone" novalidate>
         <p id="dz-title" class="dz-title">Drop a drawing (PDF, PNG, JPG)</p>
+        <p class="dz-hint">Up to 20 MB</p>
         <input type="file" id="file" name="pdf" accept=".pdf,.png,.jpg,.jpeg" aria-label="Drawing file" aria-describedby="file-error">
         <p id="file-error" class="field-error" role="alert"></p>
         <label for="part">Part name</label>
@@ -69,6 +70,7 @@
         <p class="view-label" aria-hidden="true">3D model</p>
         <p class="view-hint" id="view-hint">3D model appears after export with colors.</p>
         <div class="view-buttons" id="view-buttons" role="group" aria-label="Camera view" hidden></div>
+        <a id="step-link" class="ghost step-link" hidden>Download STEP</a>
       </section>
       <div class="tabs" id="tabs" role="tablist" aria-label="Part details"></div>
       <div class="panel" id="panel" role="tabpanel" tabindex="-1"></div>

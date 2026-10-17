@@ -438,7 +438,7 @@ function renderDrawing(detail) {
 // 3D view: model-viewer, the link between orange faces and review rows
 // ---------------------------------------------------------------------------
 const viewer = $("#viewer");
-const view = { materials: [], base: new Map(), orange: new Set(), glowing: false, down: null };
+const view = { materials: [], base: new Map(), glowing: false, down: null };
 
 const toSrgb = (c) => (c <= 0.0031308 ? 12.92 * c : 1.055 * c ** (1 / 2.4) - 0.055) * 255;
 // The exporter stores orange as [1, 0.214, 0], exactly 127.5 in the green channel: compare with a tolerance.
@@ -561,9 +561,20 @@ function reset3D(message = "3D model appears after export with colors.") {
   viewer.classList.remove("is-pending");
   viewer.removeAttribute("src");
   $("#view-buttons").hidden = true;
+  $("#step-link").hidden = true;
   const hint = $("#view-hint");
   hint.hidden = false;
   hint.textContent = message;
+}
+
+/** The nominal STEP file of an exported part is one click away, whatever tab is open. */
+function showStepLink(detail) {
+  const step = (detail.files ?? []).find((f) => /\.(step|stp)$/i.test(f) && !/_mid\.(step|stp)$/i.test(f));
+  const link = $("#step-link");
+  link.hidden = !step;
+  if (!step) return;
+  link.href = `/files/${enc(detail.name)}/${enc(step)}`;
+  link.setAttribute("download", step);
 }
 
 async function setup3D(detail, token) {
@@ -730,7 +741,7 @@ function renderValidation(detail) {
   const status = (ok) => ok
     ? h("span", { class: "ok" }, icon("check", 14), " ", sr("ok"))
     : h("span", { class: "fail" }, icon("cross", 14), " FAIL");
-  fill(panel, 
+  fill(panel,
     h("div", { class: "kpi" }, h("span", { class: "kpi-number" }, `${passed}/${rows.length}`), h("span", { class: "label" }, "checks passed")),
     table(["Check", "Expected", "Actual", "Result"], rows.map((r) => h("tr", {},
       h("td", { class: "mono", "data-label": "Check" }, r.check),
@@ -765,7 +776,7 @@ async function renderTraceability(detail) {
     return row;
   };
   const traced = review.traceability ?? [], loose = review.unreferenced ?? [];
-  fill(panel, 
+  fill(panel,
     traced.length ? h("ul", { class: "trace-list" }, traced.map((t) => line(t, true))) : plainBox("No values trace back to a dimension."),
     h("div", { class: "loose" },
       h("h3", {}, "Values without dimension reference"),
@@ -1026,7 +1037,7 @@ function logRow(entry) {
 function renderRun() {
   const run = state.run;
   const panel = $("#panel");
-  fill(panel, 
+  fill(panel,
     h("div", { class: "run" },
       h("div", { id: "chain-host" }, chainView(run, performance.now())),
       h("div", { class: "log", id: "log", role: "log", "aria-live": "polite", "aria-label": "Run log" },
@@ -1088,13 +1099,16 @@ function clearErrors() {
   notice.classList.remove("is-shown");
 }
 
+function showNotice(text) {
+  const notice = $("#run-notice");
+  notice.textContent = text;
+  notice.classList.add("is-shown");
+}
+
 function showServerError(status, message) {
-  if (status === 503) {
-    const notice = $("#run-notice");
-    notice.textContent = `${message} Recorded parts stay browsable.`;
-    notice.classList.add("is-shown");
-    return;
-  }
+  if (status === 503) { showNotice(`${message} Recorded parts stay browsable.`); return; }
+  if (status === 0) { showNotice(message); return; } // no answer at all
+
   const target = /part name/i.test(message) ? "part" : /\bmodel\b/i.test(message) ? "model" : "file";
   fieldError(target, message);
   $(`#${target}`).focus();
@@ -1124,7 +1138,7 @@ function initUpload() {
     if (!chosen) { fieldError("file", "Choose a drawing file (PDF, PNG or JPG)."); file.focus(); return; }
     if (chosen.size > MAX_UPLOAD) { fieldError("file", "The file is larger than 20 MB."); file.focus(); return; }
     if (!/^[\w-]+$/.test(name)) { fieldError("part", "Use letters, digits, '_' and '-' only."); part.focus(); return; }
-    if (state.run && !state.run.done) { $("#run-notice").textContent = "A run is still in progress."; $("#run-notice").classList.add("is-shown"); return; }
+    if (state.run && !state.run.done && !state.run.lost) { showNotice("A run is still in progress."); return; }
     const body = new FormData();
     body.append("pdf", chosen);
     body.append("part", name);
@@ -1184,11 +1198,13 @@ async function openPart(name, tab) {
   renderPanel();
   announce(`Opened ${detail.spec?.title || name}`);
   setup3D(detail, token);
+  showStepLink(detail); // after setup3D, which clears the link when it finds no model
 }
 
 function route() {
   const [rawName, rawTab] = location.hash.slice(1).split("/");
-  const name = rawName ? decodeURIComponent(rawName) : "";
+  let name = rawName ?? "";
+  try { name = decodeURIComponent(name); } catch { /* keep a malformed hash as typed */ }
   if (name) { openPart(name, rawTab); return; }
   if (state.parts.length && !state.run) { go(state.parts[0].name); return; }
   if (!state.parts.length && !state.run) showEmpty();
@@ -1225,7 +1241,6 @@ async function reload() {
 }
 
 window.addEventListener("hashchange", route);
-window.addEventListener("resize", fitPaper);
 new ResizeObserver(() => fitPaper()).observe($("#drawing"));
 new ResizeObserver(() => fitTitle()).observe($(".cell-title"));
 document.fonts?.ready.then(fitTitle);

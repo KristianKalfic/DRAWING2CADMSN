@@ -80,6 +80,18 @@ def test_parts_list_and_detail(client):
         assert missing.status_code == 404 and missing.json()["error"] == "Teil nicht gefunden"
 
 
+def test_part_without_export_lists_no_review(client, monkeypatch, tmp_path):
+    folder = tmp_path / "results" / "draft"
+    folder.mkdir(parents=True)
+    (folder / "spec.json").write_text(json.dumps(SPEC))
+    monkeypatch.setenv("D2C_RESULTS", str(tmp_path / "results"))
+    with client:
+        (entry,) = client.get("/api/parts").json()
+        detail = client.get("/api/parts/draft").json()
+    assert (entry["all_ok"], entry["review_count"], entry["issues"], entry["files"]) == (None, 0, [], ["spec.json"])
+    assert detail["review"] is None and detail["spec"]["title"] == "Plate 80x50"
+
+
 def test_eval_row_joins_by_part(client, exported):
     (exported / "EVAL.json").write_text(json.dumps([{"Teil": "other"}, {"Teil": "plate", "MATCH": "ok"}]))
     try:
@@ -259,10 +271,12 @@ def test_upload_broken_image_is_400(monkeypatch, tmp_path):
     assert not (tmp_path / "uploads").exists()
 
 
-def test_upload_too_large_is_413(monkeypatch, tmp_path):
+@pytest.mark.parametrize("excess", [1, 200_000], ids=["just_over", "far_over"])
+def test_upload_too_large_is_413(monkeypatch, tmp_path, excess):
+    """Just over the limit is caught after reading the file, far over from Content-Length before it is spooled."""
     set_llm_env(monkeypatch, tmp_path, **LLM_ENV)
     with TestClient(create_app(fake_agent([]))) as client:
-        response = upload(client, pdf=b"%PDF" + bytes(20 * 1024 * 1024))
+        response = upload(client, pdf=b"%PDF" + bytes(20 * 1024 * 1024 - 4 + excess))
     assert response.status_code == 413 and "20 MB" in response.json()["error"]
     assert not (tmp_path / "uploads").exists()
 
