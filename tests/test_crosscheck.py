@@ -1,8 +1,10 @@
-"""Cross-checks of a spec: two readings compared, plausibility rules, the check_spec tool."""
+"""Cross-checks of a spec: two readings compared, plausibility rules, the check_spec tool, the FreeCAD script."""
 
 import asyncio
 import json
 import os
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -15,6 +17,7 @@ from d2c.spec import PartSpec
 
 ROOT = Path(__file__).parents[1]
 DEMO_SPEC = ROOT / "tests" / "fixtures" / "demo_spec.json"
+FREECAD_CHECK = ROOT / "scripts" / "freecad_check.py"
 
 
 @pytest.fixture(autouse=True)
@@ -253,3 +256,71 @@ def test_check_spec_tool_rejects_invalid_spec():
 def test_instructions_name_check_spec():
     text = srv.server.instructions
     assert "check_spec" in text and text.index("check_spec") < text.index("`submit_spec`")
+
+
+# ---------------------------------------------------------------- scripts/freecad_check.py
+
+def stub_freecad(tmp_path: Path, measured: dict) -> Path:
+    """A stand-in for freecadcmd that writes a fixed measurement where the script expects it."""
+    exe = tmp_path / "freecadcmd"
+    exe.write_text(f"#!{sys.executable}\nimport json, os\njson.dump({measured!r}, open(os.environ['D2C_FC_OUT'], 'w'))\n")
+    exe.chmod(0o755)
+    return exe
+
+
+def measured(**changes) -> dict:
+    """What FreeCAD reports for the exported demo part: five concave cylinders and a rounded corner."""
+    holes = [(16, (0, 0)), (6.6, (30, 15)), (6.6, (-30, 15)), (6.6, (30, -15)), (6.6, (-30, -15))]
+    cylinders = [{"d": d, "axis": [0, 0, -1], "point": [x, y, 10], "concave": True} for d, (x, y) in holes]
+    cylinders.append({"d": 10, "axis": [0, 0, -1], "point": [-35, -20, 0], "concave": False})
+    return {"version": "1.1.4", "valid": True, "solids": 1, "volume": 43993.2, "bbox": [80, 50, 25],
+            "cylinders": cylinders} | changes
+
+
+def run_check(tmp_path: Path, report: dict, *extra: str) -> subprocess.CompletedProcess:
+    step = tmp_path / "part.step"
+    step.write_text("dummy")
+    cmd = [sys.executable, str(FREECAD_CHECK), str(step), "--freecad", str(stub_freecad(tmp_path, report)), *extra]
+    return subprocess.run(cmd, capture_output=True, text=True)
+
+
+def test_freecad_check_without_freecad_exits_2(tmp_path):
+    step = tmp_path / "part.step"
+    step.write_text("dummy")
+    done = subprocess.run([sys.executable, str(FREECAD_CHECK), str(step), "--freecad", str(tmp_path / "no" / "freecadcmd")],
+                          capture_output=True, text=True)
+    assert done.returncode == 2
+    assert "FreeCAD not found" in done.stderr and "--freecad" in done.stderr
+
+
+def test_freecad_check_passes_matching_part(tmp_path):
+    done = run_check(tmp_path, measured(), "--spec", str(DEMO_SPEC))
+    assert done.returncode == 0, done.stdout + done.stderr
+    assert "FreeCAD 1.1.4" in done.stdout and "FAILED" not in done.stdout
+    assert run_check(tmp_path, measured()).returncode == 0  # without --spec: only the solid is checked
+
+
+@pytest.mark.parametrize("change, shown", [
+    ({"bbox": [80, 50, 24]}, "bbox"),
+    ({"cylinders": measured()["cylinders"][1:]}, "hole d=16"),  # the bore is missing
+    ({"cylinders": [{**c, "concave": False} if c["d"] == 16 else c for c in measured()["cylinders"]]}, "hole d=16"),
+    ({"cylinders": [{**c, "axis": [1, 0, 0]} if c["d"] == 16 else c for c in measured()["cylinders"]]}, "hole d=16"),
+    ({"cylinders": [{**c, "point": [1, 0, 10]} if c["d"] == 16 else c for c in measured()["cylinders"]]}, "hole d=16"),
+    ({"valid": False}, "valid=False"),
+    ({"solids": 2}, "solids=2"),
+])
+def test_freecad_check_fails_wrong_part(tmp_path, change, shown):
+    done = run_check(tmp_path, measured(**change), "--spec", str(DEMO_SPEC))
+    assert done.returncode == 1, done.stdout + done.stderr
+    assert shown in done.stdout and "FAILED" in done.stdout
+
+
+def test_freecad_check_without_result_exits_1(tmp_path):
+    exe = tmp_path / "freecadcmd"
+    exe.write_text(f"#!{sys.executable}\nprint('cannot read the file')\n")
+    exe.chmod(0o755)
+    step = tmp_path / "part.step"
+    step.write_text("dummy")
+    done = subprocess.run([sys.executable, str(FREECAD_CHECK), str(step), "--freecad", str(exe)],
+                          capture_output=True, text=True)
+    assert done.returncode == 1 and "cannot read the file" in done.stderr
