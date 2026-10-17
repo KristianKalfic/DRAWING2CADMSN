@@ -273,6 +273,8 @@ results/<teil>/
 
 `python -m d2c.web [--host H] [--port P]` startet die Ansicht (Standard 0.0.0.0:8080).
 
+Gestaltung und Verhalten der Oberfläche: `docs/web-design.md`.
+
 | Methode und Pfad | Zweck |
 | --- | --- |
 | `GET /` | Oberfläche (`static/index.html`) |
