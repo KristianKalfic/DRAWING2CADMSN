@@ -267,9 +267,15 @@ def test_upload_too_large_is_413(monkeypatch, tmp_path):
     assert not (tmp_path / "uploads").exists()
 
 
+def test_app_js_served(client):
+    with client:
+        response = client.get("/static/app.js")
+    assert response.status_code == 200 and "javascript" in response.headers["content-type"]
+
+
 def test_fonts_served(client):
     with client:
-        for name in ("InterTight-wght.woff2", "InterTight-wght-italic.woff2", "JetBrainsMono-wght.woff2"):
+        for name in ("InterTight-wght.woff2", "InterTight-wght-italic.woff2", "InterTight-800.woff2", "JetBrainsMono-wght.woff2"):
             response = client.get(f"/static/vendor/fonts/{name}")
             assert response.status_code == 200 and response.content.startswith(b"wOF2"), name
             assert response.headers["content-type"] == "font/woff2"
