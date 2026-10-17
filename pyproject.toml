@@ -12,13 +12,16 @@ dependencies = ["cadquery==2.8.0", "claude-agent-sdk==0.2.168", "mcp==2.3.0", "p
 [project.optional-dependencies]
 dev = ["pytest==8.*"]
 
-# Explicit package list: the repo root also holds data/, docs/, run/ ... and
-# flat-layout auto-discovery would count them as top-level packages.
-[tool.setuptools]
-packages = ["d2c"]
+# Only d2c and its subpackages: the repo root also holds data/, docs/, run/ ... and
+# flat-layout auto-discovery would count them as top-level packages. A fixed list would break
+# the Docker dependency layer, which installs against an empty d2c package.
+[tool.setuptools.packages.find]
+include = ["d2c*"]
 
+# The patterns do not descend into subfolders, so every static folder is listed.
 [tool.setuptools.package-data]
 d2c = ["instructions.md"]
+"d2c.web" = ["static/*", "static/vendor/*", "static/vendor/fonts/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
