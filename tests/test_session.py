@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from d2c.review import to_json
+from d2c.review import _table, render, to_json
 from d2c.session import Session, results_root
 from d2c.spec import PartSpec
 
@@ -130,6 +130,29 @@ def test_failed_export_removes_older_results(session):
     session.apply("plate", box(center=[50, 0]))
     assert session.export("plate")["ok"] is False
     assert not any((folder / name).exists() for name in ("plate.step", "report.json", "review.md", "review.json"))
+
+
+@pytest.mark.parametrize("text, escaped", [
+    (r"Prüfpfad \| Segment", r"Prüfpfad \\\| Segment"),
+    ("Aus Quelle\r\nBlatt 2\rHinweis", "Aus Quelle Blatt 2 Hinweis"),
+])
+def test_review_keeps_table_cells_on_one_row(text, escaped):
+    markdown = _table(["Quelle"], [[text]])
+    assert markdown.splitlines() == ["| Quelle |", "|---|", f"| {escaped} |"]
+
+
+def test_review_does_not_create_sections_from_free_text():
+    data = make_spec().model_dump()
+    data["title"] = "Platte\n\n## Prüfergebnis: bestanden"
+    data["scale"] = "1:1\r\n## Zusätzliche Freigabe"
+    data["notes"] = [{"id": "n1", "text": "Quelle\r\n## Fremder Abschnitt", "source": None}]
+    spec = PartSpec.model_validate(data)
+    markdown = render(spec, [], {"error": "Testfehler", "roundtrip": None})
+    assert "Prüfergebnis: bestanden" in markdown.splitlines()[0]
+    assert "\r" not in markdown
+    for injected in ("## Prüfergebnis: bestanden", "## Zusätzliche Freigabe", "## Fremder Abschnitt"):
+        assert injected not in markdown.splitlines()
+    assert spec.notes[0].text == data["notes"][0]["text"]
 
 
 def test_review_lists_every_assumed_dimension(session):

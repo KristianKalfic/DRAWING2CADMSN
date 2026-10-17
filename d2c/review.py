@@ -21,7 +21,7 @@ def _g(x: float) -> str:
 
 
 def _cell(text: object) -> str:
-    return str(text).replace("|", "\\|").replace("\n", " ")
+    return " ".join(str(text).replace("\\", "\\\\").replace("|", "\\|").splitlines())
 
 
 def _table(headers: list[str], rows: list[list[object]]) -> str:
@@ -139,12 +139,12 @@ def to_json(spec: PartSpec, ops: list[dict], report: dict) -> dict:
 
 def _header(spec: PartSpec) -> str:
     return "\n".join([
-        f"# Prüfliste: {spec.title}",
+        f"# Prüfliste: {_cell(spec.title)}",
         "",
-        f"- Bauteil: {spec.name}",
-        f"- Zeichnung: {spec.drawing} (Seite {spec.page})",
-        f"- Maßstab: {spec.scale}",
-        f"- Allgemeintoleranz: {spec.general_tolerance or 'nicht angegeben'}",
+        f"- Bauteil: {_cell(spec.name)}",
+        f"- Zeichnung: {_cell(spec.drawing)} (Seite {spec.page})",
+        f"- Maßstab: {_cell(spec.scale)}",
+        f"- Allgemeintoleranz: {_cell(spec.general_tolerance or 'nicht angegeben')}",
     ])
 
 
@@ -162,7 +162,7 @@ def _assumptions_section(data: dict) -> str:
 
 
 def _notes_section(data: dict) -> str:
-    return "## Zeichnungshinweise\n" + ("\n".join(f"- {n['id']}: {n['text']}" for n in data["notes"]) or "Keine.")
+    return "## Zeichnungshinweise\n" + ("\n".join(f"- {_cell(n['id'])}: {_cell(n['text'])}" for n in data["notes"]) or "Keine.")
 
 
 def _traceability_section(data: dict) -> str:

@@ -34,26 +34,28 @@ def _safe_name(name: str) -> bool:
     return bool(name) and not any(bad in name for bad in ("/", "\\", "\0")) and ".." not in name
 
 
-def _read_json(path: Path) -> object | None:
+def _read_json(path: Path, expected: type[dict] | type[list] = dict) -> dict | list | None:
     try:
-        return json.loads(path.read_text(encoding="utf-8"))
+        value = json.loads(path.read_text(encoding="utf-8"))
+        return value if isinstance(value, expected) else None
     except (OSError, ValueError):
         return None
 
 
 def _eval_row(part: str) -> dict | None:
-    rows = _read_json(results_root() / "EVAL.json")
-    return next((r for r in rows if part in (r.get("Teil"), r.get("part"))), None) if isinstance(rows, list) else None
+    rows = _read_json(results_root() / "EVAL.json", list) or []
+    return next((r for r in rows if isinstance(r, dict) and part in (r.get("Teil"), r.get("part"))), None)
 
 
 def _summary(folder: Path) -> dict:
     spec = _read_json(folder / "spec.json") or {}
     review = _read_json(folder / "review.json") or {}
+    assumptions = review.get("assumptions")
     return {
         "name": folder.name,
         "title": spec.get("title", folder.name),
         "all_ok": review.get("all_ok"),
-        "review_count": len(review.get("assumptions", [])),
+        "review_count": len(assumptions) if isinstance(assumptions, list) else 0,
         "eval": _eval_row(folder.name),
         "files": sorted(p.name for p in folder.iterdir() if p.is_file()),
     }
@@ -92,8 +94,8 @@ async def file(request: Request) -> Response:
 async def drawing_png(request: Request) -> Response:
     folder = _part_folder(request.path_params["name"])
     spec = _read_json(folder / "spec.json") if folder else None
-    if not isinstance(spec, dict) or "drawing" not in spec:
-        return _error(404, "Keine Spezifikation für dieses Teil vorhanden")
+    if not isinstance(spec, dict) or not isinstance(spec.get("drawing"), str) or not spec["drawing"]:
+        return _error(404, "Keine gültige Zeichnung für dieses Teil hinterlegt")
     try:
         png = await run_in_threadpool(render, spec["drawing"], 1, 100)
     except ValueError as e:
@@ -145,6 +147,8 @@ async def start_run(request: Request) -> Response:
         return _error(400, "Eine PDF-Datei ist erforderlich (Formularfeld 'pdf')")
     if not PART_NAME.fullmatch(name):
         return _error(400, "Der Teilname darf nur Buchstaben, Ziffern, '_' und '-' enthalten")
+    if model is not None and not isinstance(model, str):
+        return _error(400, "Das Modell muss als Text angegeben werden (Formularfeld 'model')")
     content = await pdf.read()
     if not content.startswith(b"%PDF"):
         return _error(400, "Die hochgeladene Datei ist keine PDF-Datei")
