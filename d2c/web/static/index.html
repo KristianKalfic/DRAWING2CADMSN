@@ -13,7 +13,7 @@
     <h1>Drawing2CAD</h1>
     <form id="upload" class="upload">
       <label>Zeichnung (PDF)<input type="file" name="pdf" accept="application/pdf" required></label>
-      <label>Teilname<input type="text" name="part" pattern="[\w\-]+" placeholder="halterung_1" required></label>
+      <label>Teilname<input type="text" name="part" pattern="(?:[\p{L}\p{N}_\-]|[AaOoUu]\u0308)+" placeholder="halterung_1" required></label>
       <label>Modell (optional)<input type="text" name="model" placeholder="Servervorgabe"></label>
       <button type="submit">Agenten starten</button>
     </form>

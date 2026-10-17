@@ -26,7 +26,7 @@ def make_report(payload: dict) -> dict:
         expected = Expected.model_validate(want) if want is not None else None
         wp, notes = build(ops)
         if not wp.objects:  # CadQuery keeps no object for an empty compound, and the checks cannot read that
-            raise BuildError("Das Modell ist leer (hat ein Schnitt das gesamte Material entfernt?).")
+            raise BuildError("Das Modell ist leer. Prüfe, ob ein Schnitt das gesamte Material entfernt hat.")
         solid = solid_check(wp)
         dims = dimension_check(wp, expected) if expected is not None else []
         roundtrip = step_roundtrip(wp, payload.get("export_path") or SCRATCH_STEP, payload.get("marks", []))

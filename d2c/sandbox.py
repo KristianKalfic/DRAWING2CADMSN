@@ -41,17 +41,25 @@ def validation_error_message(error: ValidationError) -> str:
         "greater_than_equal": "muss mindestens {ge} sein",
         "less_than": "muss kleiner als {lt} sein",
         "less_than_equal": "darf höchstens {le} sein",
-        "string_pattern_mismatch": "entspricht nicht dem erwarteten Muster",
+        "string_pattern_mismatch": "muss dem Muster {pattern!r} entsprechen",
+        "string_too_short": "Textlänge muss mindestens {min_length} Zeichen betragen",
+        "string_too_long": "Textlänge darf höchstens {max_length} Zeichen betragen",
+        "too_short": "Anzahl der Einträge muss mindestens {min_length} betragen",
+        "too_long": "Anzahl der Einträge darf höchstens {max_length} betragen",
+        "union_tag_invalid": "enthält für {discriminator} den unbekannten Typ {tag!r}; zulässig sind: {expected_tags}",
+        "union_tag_not_found": "benötigt die Typangabe {discriminator}",
         "literal_error": "muss einen der zulässigen Werte annehmen: {expected}",
         "int_parsing": "muss eine Ganzzahl sein",
         "int_type": "muss eine Ganzzahl sein",
+        "int_from_float": "muss eine Ganzzahl ohne Nachkommastellen sein",
         "float_parsing": "muss eine Zahl sein",
         "float_type": "muss eine Zahl sein",
         "string_type": "muss Text sein",
         "list_type": "muss eine Liste sein",
         "tuple_type": "muss ein Tupel sein",
         "dict_type": "muss ein Objekt sein",
-        "bool_type": "muss ein boolescher Wert sein",
+        "bool_type": "muss ein Wahrheitswert sein (true oder false)",
+        "bool_parsing": "muss ein Wahrheitswert sein (true oder false)",
         "finite_number": "muss endlich sein",
     }
     rows = []
@@ -85,9 +93,9 @@ def check_script(code: str) -> None:
         return  # nothing can run; the worker reports the syntax error together with its op index
     for node in ast.walk(tree):
         if isinstance(node, (ast.Import, ast.ImportFrom)):
-            raise ValueError("Imports sind in scripts nicht zulässig (cq und math sind bereits verfügbar).")
+            raise ValueError("Importanweisungen sind in Skripten nicht zulässig (cq und math sind bereits verfügbar).")
         if isinstance(node, ast.Name) and node.id in FORBIDDEN_NAMES:
-            raise ValueError(f"Der Name {node.id!r} ist in scripts nicht zulässig.")
+            raise ValueError(f"Der Name {node.id!r} ist in Skripten nicht zulässig.")
         for name in _lookups(node):
             if name.startswith("_"):
                 raise ValueError(f"Namen und Attribute mit führendem Unterstrich sind nicht zulässig: {name!r}.")
