@@ -9,7 +9,7 @@ Alles läuft lokal; der CAD-Kern ist CadQuery (OpenCascade, quelloffene Software
 Zeichnung ──► das Sprachmodell liest sie, schreibt JSON (Schema unten, Beispiel: examples/beispiel_v2.json)
           ──► MCP-Server server.py ── build_from_json
                  └─ json_builder.py: JSON ──► CadQuery-Code (deterministisch, nur validierte Zahlen
-                                              + Selektor-Whitelist, keine Freitext-Einschleusung)
+                                              + Positivliste der Kantenselektoren, keine Freitext-Einschleusung)
           ──► Validierung (Volumenkörper gültig, genau 1 Körper, Maße + Lage, Bohrungen)
           ──► export_step: STEP schreiben, erneut einlesen, Volumen vergleichen
           ──► issue_check.py: 2 Extraktionen vergleichen, Plausibilität, Nachmessen in FreeCAD
@@ -46,7 +46,7 @@ python -m pytest tests -q                          # Modellaufbau, Validierung, 
 python issue_check.py A.json B.json out/teil.step --freecad "C:/Program Files/FreeCAD 1.0/bin/FreeCADCmd.exe"
 ```
 
-`issue_check.py` gibt ohne FreeCAD den Blocker `FREECAD_NOT_FOUND` aus und gibt nicht frei (Exit 1).
+`issue_check.py` gibt ohne FreeCAD den Sperrfehler `FREECAD_NOT_FOUND` aus und gibt nicht frei (Exit 1).
 Die FreeCAD-Prüfung in `tests/` wird übersprungen, wenn `FreeCADCmd` nicht im PATH ist.
 
 ## MCP-Clients

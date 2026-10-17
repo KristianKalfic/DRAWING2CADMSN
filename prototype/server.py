@@ -1,6 +1,6 @@
 """
 Drawing2CAD MCP-Server (Prototyp)
-- Baut 3D-Modelle ausschließlich über strukturierte Tools (CadQuery/OpenCascade)
+- Baut 3D-Modelle ausschließlich über strukturierte Werkzeuge (CadQuery/OpenCascade)
 - Prüft nach jedem Aufbau den Volumenkörper, die Maße im Vergleich zur Zeichnung und den STEP-Rückimport
 - Freier Code dient nur als Ausweichweg in einem isolierten Unterprozess mit Zeitlimit und ohne Netzwerk
 Start:  python server.py   (stdio-Transport, z. B. für MCP-Clients wie LM Studio)
@@ -19,7 +19,7 @@ PARTS: dict[str, dict] = {}
 
 
 def _safe(name):
-    """Dateinamen-Teil aus Freitext (part_name/filename) ohne Pfadtrenner o. Ae."""
+    """Bestandteil eines Dateinamens aus Freitext (part_name/filename), ohne Pfadtrenner oder Ähnliches."""
     return re.sub(r"[^A-Za-z0-9_.-]", "_", str(name)).lstrip(".")[:80] or "part"
 
 
@@ -28,8 +28,8 @@ def _new_pid(part_name):
 
 
 def _xy_on_face(wp, x, y):
-    """Globale (x, y) -> lokale Koordinaten der Flaechen-Workplane. Auf '<Z' zeigt die lokale
-    Y-Achse nach -Y; ohne Umrechnung wuerden Bohrungen/Taschen von unten gespiegelt."""
+    """Globale (x, y) -> lokale Koordinaten der Flächen-Workplane. Auf '<Z' zeigt die lokale
+    Y-Achse nach -Y; ohne Umrechnung würden Bohrungen/Taschen von unten gespiegelt."""
     loc = wp.plane.toLocalCoords(cq.Vector(x, y, wp.plane.origin.z))
     return loc.x, loc.y
 
@@ -81,7 +81,7 @@ def revolve_profile(points: list[list[float]], part_name: str = "part") -> dict:
     return {"ok": True, "part_id": pid, "bbox": _bbox(wp)}
 
 
-# ---------------- Features ----------------
+# ---------------- Merkmale ----------------
 @mcp.tool()
 def add_hole(part_id: str, x: float, y: float, diameter: float, depth: float = 0,
              face: str = ">Z", counterbore_diameter: float = 0, counterbore_depth: float = 0) -> dict:
@@ -130,9 +130,9 @@ def set_expected_dimensions(part_id: str, spec: dict) -> dict:
 
 
 def _holes(solid):
-    """Bohrungen = zylindrische Flaechen mit Achse parallel Z, die KONKAV sind (Normale zeigt zur Achse).
+    """Bohrungen = zylindrische Flächen mit Achse parallel Z, die KONKAV sind (Normale zeigt zur Achse).
     Location() liegt auf der Achse (Z beliebig), daher ist Location().X/Y nur bei Z-paralleler Achse
-    die Bohrungsposition. Konvexe Zylinder (Eckenrundungen, Aussenmantel) werden ausgeschlossen."""
+    die Bohrungsposition. Konvexe Zylinder (Eckenrundungen, Außenmantel) werden ausgeschlossen."""
     found = []
     for f in solid.Faces():
         if f.geomType() != "CYLINDER":
@@ -158,7 +158,7 @@ def _validate(p) -> dict:
     for ax, val in spec.get("bbox", {}).items():
         act = res["bbox"][ax]
         res["checks"].append({"check": f"bbox_{ax}", "soll": val, "ist": act, "pass": abs(act - val) <= tol})
-    # Lage pruefen (Nullpunkt-Konvention), nicht nur Abmessungen
+    # Lage prüfen (Nullpunktkonvention), nicht nur Abmessungen
     bb = solid.BoundingBox()
     for ax, val in spec.get("bbox_min", {}).items():
         act = round(getattr(bb, ax + "min"), 3)
@@ -184,10 +184,10 @@ def export_step(part_id: str, filename: str = "") -> dict:
     p = _part(part_id)
     path = os.path.join(OUT, _safe(filename or part_id) + ".step")
     if os.path.exists(path):
-        os.remove(path)  # sonst wuerde eine alte Datei gleichen Namens re-importiert
+        os.remove(path)  # Sonst würde eine alte Datei mit demselben Namen erneut importiert
     cq.exporters.export(p["wp"], path)
     if not os.path.isfile(path):
-        # CadQuery meldet einen fehlgeschlagenen STEP-Export nicht als Exception
+        # CadQuery meldet einen fehlgeschlagenen STEP-Export nicht als Ausnahme
         return {"ok": False, "path": None, "error": f"STEP-Datei wurde nicht geschrieben: {path} "
                 f"(Schreibrechte/Speicherplatz pruefen, D2C_OUT={OUT})",
                 "validation": {**_validate(p), "all_pass": False}, "history": p["log"]}
@@ -204,7 +204,7 @@ def export_step(part_id: str, filename: str = "") -> dict:
     return {"ok": True, "path": path, "validation": v, "history": p["log"]}
 
 
-# ---------------- Fallback: Sandbox ----------------
+# ---------------- Ausweichweg: isolierte Ausführung ----------------
 @mcp.tool()
 def run_cadquery_script(part_id: str, script: str, timeout_s: int = 20) -> dict:
     """Nur Ausweichweg für Geometrien ohne passendes Werkzeug. Das Skript muss eine Variable `result` (cq.Workplane)

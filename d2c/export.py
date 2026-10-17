@@ -49,10 +49,10 @@ from d2c.spec import Dimension, PartSpec
 
 RGB = tuple[float, float, float]
 STEEL: RGB = (0.6, 0.67, 0.69)
-ORANGE: RGB = (1.0, 0.5, 0.0)  # faces of a review mark
-GREEN: RGB = (0.396, 0.941, 0.451)  # thread faces, as in the BCT references
+ORANGE: RGB = (1.0, 0.5, 0.0)  # Flächen einer Prüfmarkierung
+GREEN: RGB = (0.396, 0.941, 0.451)  # Gewindeflächen wie in den BCT-Referenzen
 MARK_LAYER = "ASSUMED_CHECK"
-SCHEMA = "AP242DIS"  # OCCT's name for AP242; plain "AP242" is rejected
+SCHEMA = "AP242DIS"  # OCCT-Bezeichnung für AP242; "AP242" allein wird abgelehnt
 
 _DIM_TYPES = {
     "diameter": xdo.XCAFDimTolObjects_DimensionType_Size_Diameter,
@@ -66,8 +66,8 @@ _COLOR_TYPES = (
 _FOLD = str.maketrans(
     {"Ø": "dia ", "ø": "dia ", "⌀": "dia ", "°": " deg", "±": "+-", "×": "x", "ß": "ss", "ä": "ae", "ö": "oe", "ü": "ue", "Ä": "Ae", "Ö": "Oe", "Ü": "Ue", "–": "-", "—": "-", "−": "-"}
 )
-# XCAFDoc_Dimension keeps [hole, form variance, grade] on this child label. GetClassOfTolerance drops
-# those out-arguments under OCP, so the reader takes them from here.
+# XCAFDoc_Dimension speichert [Bohrung, Grundabmaß, Genauigkeitsgrad] auf diesem untergeordneten Dokumentknoten. GetClassOfTolerance
+# gibt diese Ausgabeparameter unter OCP nicht zurück; der Leser bezieht sie daher von hier.
 _CLASS_TAG = 4
 
 
@@ -78,12 +78,12 @@ def _ascii(text: str) -> str:
 
 
 def _hex(rgb: RGB) -> str:
-    # OCCT keeps colors linear, so a color read back is off by float noise: round before scaling
+    # OCCT speichert Farben linear; beim Zurücklesen entstehen Rundungsabweichungen, daher vor dem Skalieren runden.
     return "#" + "".join(f"{round(round(c, 4) * 255):02x}" for c in rgb)
 
 
 def _num(x: float) -> str:
-    return f"{round(x, 3) + 0.0:g}"  # + 0.0 turns -0.0 into 0.0
+    return f"{round(x, 3) + 0.0:g}"  # + 0.0 wandelt -0.0 in 0.0 um
 
 
 def _new_doc() -> TDocStd_Document:
@@ -93,7 +93,7 @@ def _new_doc() -> TDocStd_Document:
 
 
 def _attribute(label: TDF_Label, cls: type):
-    """The attribute of a type on a label, or None. TDF_Label.FindAttribute does not fill its handle under OCP."""
+    """Das Attribut eines Typs auf einem Label oder None. `TDF_Label.FindAttribute` füllt sein Handle unter OCP nicht aus."""
     attributes = TDF_AttributeIterator(label)
     while attributes.More():
         if isinstance(attributes.Value(), cls):
@@ -130,8 +130,8 @@ def _cylinder_faces(shape: cq.Shape, hole: dict, tol: float = LINEAR_TOL) -> lis
 def _review_faces(
     shape: cq.Shape, marks: Sequence[dict], threads: Sequence[dict]
 ) -> tuple[dict[cq.Face, list[str]], list[cq.Face]]:
-    """What gets colored: the marked faces with the ids of all marks that hit them (orange), then the
-    thread faces nobody marked (green)."""
+    """Zu färbende Flächen: zuerst markierte Flächen mit allen IDs der dort treffenden Markierungen (orange),
+    danach nicht markierte Gewindeflächen (grün)."""
     marked: dict[cq.Face, list[str]] = {}
     for mark in marks:
         for face in select_faces(shape, mark["near"]):
@@ -141,10 +141,11 @@ def _review_faces(
 
 
 def _fit_class(fit: str | None) -> tuple | None:
-    """(hole, form variance, grade) of an ISO 286 fit like "H7" or "g6", or None if XCAF cannot hold it.
+    """(Bohrung, Grundabmaß, Genauigkeitsgrad) einer ISO-286-Passung wie "H7" oder "g6", oder None, falls XCAF sie nicht abbilden kann.
 
-    OCCT 7.9.3 writes the grade 2 too high (IT7 as '9'), so the enum goes in one IT short: DimensionGrade(6)
-    prints '7'. That cannot reach IT1 (written as '01'), which leaves IT2 to IT18.
+    OCCT 7.9.3 schreibt den Genauigkeitsgrad um zwei Stufen zu hoch (IT7 als '9'); deshalb wird der Aufzählungswert
+    um eine IT-Stufe niedriger gesetzt: DimensionGrade(6) ergibt '7'. IT1 (geschrieben als '01') ist so nicht
+    erreichbar; verfügbar sind IT2 bis IT18.
     """
     match = re.fullmatch(r"([A-Za-z]{1,2})(\d{1,2})", fit or "")
     if match is None:
@@ -164,7 +165,7 @@ def _reals(*values: float) -> TColStd_HArray1OfReal:
 
 
 class _Writer:
-    """An XCAF document holding the part. Faces get a label when a color, name or dimension needs one."""
+    """Ein XCAF-Dokument mit dem Bauteil. Flächen erhalten ein Label, sobald Farbe, Name oder Maß eines benötigt."""
 
     def __init__(self, body: cq.Compound, name: str) -> None:
         self.doc = _new_doc()
@@ -182,7 +183,7 @@ class _Writer:
         self.colors.SetColor(label, color, XCAFDoc_ColorType.XCAFDoc_ColorSurf)
 
     def label(self, face: cq.Face) -> TDF_Label:
-        label = self.shapes.AddSubShape(self.root, face.wrapped)  # the existing label for a face added before
+        label = self.shapes.AddSubShape(self.root, face.wrapped)  # das bereits zuvor angelegte Label dieser Fläche
         if label.IsNull():
             raise ValueError("Eine Fläche gehört nicht zum Körper.")
         return label
@@ -198,7 +199,7 @@ class _Writer:
         self.layers.SetLayer(label, ES(MARK_LAYER))
 
     def dimension(self, entry: dict) -> None:
-        """A diameter of one face or a distance between two faces, with a fit or +- deviations, and a note."""
+        """Durchmesser auf einer Fläche oder Abstand zwischen zwei Flächen, mit Passung oder +- Abweichungen und einem Hinweis."""
         obj = xdo.XCAFDimTolObjects_DimensionObject()
         obj.SetType(_DIM_TYPES[entry["type"]])
         fit = _fit_class(entry.get("fit"))
@@ -206,19 +207,19 @@ class _Writer:
             obj.SetValue(entry["value"])
             obj.SetClassOfTolerance(*fit)
         elif entry.get("tol_upper") is not None:
-            # XCAF keeps [nominal, magnitude of the lower deviation, upper deviation]
+            # XCAF speichert [Nennmaß, Betrag der unteren Abweichung, obere Abweichung]
             obj.SetValues(_reals(entry["value"], -entry["tol_lower"], entry["tol_upper"]))
         else:
             obj.SetValue(entry["value"])
         if entry.get("description"):
-            obj.AddDescription(HS(_ascii(entry["description"])), HS("note"))  # a DESCRIPTIVE_REPRESENTATION_ITEM
+            obj.AddDescription(HS(_ascii(entry["description"])), HS("note"))  # ein DESCRIPTIVE_REPRESENTATION_ITEM
         label = self.tolerances.AddDimension()
         _attribute(label, XCAFDoc_Dimension).SetObject(obj)
         faces = [self.label(face) for face in entry.get("faces") or [entry["face"]]]
         self.tolerances.SetDimension(*faces, label)
 
     def save(self, path: str) -> None:
-        STEPControl_Controller.Init_s()  # the parameters below exist only after both Init calls
+        STEPControl_Controller.Init_s()  # Die folgenden Einstellungen sind erst nach beiden Init-Aufrufen verfügbar.
         STEPCAFControl_Controller.Init_s()
         previous = Interface_Static.CVal_s("write.step.schema")
         try:
@@ -231,13 +232,13 @@ class _Writer:
             if not writer.Transfer(self.doc, STEPControl_AsIs) or writer.Write(path) != IFSelect_RetDone:
                 raise OSError(f"Die Datei {path} konnte nicht geschrieben werden.")
         finally:
-            Interface_Static.SetCVal_s("write.step.schema", previous)  # the setting is global to the process
+            Interface_Static.SetCVal_s("write.step.schema", previous)  # Die Einstellung gilt prozessweit.
 
 
 def write_step(
     shape: cq.Shape, path: str, *, name: str, marks: Sequence[dict], pmi: Sequence[dict], threads: Sequence[dict]
 ) -> dict:
-    """Schreibe die Form als STEP AP242 mit Farben, Namen, dem Layer ASSUMED_CHECK und semantischer PMI.
+    """Schreibe die Form als STEP AP242 mit Farben, Namen, der Ebene ASSUMED_CHECK und semantischer PMI.
 
     `marks` enthält {"id", "near": [(x, y, z), ...]}: Die Flächen nahe den Punkten werden orange und
     "PRUEFEN <id>" genannt; trifft eine Fläche mehrere Markierungen, enthält ihr Name alle IDs. `threads`
@@ -247,7 +248,7 @@ def write_step(
     "value", "tol_upper", "tol_lower", "description"}. Eine Passung hat Vorrang vor Abweichungen.
     Eine von XCAF nicht unterstützte Passung wird weggelassen, das Maß aber trotzdem geschrieben.
     """
-    # a Compound root: below a Solid that carries a location, AddSubShape finds no faces
+    # Als Compound-Wurzel: Unter einem Solid mit gesetzter Position findet AddSubShape keine Flächen.
     body = cq.Compound.makeCompound(shape.Solids())
     marked, threaded = _review_faces(body, marks, threads)
     writer = _Writer(body, name)
@@ -306,13 +307,14 @@ def _assumed_pmi(spec: PartSpec, dims: dict[str, Dimension], shape: cq.Shape, to
 def pmi_from(spec: PartSpec, ops: Sequence[Op], shape: cq.Shape, report: dict, tol: float = LINEAR_TOL) -> list[dict]:
     """The PMI entries for write_step: a diameter per found hole and a distance per assumed length.
 
-    A hole counts when its check in report["dims"] is ok and one of its dimensions is a diameter. The
-    diameter sits on the cylinder face, with the value, deviations or fit of that dimension. `text`, the
-    printed callout, goes along but is not written.
+    Eine Bohrung zählt, wenn ihre Prüfung in `report["dims"]` den Status ok hat und eines ihrer Maße ein
+    Durchmesser ist. Der Durchmesser wird mit Wert, Abweichungen oder Passung auf der Zylinderfläche
+    abgelegt. `text`, also die gedruckte Maßangabe, wird mitgeführt, aber nicht geschrieben.
 
-    A review item of issue "missing" with exactly one assumed length gets a distance between the two
-    parallel planes its mark_near hits, if they are that length apart, with the note
-    "ANNAHME: <assumption> - <reason> - bitte prüfen". That is how BCT carries the missing width of the Sensoraufnahme.
+    Ein Prüfeintrag mit issue "missing" und genau einem angenommenen Längenmaß erhält einen Abstand zwischen
+    den beiden parallelen Ebenen, die seine `mark_near`-Punkte treffen, sofern deren Abstand dem Maß
+    entspricht. Als Hinweis wird
+    "ANNAHME: <assumption> - <reason> - bitte prüfen". So bildet BCT beispielsweise die fehlende Breite der Sensoraufnahme ab.
 
     tol is how far the shape may be off the drawn diameters, hole positions and lengths, as in
     checks.dimension_check: a shape built on the tolerance mid needs more than the default.
@@ -323,27 +325,27 @@ def pmi_from(spec: PartSpec, ops: Sequence[Op], shape: cq.Shape, report: dict, t
 
 
 def _patch_materials(path: str) -> None:
-    """Make the material matte. OCCT writes only baseColorFactor, glTF then defaults to metallic 1.0 and viewers
-    render the part dark."""
+    """Macht das Material matt. OCCT schreibt nur `baseColorFactor`; glTF verwendet dann den Standardwert
+    `metallicFactor=1.0`, wodurch Betrachter das Bauteil dunkel darstellen."""
     blob = Path(path).read_bytes()
     json_length = struct.unpack_from("<I", blob, 12)[0]
     gltf = json.loads(blob[20 : 20 + json_length])
     for material in gltf["materials"]:
         material["pbrMetallicRoughness"].update(metallicFactor=0.0, roughnessFactor=0.8)
     text = json.dumps(gltf, separators=(",", ":")).encode()
-    text += b" " * (-len(text) % 4)  # the JSON chunk is padded with spaces to 4 bytes
-    rest = blob[20 + json_length :]  # the BIN chunk stays as it is
+    text += b" " * (-len(text) % 4)  # Der JSON-Block wird mit Leerzeichen auf 4 Byte aufgefüllt.
+    rest = blob[20 + json_length :]  # Der BIN-Block bleibt unverändert.
     header = struct.pack("<4sII", b"glTF", 2, 20 + len(text) + len(rest))
     Path(path).write_bytes(header + struct.pack("<I4s", len(text), b"JSON") + text + rest)
 
 
 def write_glb(shape: cq.Shape, path: str, marks: Sequence[dict], threads: Sequence[dict]) -> dict:
-    """Write the shape as GLB, colored like the STEP file. Returns the content of marks.json, written next to it.
+    """Schreibt die Form als GLB und verwendet dieselben Farben wie in der STEP-Datei. Gibt den Inhalt von `marks.json` zurück, der daneben gespeichert wird.
 
-    glTF drops face names, so marks.json maps the color of the marked faces to the ids of the marks that
-    hit a face: {"#ff8000": ["rv1", ...]}. It is empty when no mark hit.
+    glTF speichert keine Flächennamen; daher ordnet `marks.json` die Farbe markierter Flächen den IDs der
+    Markierungen zu, die eine Fläche treffen: {"#ff8000": ["rv1", ...]}. Ohne Treffer enthält die Datei eine leere Zuordnung ({}).
     """
-    body = shape.copy()  # exporting meshes the shape in place, which would skew a bounding box of the caller's
+    body = shape.copy()  # Der Export erzeugt ein Netz direkt auf der Form und könnte sonst die Bounding Box des Aufrufers verändern.
     marked, threaded = _review_faces(body, marks, threads)
     assembly = cq.Assembly(body, name=Path(path).stem, color=cq.Color(*STEEL))
     for face in threaded:
@@ -359,7 +361,7 @@ def write_glb(shape: cq.Shape, path: str, marks: Sequence[dict], threads: Sequen
 
 
 def _describe(topods: TopoDS_Shape) -> str:
-    """A short name for the geometry of a PMI face: "plane z=10", "cylinder d=16 at (0, 0, 12.5)"."""
+    """Kurzbezeichnung der Geometrie einer PMI-Fläche, z. B. "plane z=10" oder "cylinder d=16 at (0, 0, 12.5)"."""
     shape = cq.Shape.cast(topods)
     kind = shape.ShapeType().lower()
     if kind != "face":
@@ -379,12 +381,12 @@ def _fit_of(dimension: TDF_Label) -> str:
     array = _attribute(dimension.FindChild(_CLASS_TAG, False), TDataStd_IntegerArray).Array()
     hole, variance, grade = (array.Value(i) for i in range(array.Lower(), array.Upper() + 1))
     letters = xdo.XCAFDimTolObjects_DimensionFormVariance(variance).name.rsplit("_", 1)[1]
-    # the reader maps '7' to IT7, whose enum value is 8
+    # Der Leser ordnet '7' IT7 zu, dessen Enum-Wert 8 ist.
     return (letters if hole else letters.lower()) + str(grade - 1)
 
 
 def _dimension(label: TDF_Label) -> dict | None:
-    """A dimension as read_pmi reports it, or None for entries without a number (presentations, common labels)."""
+    """Ein Maß im Format von `read_pmi` oder None für Einträge ohne Zahlenwert (Darstellungen, allgemeine Labels)."""
     obj = _attribute(label, XCAFDoc_Dimension).GetObject()
     if obj.GetValues() is None:
         return None
@@ -396,7 +398,7 @@ def _dimension(label: TDF_Label) -> dict | None:
         "type": next((name for name, t in _DIM_TYPES.items() if t == kind), kind.name.split("Type_", 1)[1]),
         "value": obj.GetValue(),
         "tol_upper": obj.GetUpperTolValue() if plus_minus else None,
-        "tol_lower": 0.0 - obj.GetLowerTolValue() if plus_minus else None,  # XCAF keeps its magnitude
+        "tol_lower": 0.0 - obj.GetLowerTolValue() if plus_minus else None,  # XCAF speichert den Betrag.
         "fit": _fit_of(label) if obj.IsDimWithClassOfTolerance() else None,
         "descriptions": [obj.GetDescription(i).ToCString() for i in range(obj.NbDescriptions())],
         "faces": [_describe(XCAFDoc_ShapeTool.GetShape_s(f)) for f in _labels(first) + _labels(second)],
@@ -413,7 +415,7 @@ def _colors_of(label: TDF_Label) -> set[str]:
 
 
 def _shape_labels(shapes: XCAFDoc_ShapeTool) -> list[TDF_Label]:
-    """Every shape label of the document with the labels below them: the faces."""
+    """Alle Form-Labels des Dokuments samt untergeordneten Labels, also auch der Flächen."""
     roots = TDF_LabelSequence()
     shapes.GetShapes(roots)
     found = []
@@ -439,13 +441,13 @@ def _layers(tool: XCAFDoc_LayerTool) -> dict[str, int]:
 
 
 def read_pmi(path: str) -> dict:
-    """What a CAD system finds in a STEP file: the schema, semantic dimensions, colors and layers.
+    """Angaben, die ein CAD-System in einer STEP-Datei findet: Schema, semantische Maße, Farben und Ebenen.
 
-    The result is JSON-serializable. dimensions are {"type", "value", "tol_upper", "tol_lower", "fit",
-    "descriptions", "faces"}: type is "diameter" or "distance" as write_step writes them, otherwise the
-    OCCT name such as "Size_Radius"; deviations are signed and None without a tolerance; fit is like "H7".
-    colors maps "#rrggbb" to the number of shapes (body, faces, edges) that carry it, layers maps a layer
-    name to its number of shapes.
+    Das Ergebnis ist JSON-serialisierbar. `dimensions` enthält {"type", "value", "tol_upper", "tol_lower",
+    "fit", "descriptions", "faces"}: `type` ist wie in `write_step` "diameter" oder "distance", sonst
+    ein OCCT-Name wie "Size_Radius". Abweichungen sind vorzeichenbehaftet; ohne Toleranz ist der Wert None;
+    `fit` hat etwa den Wert "H7". `colors` ordnet "#rrggbb" der Anzahl der Formen (Körper, Flächen, Kanten)
+    mit dieser Farbe zu; `layers` ordnet Ebenennamen der Zahl ihrer Formen zu.
     """
     STEPCAFControl_Controller.Init_s()
     doc = _new_doc()

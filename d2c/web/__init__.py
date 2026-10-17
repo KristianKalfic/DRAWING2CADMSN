@@ -1,1 +1,1 @@
-"""Web view of the results folder: part browser, 3D view and live agent runs."""
+"""Webansicht des Ergebnisordners: Bauteilübersicht, 3D-Ansicht und laufende Agentenläufe."""

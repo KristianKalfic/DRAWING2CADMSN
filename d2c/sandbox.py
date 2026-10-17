@@ -1,7 +1,8 @@
-"""Runs the build worker in an isolated process and checks scripts before they run.
+"""Startet den Aufbau-Worker in einem isolierten Prozess und prüft Skripte vor ihrer Ausführung.
 
-The real boundary is the container (no network) and the worker process: wall-clock timeout, resource
-limits and a scratch directory. The script check only gives early, readable errors.
+Die eigentliche Sicherheitsgrenze bilden der Container (ohne Netzwerk) und der Worker-Prozess:
+Zeitlimit, Ressourcenbeschränkungen und ein temporäres Verzeichnis. Die Skriptprüfung liefert vorab
+verständliche Fehlermeldungen.
 """
 import ast
 import functools
@@ -17,23 +18,23 @@ from pathlib import Path
 
 from pydantic import ValidationError
 
-DEFAULT_TIMEOUT = 60.0  # seconds of wall clock, D2C_TIMEOUT overrides it
-MEMORY_LIMIT = 4 * 2**30  # bytes of address space
-FILE_LIMIT = 200 * 2**20  # bytes of any file the worker writes
-STDERR_FILE = "stderr.txt"  # in the scratch directory; the child cannot write more than FILE_LIMIT to it
-STDERR_TAIL = 500  # bytes of the worker's stderr kept for a crash message
-# Names that open files, run code or reach into objects. Names and attributes starting with "_" are rejected too.
+DEFAULT_TIMEOUT = 60.0  # Sekunden Laufzeit; D2C_TIMEOUT überschreibt diesen Wert.
+MEMORY_LIMIT = 4 * 2**30  # Adressraum in Byte.
+FILE_LIMIT = 200 * 2**20  # Maximale Größe jeder vom Worker geschriebenen Datei in Byte.
+STDERR_FILE = "stderr.txt"  # Temporäre Datei; das Kind kann sie höchstens bis FILE_LIMIT füllen.
+STDERR_TAIL = 500  # Für eine Absturzmeldung behaltene Bytes aus stderr des Workers.
+# Namen zum Öffnen von Dateien, Ausführen von Code oder Zugriff auf Objekte; auch Namen und Attribute mit führendem "_" sind verboten.
 FORBIDDEN_NAMES = frozenset(
     "open exec eval compile __import__ globals locals vars getattr setattr delattr input breakpoint".split())
 
 
 def error_report(error: str) -> dict:
-    """The worker report of a run that made no model: `error` is set, everything else is empty."""
+    """Worker-Bericht ohne erzeugtes Modell: `error` ist gesetzt, alle übrigen Felder sind leer."""
     return {"ok": False, "error": error, "solid": None, "dims": [], "build_notes": [], "roundtrip": None}
 
 
 def validation_error_message(error: ValidationError) -> str:
-    """Pydantic field errors in German, retaining each field path and error type."""
+    """Gibt Pydantic-Feldfehler auf Deutsch aus und erhält dabei Feldpfade sowie Fehlertypen."""
     messages = {
         "missing": "fehlt",
         "extra_forbidden": "ist nicht zulässig",
@@ -75,22 +76,22 @@ def validation_error_message(error: ValidationError) -> str:
 
 
 def _lookups(node: ast.AST) -> list[str]:
-    """The attribute names and variable names this node looks up."""
+    """Attribut- und Variablennamen, auf die dieser Knoten zugreift."""
     if isinstance(node, ast.Name):
         return [node.id]
     if isinstance(node, ast.Attribute):
         return [node.attr]
-    if isinstance(node, ast.MatchClass):  # `case Point(__class__=c)` reads an attribute too
+    if isinstance(node, ast.MatchClass):  # Auch `case Point(__class__=c)` greift auf ein Attribut zu.
         return node.kwd_attrs
     return []
 
 
 def check_script(code: str) -> None:
-    """Raise ValueError if a script imports, uses a forbidden name or reaches for a private attribute."""
+    """Löst ValueError aus, wenn ein Skript importiert, einen verbotenen Namen nutzt oder auf ein privates Attribut zugreift."""
     try:
         tree = ast.parse(code)
     except SyntaxError:
-        return  # nothing can run; the worker reports the syntax error together with its op index
+        return  # Es kann nichts ausgeführt werden; der Worker meldet den Syntaxfehler mit dem Vorgangsindex.
     for node in ast.walk(tree):
         if isinstance(node, (ast.Import, ast.ImportFrom)):
             raise ValueError("Importanweisungen sind in Skripten nicht zulässig (cq und math sind bereits verfügbar).")
@@ -102,14 +103,14 @@ def check_script(code: str) -> None:
 
 
 def _limits(cpu_seconds: int) -> None:
-    """Runs in the child before it executes: caps address space, file size and CPU time."""
+    """Wird im Kindprozess vor der Ausführung aufgerufen und begrenzt Adressraum, Dateigröße und CPU-Zeit."""
     for kind, limit in ((resource.RLIMIT_AS, MEMORY_LIMIT), (resource.RLIMIT_FSIZE, FILE_LIMIT),
                         (resource.RLIMIT_CPU, cpu_seconds)):
         resource.setrlimit(kind, (limit, limit))
 
 
 def run_worker(payload: dict, timeout: float | None = None) -> dict:
-    """Build and check the ops of the payload in a fresh worker process and return its report.
+    """Baut und prüft die ops der Nutzlast `payload` in einem frischen Worker-Prozess und gibt dessen Bericht zurück.
 
     The payload is {"ops": [...], "expected": {...} | None, "marks": [...], "export_path": str | None} and
     optionally "pmi_spec", "glb_path" and "tol" (see d2c.worker).
@@ -120,15 +121,15 @@ def run_worker(payload: dict, timeout: float | None = None) -> dict:
     limit = timeout if timeout is not None else float(os.environ.get("D2C_TIMEOUT", DEFAULT_TIMEOUT))
     for index, op in enumerate(payload["ops"]):
         code = op.get("code")
-        if op.get("op") == "script" and isinstance(code, str):  # other types: the worker's validation reports them
+        if op.get("op") == "script" and isinstance(code, str):  # Andere Typen meldet die Validierung des Workers.
             try:
                 check_script(code)
             except ValueError as e:
                 return error_report(f"ValueError: op {index} (script): {e}")
-    # CPU time is only the fallback limit: import cadquery alone takes about 2 s of CPU in 1.2 s of wall clock
+    # CPU-Zeit ist nur die Ersatzgrenze: Schon der Import von cadquery benötigt etwa 2 s CPU in 1,2 s Laufzeit.
     cpu_seconds = 4 * math.ceil(limit) + 10
     with tempfile.TemporaryDirectory() as scratch, open(Path(scratch) / STDERR_FILE, "w+b") as stderr:
-        # own process group, so a timeout kills whatever the worker started; stderr in a file, not in our memory
+        # Eigene Prozessgruppe, damit ein Timeout alle vom Worker gestarteten Prozesse beendet; stderr landet in einer Datei.
         worker = subprocess.Popen(
             [sys.executable, "-I", "-m", "d2c.worker"], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=stderr,
             preexec_fn=functools.partial(_limits, cpu_seconds), env={"PATH": os.environ["PATH"]}, cwd=scratch,
@@ -142,7 +143,7 @@ def run_worker(payload: dict, timeout: float | None = None) -> dict:
         stderr.seek(max(0, stderr.seek(0, os.SEEK_END) - STDERR_TAIL))
         crash = stderr.read().decode(errors="replace")
     try:
-        return json.loads(stdout)  # a finished report counts even if the process died at exit
+        return json.loads(stdout)  # Ein fertiger Bericht zählt auch dann, wenn der Prozess beim Beenden abstürzt.
     except ValueError:
         pass
     if worker.returncode in (-signal.SIGKILL, -signal.SIGXCPU):

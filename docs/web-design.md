@@ -18,8 +18,8 @@ Warum diese Richtung:
 ## BCT-Marke (Quelle: bct-technology.com und BCTs Hackathon-Folien, geprüft)
 
 - Primärfarbe BCT-Rot `#DB0027`, Aktivfarbe `#9D0521`. Weiß dominiert, Hellgrau-Bänder `#F2F5F8`, Anthrazit `#272727`, Text `#222`.
-- Sekundär Petrol: Button `#046C83`, Verlauf `#14A8C5` bis `#004959`.
-- Schrift Inter Tight. Überschriften 700 mit enger Laufweite, Buttons mit 3 px Radius und `letter-spacing: 1px`.
+- Sekundär Petrol: Schaltfläche `#046C83`, Verlauf `#14A8C5` bis `#004959`.
+- Schrift Inter Tight. Überschriften 700 mit enger Laufweite, Schaltflächen mit 3 px Radius und `letter-spacing: 1px`.
 - Markenzeichen: In einer dunklen Überschrift ist **ein Wortteil rot** („Gemeinsam **MEHR**wert schaffen“). Dazu ein kurzer roter Strich (145 px) als Trenner.
 - Das Cyan/Schwarz der Folie (`#00EBFD`, „BLACK FOREST“ als Konturversalien) ist die Veranstaltungsmarke, nicht BCT.
 - **Das BCT-Logo wird nicht verwendet** (keine Freigabe).
@@ -38,7 +38,7 @@ In `style.css` als Variablen. Die Kontrastwerte sind nach WCAG 2.x gerechnet und
   --hair: #c9d2db;        /* nur Zeilentrenner und Deko, nie Grenze eines Bedienelements (1,5) */
   --bct: #db0027;         /* Marke: Weiß darauf 5,2 */
   --bct-press: #9d0521;   /* Aktivzustand der primären Schaltfläche: 8,5 */
-  --petrol: #046c83;      /* Sekundärbuttons, Links, Fokus auf hellen Flächen, Zellen-Highlight: 6,0 auf paper */
+  --petrol: #046c83;      /* Sekundäre Schaltflächen, Verknüpfungen, Fokus auf hellen Flächen, hervorgehobene Zellen: 6,0 auf paper */
   --view-top: #004959;    /* 3D-Fenster, Verlauf oben; Weiß darauf 10,0 */
   --view-bottom: #00404f; /* 3D-Fenster, Verlauf unten; Weiß darauf 11,4 */
   --cyan: #00ebfd;        /* Veranstaltungsfarbe, NUR im 3D-Fenster: 6,8 auf view-top */
@@ -223,7 +223,7 @@ const sameColor = (factor, hex) =>
 - Kein BCT-Logo, kein Glas, kein Glow, kein Verlaufstext, keine Schatten, keine Pillen. Der einzige Verlauf ist das 3D-Fenster (BCT-Motiv).
 - Kein Cyan außerhalb des 3D-Fensters, kein BCT-Rot auf Daten, kein Dunkelmodus-Schalter.
 - Keine Icon-Bibliothek: Zeichnungssymbole als Inline-SVG.
-- Kein Framework, kein Build-Schritt, kein CDN zur Laufzeit, keine weitere JS-Bibliothek außer `model-viewer`.
+- Kein Framework, kein zusätzlicher Erstellungsschritt, kein CDN zur Laufzeit, keine weitere JS-Bibliothek außer `model-viewer`.
 
 ## 9. Priorität
 

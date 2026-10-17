@@ -40,7 +40,7 @@ def fresh_session(monkeypatch):
 
 @pytest.fixture
 def data(tmp_path, monkeypatch) -> Path:
-    """A data folder holding the demo drawing under a name with spaces and parentheses."""
+    """Datenordner mit der Demo-Zeichnung unter einem Dateinamen mit Leerzeichen und Klammern."""
     root = tmp_path / "data"
     (root / "Demo Teil (A)").mkdir(parents=True)
     shutil.copy(FIXTURES / "demo_drawing.pdf", root / DRAWING)

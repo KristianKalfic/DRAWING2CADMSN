@@ -9,12 +9,12 @@ import pytest
 from d2c.drawing import pdf_info, render, resolve_drawing
 
 DEMO = Path(__file__).parent / "fixtures" / "demo_drawing.pdf"
-NAME = "Demo Teil (A)/demo drawing.pdf"  # spaces and parentheses must survive every subprocess call
+NAME = "Demo Teil (A)/demo drawing.pdf"  # Leerzeichen und Klammern müssen jeden Aufruf eines Unterprozesses unverändert überstehen.
 
 
 @pytest.fixture
 def demo_root(tmp_path, monkeypatch):
-    """Data folder holding a copy of the demo drawing."""
+    """Datenordner mit einer Kopie der Demo-Zeichnung."""
     (tmp_path / "Demo Teil (A)").mkdir()
     shutil.copy(DEMO, tmp_path / NAME)
     monkeypatch.setenv("D2C_DATA", str(tmp_path))
@@ -22,13 +22,13 @@ def demo_root(tmp_path, monkeypatch):
 
 
 def png_size(png: bytes) -> tuple[int, int]:
-    """Width and height from the IHDR chunk."""
+    """Breite und Höhe aus dem IHDR-Abschnitt."""
     assert png[:8] == b"\x89PNG\r\n\x1a\n"
     return struct.unpack(">II", png[16:24])
 
 
 def one_page_pdf(page_entries: str) -> bytes:
-    """A blank one-page PDF whose page dictionary carries page_entries (MediaBox, CropBox, Rotate)."""
+    """Ein leeres PDF mit einer Seite, deren Seitendictionary `page_entries` enthält (MediaBox, CropBox, Rotate)."""
     bodies = [
         "<< /Type /Catalog /Pages 2 0 R >>",
         "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
@@ -80,11 +80,11 @@ def test_render_crop_size(demo_root):
 
 def test_render_caps_long_side_2000(demo_root):
     longest = max(png_size(render(NAME, dpi=600)))
-    assert 1900 < longest <= 2000  # the cap lowers dpi to what 2000 px allow, not further
+    assert 1900 < longest <= 2000  # Die Begrenzung senkt die dpi-Zahl auf den für 2000 Pixel nötigen Wert, aber nicht weiter.
 
 
 def test_render_rejects_outside_data(demo_root):
-    (demo_root / "link.pdf").symlink_to(DEMO)  # a PDF that lives outside the data folder
+    (demo_root / "link.pdf").symlink_to(DEMO)  # Ein PDF außerhalb des Datenordners
     for name in ("../../etc/passwd", "link.pdf", str(DEMO)):
         with pytest.raises(ValueError, match="im Datenordner"):
             render(name)
@@ -92,7 +92,7 @@ def test_render_rejects_outside_data(demo_root):
 
 def test_missing_lists_available(demo_root):
     composed = "Trägerplatte"
-    decomposed = unicodedata.normalize("NFD", composed)  # as a macOS mount lists it
+    decomposed = unicodedata.normalize("NFD", composed)  # so, wie der macOS-Einhängepunkt ihn auflistet
     (demo_root / decomposed).mkdir()
     shutil.copy(DEMO, demo_root / decomposed / "plate.pdf")
     with pytest.raises(ValueError) as err:
@@ -102,7 +102,7 @@ def test_missing_lists_available(demo_root):
 
 
 def test_rotated_cropped_page_uses_displayed_size(tmp_path, monkeypatch):
-    """pdfinfo reports the unrotated CropBox; the image, and so the crop fractions, follow the display."""
+    """`pdfinfo` meldet die nicht gedrehte CropBox; das Bild und damit die Ausschnittsanteile richten sich nach der angezeigten Seite."""
     (tmp_path / "turned.pdf").write_bytes(
         one_page_pdf("/MediaBox [0 0 400 300] /CropBox [100 50 300 200] /Rotate 90")
     )

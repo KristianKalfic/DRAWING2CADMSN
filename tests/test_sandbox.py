@@ -1,4 +1,4 @@
-"""Isolated build worker (process boundary, report protocol) and the AST check for scripts."""
+"""Isolierter Worker für den Modellaufbau (Prozessgrenze, Berichtsprotokoll) und AST-Prüfung der Skripte."""
 import json
 import math
 import os
@@ -41,7 +41,7 @@ def test_validation_errors_keep_repair_details(changes, details):
 
 
 def box(w=20.0, h=10.0, t=5.0, center=(0, 0), mode="add"):
-    """Extrude op: a w x h block on XY from z=0 to z=t."""
+    """Extrude-Operation: Quader w × h auf XY von z=0 bis z=t."""
     return {"op": "extrude", "profile": {"type": "rect", "center": center, "w": w, "h": h},
             "plane": {"name": "XY"}, "distance": t, "mode": mode}
 
@@ -55,12 +55,12 @@ def payload(*ops, **changes):
 
 
 def failed(error):
-    """The report of a run that made no model: only `error` is set."""
+    """Bericht eines Laufs ohne erzeugtes Modell: Nur `error` ist gesetzt."""
     return {"ok": False, "error": error, "solid": None, "dims": [], "build_notes": [], "roundtrip": None}
 
 
 def fake_popen(returncode, stdout=b"", stderr=b""):
-    """Stand-in for subprocess.Popen: finishes at once with these results and keeps the call it got."""
+    """Ersatz für `subprocess.Popen`: liefert die Ergebnisse sofort und speichert den erhaltenen Aufruf."""
     class Process:
         def __init__(self, args, **kwargs):
             popen.call = {"args": args, **kwargs}
@@ -88,34 +88,34 @@ def test_worker_builds_box(tmp_path):
     assert report["build_notes"] == [{"op_index": 1, "drilled_d": 4.0, "holes": 1}]
     assert report["roundtrip"]["ok"] is True
 
-    # a failed check is a result, not an error: ok needs the solid check and every dimension to pass
+    # Eine fehlgeschlagene Prüfung ist ein Ergebnis, kein Fehler: `ok` setzt eine gültige Körperprüfung und bestandene Prüfungen aller Maße voraus.
     wrong_size = run_worker(payload(box(), expected={"bbox": [20, 10, 6]}))
     assert [d["ok"] for d in wrong_size["dims"]] == [True, True, False]
     flip = "result = cq.Workplane().add(cq.Shape.cast(result.val().Solids()[0].wrapped.Reversed()))"
-    inside_out = run_worker(payload(box(), script(flip)))  # negative volume
+    inside_out = run_worker(payload(box(), script(flip)))  # negatives Volumen
     assert inside_out["solid"]["ok"] is False
     for report in (wrong_size, inside_out):
         assert (report["ok"], report["error"]) == (False, None)
 
-    # print() in a script and OpenCascade's own messages must not break the protocol:
-    # stdout holds exactly one JSON line, everything else goes to stderr
+    # Ausgaben von `print()` und OpenCascade dürfen das Protokoll nicht stören:
+    # Auf stdout steht genau eine JSON-Zeile; alles Weitere geht auf stderr.
     (tmp_path / "bad.step").write_text("not a STEP file")
-    noisy = "print('hello')\ntry:\n    cq.importers.importStep('bad.step')\nexcept:\n    pass"
+    noisy = "print('Hallo')\ntry:\n    cq.importers.importStep('bad.step')\nexcept:\n    pass"
     request = json.dumps(payload(box(), script(noisy))).encode()
     raw = subprocess.run([sys.executable, "-I", "-m", "d2c.worker"], input=request, capture_output=True, cwd=tmp_path)
     assert len(raw.stdout.splitlines()) == 1
     assert json.loads(raw.stdout)["ok"] is True
-    assert b"hello" in raw.stderr and b"StepFile" in raw.stderr
+    assert b"Hallo" in raw.stderr and b"StepFile" in raw.stderr
 
 
 def test_worker_reports_build_error(monkeypatch):
     assert run_worker(payload(box(mode="cut"))) == failed(
         "BuildError: op 0 (extrude): Der erste Vorgang muss den Modus 'add' haben.")
 
-    # every other way to fail is a report as well, never a crash
+    # Auch jede andere Fehlerursache muss als Bericht erscheinen und darf nie zum Absturz führen.
     bad_ops = run_worker(payload({"op": "extrude", "distance": 0}, script(123)))
     assert bad_ops == failed(bad_ops["error"]) and bad_ops["error"].startswith("ValidationError: ")
-    assert "1.script.code" in bad_ops["error"]  # a script of the wrong type is the worker's to report, not the check's
+    assert "1.script.code" in bad_ops["error"]  # Ein Skript mit falschem Typ muss der Worker melden, nicht die Prüfung.
     assert "muss Text sein" in bad_ops["error"]
     assert "Input should be a valid string" not in bad_ops["error"]
     bad_expected = run_worker(payload(box(), expected={}))
@@ -130,12 +130,12 @@ def test_worker_reports_build_error(monkeypatch):
     assert empty == failed("BuildError: Das Modell ist leer. Prüfe, ob ein Schnitt das gesamte Material entfernt hat.")
     assert run_worker(payload()) == failed("BuildError: Keine Vorgänge angegeben.")
 
-    # so is an exception from the checks or the export, whatever its type
+    # Dasselbe gilt für Ausnahmen aus der Prüfung oder dem Export, unabhängig vom Typ.
     def explode(*args):
-        raise RuntimeError("export exploded")
+        raise RuntimeError("Export fehlgeschlagen")
 
     monkeypatch.setattr(worker, "step_roundtrip", explode)
-    assert worker.make_report(payload(box())) == failed("RuntimeError: export exploded")
+    assert worker.make_report(payload(box())) == failed("RuntimeError: Export fehlgeschlagen")
 
 
 def test_timeout_kills(monkeypatch):
@@ -143,7 +143,7 @@ def test_timeout_kills(monkeypatch):
     assert run_worker(payload(box(), script("while True: pass")), timeout=2) == failed("Zeitüberschreitung nach 2s")
     assert time.monotonic() - start < 4
 
-    # a print loop floods stderr: it goes to a file, not into the parent's memory, and the whole group dies at the timeout
+    # Eine Druckschleife füllt stderr. Die Ausgabe landet in einer Datei statt im Arbeitsspeicher des Elternprozesses; bei Zeitüberschreitung wird die ganze Prozessgruppe beendet.
     real_popen, started = subprocess.Popen, []
 
     def recording_popen(*args, **kwargs):
@@ -151,7 +151,7 @@ def test_timeout_kills(monkeypatch):
         return started[-1][0]
 
     monkeypatch.setattr(subprocess, "Popen", recording_popen)
-    chatter = "while True:\n    print('x' * 1000)\n    sum(range(10**5))"  # unthrottled it hits the 200 MiB file limit first
+    chatter = "while True:\n    print('x' * 1000)\n    sum(range(10**5))"  # Ohne Begrenzung erreicht die Ausgabe zuerst die Dateigrenze von 200 MiB.
     flood = run_worker(payload(box(), script(chatter)), timeout=2)
     assert flood == failed("Zeitüberschreitung nach 2s")
     process, kwargs = started[0]
@@ -159,14 +159,14 @@ def test_timeout_kills(monkeypatch):
     assert kwargs["start_new_session"] is True
     with pytest.raises(ProcessLookupError):
         os.killpg(process.pid, 0)
-    # the address space limit turns a runaway allocation (4 GiB of list slots) into an error
+    # Die Adressraumgrenze fängt eine ausufernde Speicherbelegung (4 GiB Listenplätze) als Fehler ab.
     greedy = run_worker(payload(box(), script("slots = [0] * 2**29")))
     assert greedy == failed(greedy["error"]) and greedy["error"].startswith("BuildError: op 1 (script): MemoryError")
 
-    # the call: isolated interpreter, only PATH in the environment, a scratch directory that is removed again
+    # Der Aufruf nutzt einen isolierten Interpreter, enthält nur `PATH` in der Umgebung und verwendet ein anschließend gelöschtes Arbeitsverzeichnis.
     spy = fake_popen(0, stdout=json.dumps(failed("seen")).encode())
     monkeypatch.setattr(subprocess, "Popen", spy)
-    monkeypatch.setenv("D2C_TIMEOUT", "2.5")  # the default timeout is read on every call
+    monkeypatch.setenv("D2C_TIMEOUT", "2.5")  # Das Standardzeitlimit wird bei jedem Aufruf neu eingelesen.
     run_worker(payload(box()))
     call = spy.call
     assert call["args"] == [sys.executable, "-I", "-m", "d2c.worker"]
@@ -177,21 +177,21 @@ def test_timeout_kills(monkeypatch):
     run_worker(payload(box()))
     assert spy.call["timeout"] == 60
 
-    # limits as set in the child: address space 4 GiB, file size 200 MiB, CPU 4 * ceil(2.5 s) + 10 s
+    # Grenzen im Kindprozess: 4 GiB Adressraum, 200 MiB Dateigröße und CPU-Zeit 4 * ceil(2.5 s) + 10 s.
     probe = ("import json, resource as r\n"
              "print(json.dumps([r.getrlimit(k) for k in (r.RLIMIT_AS, r.RLIMIT_FSIZE, r.RLIMIT_CPU)]))")
     limits = real_popen([sys.executable, "-c", probe], preexec_fn=call["preexec_fn"], stdout=subprocess.PIPE)
     assert json.loads(limits.communicate()[0]) == [[4 * 2**30] * 2, [200 * 2**20] * 2, [22] * 2]
 
-    # exit status of a worker that left no report: SIGKILL or SIGXCPU is the CPU limit, anything else a crash
+    # Exitstatus eines Workers ohne Bericht: SIGKILL oder SIGXCPU bedeutet CPU-Zeitlimit, jeder andere Status einen Absturz.
     for signal_exit in (-9, -24):
         monkeypatch.setattr(subprocess, "Popen", fake_popen(signal_exit))
         assert run_worker(payload(box()), timeout=2) == failed("Zeitüberschreitung nach 2s (CPU-Limit)")
-    for code, stdout in ((1, b""), (0, b"not json")):  # the last 500 characters of stderr, undecodable bytes included
+    for code, stdout in ((1, b""), (0, b"not json")):  # die letzten 500 Zeichen von stderr, einschließlich nicht dekodierbarer Bytes
         monkeypatch.setattr(subprocess, "Popen", fake_popen(code, stdout, stderr=b"x" * 600 + b"\xff" + b"boom"))
         assert run_worker(payload(box())) == failed("Worker abgestürzt: " + "x" * 495 + "\ufffd" + "boom")
     finished = json.dumps(failed("BuildError: kept")).encode() + b"\n"
-    monkeypatch.setattr(subprocess, "Popen", fake_popen(-11, finished))  # a segfault at exit does not undo the report
+    monkeypatch.setattr(subprocess, "Popen", fake_popen(-11, finished))  # Ein Segfault beim Beenden macht den Bericht nicht rückgängig.
     assert run_worker(payload(box())) == failed("BuildError: kept")
 
 
@@ -200,7 +200,7 @@ def test_script_import_os_rejected(monkeypatch):
         with pytest.raises(ValueError, match="Importanweisungen sind in Skripten nicht zulässig"):
             check_script(code)
 
-    # run_worker reports the rejection and never starts a process
+    # `run_worker` meldet die Ablehnung, ohne einen Prozess zu starten.
     monkeypatch.setattr(subprocess, "Popen", lambda *args, **kwargs: pytest.fail("the worker was started"))
     report = run_worker(payload(box(), script("x = 1"), script("import os")))
     assert report == failed(
@@ -209,10 +209,10 @@ def test_script_import_os_rejected(monkeypatch):
 
 def test_script_open_rejected():
     for name in FORBIDDEN_NAMES.split():
-        for code in (f"{name}('x')", f"f = {name}"):  # called, or only referenced
+        for code in (f"{name}('x')", f"f = {name}"):  # aufgerufen oder nur referenziert
             with pytest.raises(ValueError, match=name):
                 check_script(code)
-    # whole names only, and only names: an attribute called like a builtin is no threat
+    # Es werden nur vollständige Namen geprüft; ein Attribut mit demselben Namen wie eine eingebaute Funktion stellt keine Gefahr dar.
     check_script("opening = max(1, 2)\nevaluated = [input_ for input_ in range(3)]\nresult.open\nresult.vars()")
 
 
@@ -224,20 +224,20 @@ def test_script_dunder_rejected():
         "result._private",
         "f = lambda: __builtins__",
         "print(f'{result.__dict__}')",
-        # a keyword in a class pattern looks up an attribute as well
+        # Ein Schlüsselwort in einem Klassenmuster greift ebenfalls auf ein Attribut zu.
         "match result:\n    case cq.Workplane(__class__=c):\n        pass",
     ):
         with pytest.raises(ValueError, match="Unterstrich"):
             check_script(code)
 
-    # what a model script needs passes, and so does code that cannot compile (the worker reports that)
+    # Benötigte Modellskripte werden zugelassen; nicht kompilierbarer Code passiert die Prüfung ebenfalls, damit der Worker den Fehler melden kann.
     check_script("result = result.faces('>Z').workplane().hole(math.sqrt(16))\nprint(len([i for i in range(3)]))")
     check_script("def (")
 
 
 def test_export_roundtrip_via_worker(tmp_path, monkeypatch):
     path = tmp_path / "plate.step"
-    marks = [{"id": "rv1", "near": [[0, 0, 5.2]]}]  # 0.2 mm over the top face
+    marks = [{"id": "rv1", "near": [[0, 0, 5.2]]}]  # 0,2 mm über der Oberseite
     report = run_worker(payload(box(), export_path=str(path), marks=marks))
     assert report["ok"] is True
     roundtrip = report["roundtrip"]
@@ -248,13 +248,13 @@ def test_export_roundtrip_via_worker(tmp_path, monkeypatch):
     assert read_pmi(str(path))["schema"] == "AP242_MANAGED_MODEL_BASED_3D_ENGINEERING_MIM_LF"
     assert roundtrip["pmi"] == {"written": 0, "read_back": 0}  # no spec in the payload, so no dimensions to carry
 
-    # without export_path the worker still exports and re-imports: into model.step in its own scratch directory
+    # Ohne `export_path` exportiert und importiert der Worker weiterhin erneut: nach `model.step` im eigenen Arbeitsverzeichnis.
     monkeypatch.chdir(tmp_path)
     scratch = run_worker(payload(box()))
     assert (scratch["roundtrip"]["ok"], scratch["roundtrip"]["path"]) == (True, "model.step")
     assert not (tmp_path / "model.step").exists()
 
-    # ok needs the round trip too: a mark that finds no face fails it while the solid is fine
+    # Für `ok` muss auch der Rückimport bestehen: Eine Markierung ohne passende Fläche lässt die Prüfung fehlschlagen, obwohl der Körper gültig ist.
     lost_mark = run_worker(payload(box(), marks=[{"id": "far", "near": [[100, 0, 0]]}]))
     assert (lost_mark["solid"]["ok"], lost_mark["roundtrip"]["ok"], lost_mark["ok"]) == (True, False, False)
     assert lost_mark["error"] is None

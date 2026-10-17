@@ -1,4 +1,4 @@
-# BCT sample data and everything derived from it stays out of git
+# BCT-Beispieldaten und alle daraus abgeleiteten Dateien bleiben außerhalb von Git.
 OneDrive*/
 *.stp
 *.prt

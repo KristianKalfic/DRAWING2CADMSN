@@ -1,4 +1,4 @@
-"""Build worker: the process `python -I -m d2c.worker` that d2c.sandbox.run_worker starts.
+"""Aufbau-Worker: Prozess `python -I -m d2c.worker`, den d2c.sandbox.run_worker startet.
 
 stdin holds one JSON payload {"ops": [...], "expected": {...} | null, "marks": [...], "export_path": str | null}
 and optionally "pmi_spec": the PartSpec as a dict (the STEP then carries its semantic dimensions), "glb_path":
@@ -20,7 +20,7 @@ from d2c.sandbox import error_report, validation_error_message
 from d2c.spec import Expected, PartSpec
 
 OPS = TypeAdapter(list[Op])
-SCRATCH_STEP = "model.step"  # where the model is exported when the payload names no path: the scratch cwd
+SCRATCH_STEP = "model.step"  # Exportpfad des Modells, wenn im payload keiner angegeben ist: das temporäre Arbeitsverzeichnis.
 
 
 def thread_holes(ops: list[Op]) -> list[dict]:
@@ -36,7 +36,7 @@ def thread_holes(ops: list[Op]) -> list[dict]:
 
 
 def make_report(payload: dict) -> dict:
-    """Build, check and export the model of the payload. Whatever fails on the way becomes `error`."""
+    """Baut, prüft und exportiert das Modell aus dem payload. Jeder Fehler auf dem Weg wird als `error` zurückgegeben."""
     try:
         ops = OPS.validate_python(payload["ops"])
         want = payload.get("expected")
@@ -60,7 +60,7 @@ def make_report(payload: dict) -> dict:
                 json.dumps(read_pmi(step), indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     except ValidationError as e:
         return error_report(f"ValidationError: {validation_error_message(e)}")
-    except Exception as e:  # invalid input, build, check and export errors alike: the caller always gets a report
+    except Exception as e:  # Auch bei ungültigen Eingaben sowie Aufbau-, Prüf- und Exportfehlern erhält der Aufrufer einen Bericht.
         return error_report(f"{type(e).__name__}: {e}")
     return {
         "ok": ok,
@@ -73,9 +73,9 @@ def make_report(payload: dict) -> dict:
 
 
 def main() -> None:
-    """Read the payload from stdin and write the report as one JSON line to the real stdout."""
-    with os.fdopen(os.dup(1), "w") as report_out:  # the real stdout, kept for the report
-        os.dup2(2, 1)  # print() in scripts and OpenCascade's own messages now land on stderr
+    """Liest das payload aus stdin und schreibt den Bericht als einzelne JSON-Zeile auf stdout."""
+    with os.fdopen(os.dup(1), "w") as report_out:  # Echte stdout-Ausgabe für den Bericht sichern.
+        os.dup2(2, 1)  # print() in Skripten und Meldungen von OpenCascade gehen nun auf stderr.
         report_out.write(json.dumps(make_report(json.load(sys.stdin))) + "\n")
 
 

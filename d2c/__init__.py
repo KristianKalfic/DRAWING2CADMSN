@@ -1,1 +1,1 @@
-"""Drawing2CAD: MCP server that turns 2D technical drawings into validated STEP models."""
+"""Drawing2CAD: MCP-Server, der technische 2D-Zeichnungen in geprüfte STEP-Modelle umwandelt."""

@@ -1,4 +1,4 @@
-"""The MCP server: render and read drawings, submit a spec, build the part op by op, export the STEP."""
+"""MCP-Server: rendert und liest Zeichnungen, übernimmt Spezifikationen, baut Bauteile Schritt für Schritt und exportiert STEP."""
 
 import argparse
 import functools
@@ -21,16 +21,16 @@ from d2c.text import read_text
 from d2c.tolerances import Variant
 
 MAX_TEXT_ITEMS = 300
-MAX_SHAPES = 12  # circles and arcs measure_drawing lists
-SCALE_TOL = 0.005  # relative difference at which two scales count as different
-MIN_PRINTED_DIMS = 6  # fewer printed values cannot tell the real scale from chance hits
+MAX_SHAPES = 12  # Anzahl der von measure_drawing ausgegebenen Kreise und Bögen.
+SCALE_TOL = 0.005  # Relative Abweichung, ab der zwei Maßstäbe als verschieden gelten.
+MIN_PRINTED_DIMS = 6  # Mit weniger gedruckten Werten lässt sich der echte Maßstab nicht von Zufallstreffern unterscheiden.
 
 server = MCPServer("drawing2cad", instructions=Path(__file__).with_name("instructions.md").read_text("utf-8"))
 session = Session()
 
 
 def _guard(fn: Callable) -> Callable:
-    """Re-raise the errors of a tool as ToolError: only its message reaches the client."""
+    """Leitet Werkzeugfehler als ToolError weiter; nur ihre Meldung erreicht den Client."""
 
     @functools.wraps(fn)
     def guarded(*args: Any, **kwargs: Any) -> Any:
@@ -49,11 +49,11 @@ def _tool(fn: Callable) -> Callable:
 
 
 def _op_tool(model: type[OpBase]) -> Callable[[Callable], Callable]:
-    """Register a build tool whose parameters are the fields of an op model, without `op`.
+    """Registriert ein Aufbauwerkzeug mit den Feldern eines Op-Modells als Parametern, ohne `op`.
 
-    The decorated stub only supplies the name and the docstring. Types, defaults and descriptions come
-    from the model, so the tool and the op schema cannot drift apart. The tool builds the op model
-    (which validates it) and hands model_dump() to the session.
+    Der dekorierte Stub liefert nur Namen und Docstring. Typen, Standardwerte und Beschreibungen stammen
+    aus dem Modell, damit Werkzeug und Op-Schema nicht auseinanderlaufen. Das Werkzeug erstellt das
+    Op-Modell (und validiert es) und übergibt model_dump() an die Session.
     """
     op = get_args(model.model_fields["op"].annotation)[0]
     params = [inspect.Parameter("part", inspect.Parameter.KEYWORD_ONLY, annotation=str)]
@@ -118,7 +118,7 @@ def read_drawing_text(pdf: str, page: int = 1, region: list[float] | None = None
 
 
 def _scale_notes(scale: float | None, suggestion: list[dict], printed: int) -> list[str]:
-    """Hints on the scale: missing, disagreeing with the geometry, or voted on by too few values."""
+    """Hinweise zum Maßstab: Er fehlt, weicht von der Geometrie ab oder beruht auf zu wenigen Werten."""
     notes = []
     if scale is None:
         notes.append("Maßstab nicht angegeben: Messung mit 1:1. Übergib den Maßstab aus dem Schriftfeld für reale Modellmaße.")

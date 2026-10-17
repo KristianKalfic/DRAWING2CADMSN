@@ -3,7 +3,7 @@ json_builder.py - wandelt die JSON-Beschreibung (aus der Zeichnung) deterministi
 
 - generate(spec) -> (cadquery_code: str, info: dict)   erzeugt lesbaren CadQuery-Quelltext
 - execute(code)  -> cq.Workplane                       führt genau diesen Text aus
-- Der Code entsteht nur aus geprüften Zahlen und einer Kantenselektor-Whitelist (keine Einschleusung von Freitext).
+- Der Code entsteht nur aus geprüften Zahlen und einer Positivliste zulässiger Kantenselektoren (keine Einschleusung von Freitext).
 - Nicht unterstützte Merkmale werden nicht stillschweigend ignoriert, sondern in info["unsupported"] gemeldet.
 
 Konventionen (müssen mit der Eingabeaufforderung und dem Schema übereinstimmen):
@@ -136,7 +136,7 @@ def generate(spec):
             return f'cq.Workplane("XY").workplane(offset={_n(H+1,"o")})', f"-{_n(ext,'d')}"
         return f'cq.Workplane("XY").workplane(offset=-1.0)', _n(ext, "d")
 
-    # ---- Kanten (zuerst, solange der Koerper noch einfach ist) ----
+    # ---- Kanten (zuerst, solange der Körper noch einfach ist) ----
     if edge:
         lines += ["", "# Rundungen/Fasen auf dem Grundkörper (vor den Bohrungen, sonst werden Bohrungsnähte mit ausgewählt)"]
     for f in edge:

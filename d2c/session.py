@@ -1,4 +1,4 @@
-"""Op-list sessions: one PartSpec and its list of ops per part, kept in memory and in results/<name>/."""
+"""Vorgangssitzungen: je Bauteil eine PartSpec und Vorgangsliste, im Speicher und unter results/<name>/ abgelegt."""
 
 import json
 import os
@@ -43,7 +43,7 @@ def _tolerance_rows(spec: PartSpec, ops: list[dict], nominal: list[dict]) -> lis
 
 
 class Session:
-    """The specs, op lists and last build reports of the parts of this server run."""
+    """Spezifikationen, Vorgangslisten und letzte Aufbau-Berichte der Bauteile in diesem Serverlauf."""
 
     def __init__(self) -> None:
         self.specs: dict[str, PartSpec] = {}
@@ -54,7 +54,7 @@ class Session:
         return results_root() / part
 
     def _load(self, part: str) -> str:
-        """The normalized name of a known part; a part only on disk is loaded first."""
+        """Normalisierter Name eines bekannten Bauteils; ein nur auf Datenträger vorhandenes Bauteil wird zuerst geladen."""
         part = unicodedata.normalize("NFC", part)
         if not PART_NAME.fullmatch(part):
             raise KeyError(f"Unbekanntes Bauteil '{part}'; rufe zuerst `submit_spec` auf.")
@@ -67,7 +67,7 @@ class Session:
 
     @staticmethod
     def _read(folder: Path) -> tuple[PartSpec, list[dict]]:
-        """The spec and op list stored in a part folder; an unreadable file is named in the error."""
+        """Spezifikation und Vorgangsliste aus dem Bauteilordner; eine nicht lesbare Datei wird in der Fehlermeldung genannt."""
         name = "spec.json"
         try:
             spec = PartSpec.model_validate_json((folder / name).read_text(encoding="utf-8"))
@@ -102,7 +102,7 @@ class Session:
         } | export)
 
     def _commit(self, part: str, ops: list[dict], op_index: int) -> dict:
-        """Build the new op list and adopt it unless the build has an error (ok=false is adopted)."""
+        """Baut die neue Vorgangsliste auf und übernimmt sie, sofern kein Aufbaufehler auftritt (`ok=false` wird übernommen)."""
         report = self._build(part, ops) | {"op_index": op_index}
         if not report["error"]:
             self.ops[part] = ops
@@ -115,7 +115,7 @@ class Session:
             raise IndexError(f"`index` {index} liegt außerhalb der {len(self.ops[part])} Vorgänge.")
 
     def submit_spec(self, spec: PartSpec) -> dict:
-        """Register a spec, reset the ops of the part and write results/<name>/spec.json."""
+        """Registriert eine Spezifikation, setzt die Vorgänge des Bauteils zurück und schreibt results/<name>/spec.json."""
         part = unicodedata.normalize("NFC", spec.name)
         self.specs[part] = spec.model_copy(update={"name": part})
         self.ops[part] = []

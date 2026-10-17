@@ -1,7 +1,6 @@
-"""Tolerances (X1): ISO 286 fits, ISO 2768 general tolerances, tolerance mid and compliance.
+"""Toleranzen (X1): Passungen nach ISO 286, Allgemeintoleranzen nach ISO 2768, Toleranzmitte und Einhaltung.
 
-tests/fixtures/tables holds small tables in the BCT format with public ISO values.
-"""
+Unter `tests/fixtures/tables` liegen kleine Tabellen im BCT-Format mit öffentlichen ISO-Werten."""
 
 from pathlib import Path
 
@@ -14,7 +13,7 @@ from d2c.tolerances import ToleranceError, apply_mode, compliance, limits, mid_v
 
 FIXTURE_TABLES = Path(__file__).parent / "fixtures" / "tables"
 OPS = TypeAdapter(list[Op])
-# ISO 2768-1, linear sizes over 6 up to 30 mm
+# ISO 2768-1: lineare Maße über 6 bis 30 mm
 GENERAL_25MM = [("ISO 2768-f", 0.1), ("ISO 2768-m", 0.2), ("ISO 2768-c", 0.5), ("ISO 2768-v", 1.0)]
 
 
@@ -24,7 +23,7 @@ def _fixture_tables(monkeypatch):
 
 
 def dim(value, kind="length", id="d", **fields) -> Dimension:
-    """A dimension as read from a drawing; the text carries the value, as a spec requires."""
+    """Ein aus einer Zeichnung ausgelesenes Maß; wie in der Spezifikation verlangt, enthält der Text den Maßwert."""
     return Dimension(id=id, kind=kind, value=value, text=f"{value:g}", source=None, confidence=0.95, **fields)
 
 
@@ -46,12 +45,12 @@ def bore(d, positions=((0, 0),), refs=None) -> dict:
 
 
 def plain_ops(*ops) -> list[dict]:
-    """Ops as the session keeps them: parsed through the Op union, then dumped."""
+    """Operationen wie in der Sitzung gespeichert: über die `Op`-Union eingelesen und anschließend ausgegeben."""
     return [op.model_dump() for op in OPS.validate_python(list(ops))]
 
 
 def hole_report(measured, dim_ids=("d16",)) -> dict:
-    """A worker report with a bbox check and one hole check, in the format of checks.dimension_check."""
+    """Worker-Bericht mit Begrenzungsmaß und einer Bohrungsprüfung im Format von `checks.dimension_check`."""
     actual = None if measured is None else {"d": measured, "dist": 0.0}
     hole = {"check": "hole", "expected": {"d": 16.0, "at": (0.0, 0.0, 0.0), "axis": (0.0, 0.0, 1.0)},
             "actual": actual, "ok": actual is not None, "dim_ids": list(dim_ids)}
@@ -68,7 +67,7 @@ def test_fit_H10_4():
 
 
 def test_zero_deviation_has_no_sign():
-    """The tables write "-0.0" for the zero deviation of the H classes; reports and reviews show 0.0."""
+    """Die Tabellen speichern für die H-Klassen die Nullabweichung als „-0.0“; Berichte und Prüflisten zeigen 0,0."""
     lower, upper, _ = limits(dim(16, "diameter", fit="H7"), None)
     assert (repr(lower), repr(upper)) == ("0.0", "0.018")
 
@@ -84,7 +83,7 @@ def test_general_tolerance_classes(general, deviation):
 
 @pytest.mark.parametrize("nominal", [3.001, 6.0])
 def test_range_boundary_inclusive(nominal):
-    """A range is (over, to]: h10 over 3 up to 6 contains its upper bound 6.0."""
+    """Der Bereich ist (über, bis]: h10 über 3 bis 6 schließt den oberen Grenzwert 6,0 ein."""
     assert limits(dim(nominal, "diameter", fit="h10"), None) == (-0.048, 0.0, "fit")
 
 
@@ -95,9 +94,9 @@ def test_range_boundary_exclusive(nominal):
 
 
 @pytest.mark.parametrize("nominal, deviation", [
-    (0.0, 0.0), (0.4, 0.0),  # from=0.0 up_to=0.5: stops before 0.5
-    (0.5, 0.1), (3.0, 0.1),  # from=0.5 to=3.0: starts at 0.5, includes 3.0
-    (3.5, 0.1), (6.0, 0.1), (6.5, 0.2),  # over/to rows
+    (0.0, 0.0), (0.4, 0.0),  # from=0,0 up_to=0,5: endet vor 0,5
+    (0.5, 0.1), (3.0, 0.1),  # from=0,5 to=3,0: beginnt bei 0,5 und schließt 3,0 ein
+    (3.5, 0.1), (6.0, 0.1), (6.5, 0.2),  # Zeilen mit „über“ und „bis“
 ])
 def test_range_attribute_styles(nominal, deviation):
     assert limits(dim(nominal), "ISO 2768-m") == (-deviation, deviation, "general")
@@ -133,7 +132,7 @@ def test_unknown_fit_class():
 
 
 def test_missing_tables_name_the_folder(monkeypatch, tmp_path):
-    """The folder is read on every call. Explicit deviations need no table."""
+    """Der Ordner wird bei jedem Aufruf neu gelesen. Für ausdrücklich angegebene Abweichungen ist keine Tabelle nötig."""
     monkeypatch.setenv("D2C_TABLES", str(tmp_path))
     with pytest.raises(ToleranceError, match=str(tmp_path)):
         limits(dim(6, "diameter", fit="h10"), None)
@@ -152,15 +151,15 @@ def test_first_matching_file_is_read_in_its_declared_encoding(monkeypatch, tmp_p
 
 
 def test_mid_asymmetric():
-    """"31 -0,1" is 31 with the deviations 0 and -0.1: the tolerance mid is 30.95."""
+    """„31 -0,1“ bedeutet 31 mit den Abweichungen 0 und -0,1; die Toleranzmitte ist 30,95."""
     assert mid_value(dim(31, tol_upper=0.0, tol_lower=-0.1), None) == 30.95
 
 
 def test_mid_value_cases():
     assert mid_value(dim(16, "diameter", fit="H7"), None) == 16.009
-    assert mid_value(dim(25), "ISO 2768-m") == 25  # symmetric: the nominal itself
-    assert mid_value(dim(25), None) == 25  # no tolerance
-    # 12.7 + (0 - 0.1) / 2 is 12.649999999999999 in floating point
+    assert mid_value(dim(25), "ISO 2768-m") == 25  # symmetrisch: das Nennmaß selbst
+    assert mid_value(dim(25), None) == 25  # keine Toleranz
+    # 12,7 + (0 − 0,1) / 2 ergibt als Gleitkommazahl 12,649999999999999
     assert mid_value(dim(12.7, tol_upper=0.0, tol_lower=-0.1), None) == 12.65
 
 
@@ -175,17 +174,17 @@ def test_apply_mode_substitutes_refs():
     mid_ops, changes = apply_mode(ops, spec, "mid")
 
     assert mid_ops[3]["d"] == 16.009
-    assert mid_ops[3]["positions"] == [(0, 30.1)]  # a path through a list and a tuple
-    assert mid_ops[:3] == ops[:3]  # t10 is symmetric (ISO 2768-m): nothing to shift
+    assert mid_ops[3]["positions"] == [(0, 30.1)]  # ein Pfad durch eine Liste und ein Tupel
+    assert mid_ops[:3] == ops[:3]  # t10 ist symmetrisch (ISO 2768-m): keine Verschiebung nötig
     assert changes == [
         {"op_index": 3, "path": "d", "dim_id": "d16", "nominal": 16, "mid": 16.009},
         {"op_index": 3, "path": "positions.0.1", "dim_id": "p30", "nominal": 30, "mid": 30.1},
     ]
-    assert (ops[3]["d"], ops[3]["positions"]) == (16, [(0, 30)])  # the input stays as it was
+    assert (ops[3]["d"], ops[3]["positions"]) == (16, [(0, 30)])  # die Eingabe bleibt unverändert
 
 
 def test_apply_mode_leaves_untoleranced_dimensions_alone():
-    """No tolerance, no mid: a value derived from the dimension (15 = 25 - 10) stays as it is."""
+    """Ohne Toleranz gibt es keine Toleranzmitte: Ein aus Maßen abgeleiteter Wert (15 = 25 - 10) bleibt unverändert."""
     spec = make_spec(dim(25, id="h25"))
     ops = plain_ops(extrude(15, {"distance": "h25"}))
     assert apply_mode(ops, spec, "mid") == (ops, [])
@@ -209,7 +208,7 @@ def test_compliance_flags_nominal_outside():
         "source": "explicit", "values": [31], "in_tolerance": False}]
     mid = compliance(spec, ops, report, "mid")[0]
     assert (mid["values"], mid["in_tolerance"]) == ([30.8], True)
-    # ops that were already moved to the mid give the same answer
+    # Bereits auf die Toleranzmitte gesetzte Operationen liefern dasselbe Ergebnis.
     moved, _ = apply_mode(ops, spec, "mid")
     assert compliance(spec, moved, report, "mid") == compliance(spec, ops, report, "mid")
 
@@ -219,7 +218,7 @@ def test_compliance_adds_measured_hole_diameter():
     ops = plain_ops(extrude(), bore(16, refs={"d": "d16"}))
 
     nominal = compliance(spec, ops, hole_report(16.0), "nominal")[0]
-    assert (nominal["values"], nominal["in_tolerance"]) == ([16, 16.0], True)  # on the lower limit still counts
+    assert (nominal["values"], nominal["in_tolerance"]) == ([16, 16.0], True)  # Der untere Grenzwert zählt noch als eingehalten.
     mid = compliance(spec, ops, hole_report(16.009), "mid")[0]
     assert (mid["values"], mid["in_tolerance"]) == ([16.009, 16.009], True)
     too_big = compliance(spec, ops, hole_report(16.03), "mid")[0]
@@ -236,7 +235,7 @@ def test_compliance_band_has_a_slack_of_1e_6():
 
 
 def test_compliance_without_measurements():
-    """The report of a failed build has no dims."""
+    """Der Bericht eines fehlgeschlagenen Aufbaus enthält keine Maßeinträge."""
     spec = make_spec(dim(16, "diameter", id="d16", fit="H7"))
     ops = plain_ops(extrude(), bore(16, refs={"d": "d16"}))
     failed = {"ok": False, "error": "BuildError: op 1 (holes): ...", "dims": None}
@@ -244,14 +243,14 @@ def test_compliance_without_measurements():
 
 
 def test_measured_diameter_only_for_diameter_dimensions():
-    """An expected hole may name the dimensions that locate it as well as its diameter."""
+    """Für eine erwartete Bohrung können neben dem Durchmesser auch die Maße angegeben werden, die ihre Lage bestimmen."""
     spec = make_spec(dim(16, "diameter", id="d16", fit="H7"), dim(30, id="p30", tol_upper=0.1, tol_lower=-0.1))
     by_id = {c["dim_id"]: c for c in compliance(spec, [], hole_report(16.0, ("d16", "p30")), "nominal")}
     assert (by_id["d16"]["values"], by_id["p30"]["values"]) == ([16.0], [])
 
 
 def test_measured_diameter_only_from_hole_checks():
-    """The size check of a turned part may name its diameter dimension; its actual is no cylinder."""
+    """Die Maßprüfung eines Drehteils kann auf sein Durchmessermaß verweisen; der Istwert ist kein Zylinder."""
     spec = make_spec(dim(40, "diameter", id="d40", tol_upper=0.0, tol_lower=-0.1))
     size_check = {"check": "bbox_y", "expected": 40.0, "actual": 39.95, "ok": True, "dim_ids": ["d40"]}
     assert compliance(spec, [], {"ok": True, "dims": [size_check]}, "nominal")[0]["values"] == []

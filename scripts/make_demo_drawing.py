@@ -1,7 +1,7 @@
 """Erstellt tests/fixtures/demo_drawing.pdf: die zweiseitige Zeichnung des Demo-Bauteils "D2C Demo-Halterung".
 
 Nur die Standardbibliothek wird benötigt; die PDF-Objekte werden direkt geschrieben. Seite 1 zeigt
-das Bauteil im Maßstab 1:1 (mm zu pt mit 72/25,4) in Erstwinkelprojektion: Vorderansicht über der
+das Bauteil im Maßstab 1:1 (Umrechnung mm zu pt: 72 pt je 25,4 mm) in Erstwinkelprojektion: Vorderansicht über der
 Draufsicht, mit Maßen, Mittellinien, verdeckten Kanten (gestrichelt) und Schriftfeld. Jeder Kreis
 besteht aus vier kubischen Bézierkurven, jede R5-Ecke aus einer; so lassen sich Mittelpunkte und
 Durchmesser aus den Vektordaten bestimmen. Der Text ist echter Helvetica-Text (WinAnsiEncoding,
@@ -15,39 +15,39 @@ import math
 from pathlib import Path
 
 OUT = Path(__file__).resolve().parents[1] / "tests" / "fixtures" / "demo_drawing.pdf"
-PT = 72 / 25.4  # pt per mm; the scale is 1:1, so this converts part lengths to sheet lengths
-PAGE = (595.28, 841.89)  # A4 portrait, pt
-KAPPA = 0.5522847498  # control point distance of a cubic Bezier quarter circle, in radii
-EDGE, THIN = 0.5, 0.25  # stroke widths, pt: visible edges; dimension, centre and hidden lines
-HIDDEN = (8, 3)  # dash patterns, pt
+PT = 72 / 25.4  # pt pro mm; im Maßstab 1:1 wird damit die Bauteillänge in Blattlänge umgerechnet
+PAGE = (595.28, 841.89)  # A4-Hochformat, pt
+KAPPA = 0.5522847498  # Abstand des Kontrollpunkts eines kubischen Bézier-Viertelkreises, in Radien
+EDGE, THIN = 0.5, 0.25  # Strichbreiten in pt: sichtbare Kanten sowie Maß-, Mittel- und verdeckte Linien
+HIDDEN = (8, 3)  # Strichmuster in pt
 CENTRE = (14, 2.5, 2, 2.5)
-ARROW = (3.0, 1.0)  # arrow head length and width, mm
+ARROW = (3.0, 1.0)  # Länge und Breite der Pfeilspitze in mm
 FONT = 10  # pt
 
-# The part, mm. The plate thickness is not dimensioned on the drawing.
+# Bauteilmaße in mm. Die Plattendicke ist in der Zeichnung nicht bemaßt.
 PLATE_W, PLATE_H, PLATE_T, CORNER = 80, 50, 10, 5
 BOSS_D, TOTAL_H, BORE_D = 30, 25, 16
-HOLE_D, HOLE_DX, HOLE_DY = 6.6, 60, 30  # four through holes on a 60 x 30 pattern
+HOLE_D, HOLE_DX, HOLE_DY = 6.6, 60, 30  # vier Durchgangsbohrungen im Muster 60 × 30
 
-# Sheet position (mm, origin lower left) of the plate centre in the top view and of the middle
-# of the plate underside in the front view.
+# Blattposition (mm, Ursprung links unten) der Plattenmitte in der Draufsicht und der Mitte
+# der Plattenunterseite in der Vorderansicht.
 TOP_AT, FRONT_AT = (105, 140), (105, 205)
 
-# Helvetica advance widths (1/1000 em) of the characters the centred dimension texts use.
+# Zeichenbreiten von Helvetica (1/1000 em) für zentrierte Maßtexte.
 ADVANCE = {" ": 278, ",": 278, "x": 500, "H": 722, "R": 722, "Ø": 778} | {d: 556 for d in "0123456789"}
 
 Point = tuple[float, float]
-Segment = tuple  # ("m", p), ("l", p) or ("c", p1, p2, p3)
+Segment = tuple  # ("m", p), ("l", p) oder ("c", p1, p2, p3)
 
 
 def num(mm: float) -> str:
-    """A sheet length in mm as a PDF number in pt."""
+    """Ein Blattmaß in mm, dargestellt als PDF-Zahl in pt."""
     s = f"{mm * PT:.4f}".rstrip("0").rstrip(".")
     return "0" if s in ("", "-0") else s
 
 
 def quarter(c: Point, r: float, deg: float) -> tuple[Point, Point, Point, Point]:
-    """Cubic Bezier quarter arc about c from angle deg to deg + 90: start, two controls, end."""
+    """Kubischer Bézier-Viertelbogen um c vom Winkel deg bis deg + 90: Anfang, zwei Kontrollpunkte, Ende."""
     t0, t1 = math.radians(deg), math.radians(deg + 90)
     p0 = (c[0] + r * math.cos(t0), c[1] + r * math.sin(t0))
     p3 = (c[0] + r * math.cos(t1), c[1] + r * math.sin(t1))
@@ -57,7 +57,7 @@ def quarter(c: Point, r: float, deg: float) -> tuple[Point, Point, Point, Point]
 
 
 def radial(c: Point, r: float, deg: float, end_y: float) -> tuple[Point, Point]:
-    """Point on the circle at angle deg, and the point at height end_y further out on that radius."""
+    """Punkt auf dem Kreis beim Winkel deg und ein weiterer Punkt auf derselben Radiuslinie in Höhe end_y."""
     ux, uy = math.cos(math.radians(deg)), math.sin(math.radians(deg))
     tip = (c[0] + r * ux, c[1] + r * uy)
     t = (end_y - tip[1]) / uy
@@ -65,7 +65,7 @@ def radial(c: Point, r: float, deg: float, end_y: float) -> tuple[Point, Point]:
 
 
 class Sheet:
-    """Content stream of one page. Points are sheet mm, origin lower left, y up."""
+    """Inhaltsstrom einer Seite. Punkte in mm auf dem Blatt, Ursprung links unten, y nach oben."""
 
     def __init__(self) -> None:
         self.ops: list[str] = []
@@ -85,7 +85,7 @@ class Sheet:
         self.path([("m", arcs[0][0])] + [("c", *arc[1:]) for arc in arcs], width, close=True)
 
     def arrow(self, tip: Point, to: Point) -> None:
-        """Filled arrow head with its tip at `tip`, pointing along the unit vector `to`."""
+        """Gefüllte Pfeilspitze mit der Spitze bei `tip`, ausgerichtet entlang des Einheitsvektors `to`."""
         base = (tip[0] - ARROW[0] * to[0], tip[1] - ARROW[0] * to[1])
         w = (-to[1] * ARROW[1] / 2, to[0] * ARROW[1] / 2)
         left, right = (base[0] + w[0], base[1] + w[1]), (base[0] - w[0], base[1] - w[1])
@@ -93,8 +93,8 @@ class Sheet:
 
     def text(self, x: float, y: float, s: str, size: float = FONT, vertical: bool = False,
              centred: bool = False) -> None:
-        """Text with its baseline start at (x, y); centred puts the middle of the string there.
-        Vertical text reads from bottom to top, its letters standing left of the baseline."""
+        """Text mit Grundlinienanfang bei (x, y); centred setzt dort die Zeichenmitte.
+        Bei vertical verläuft der Text von unten nach oben, links neben der Grundlinie."""
         if centred:
             half = sum(ADVANCE[ch] for ch in s) * size / 2000 / PT
             x, y = (x, y - half) if vertical else (x - half, y)
@@ -103,11 +103,11 @@ class Sheet:
         self.ops.append(f"BT /F1 {size:g} Tf {a} {b} {-b} {a} {num(x)} {num(y)} Tm ({s}) Tj ET")
 
     def stream(self) -> bytes:
-        return "\n".join(self.ops).encode("cp1252")  # WinAnsiEncoding: Ø is byte 0xD8
+        return "\n".join(self.ops).encode("cp1252")  # WinAnsiEncoding: Ø entspricht dem Byte 0xD8
 
 
 def dim_h(s: Sheet, p: Point, q: Point, label: str) -> None:
-    """Horizontal dimension line from p to q with arrows and the text above the middle."""
+    """Waagerechte Maßlinie von p nach q mit Pfeilen und Beschriftung über der Mitte."""
     s.line(p, q)
     s.arrow(p, (-1, 0))
     s.arrow(q, (1, 0))
@@ -115,7 +115,7 @@ def dim_h(s: Sheet, p: Point, q: Point, label: str) -> None:
 
 
 def dim_v(s: Sheet, p: Point, q: Point, label: str) -> None:
-    """Vertical dimension line from p up to q with arrows and the text left of the middle."""
+    """Senkrechte Maßlinie von p nach q mit Pfeilen und Beschriftung links neben der Mitte."""
     s.line(p, q)
     s.arrow(p, (0, -1))
     s.arrow(q, (0, 1))
@@ -123,7 +123,7 @@ def dim_v(s: Sheet, p: Point, q: Point, label: str) -> None:
 
 
 def callout(s: Sheet, tip: Point, end: Point, label: str) -> None:
-    """Leader line from `end` to an arrow head at `tip`, the label centred above the end."""
+    """Führungslinie von `end` zur Pfeilspitze bei `tip`, Beschriftung mittig über end."""
     d = math.dist(tip, end)
     s.line(end, tip)
     s.arrow(tip, ((tip[0] - end[0]) / d, (tip[1] - end[1]) / d))
@@ -135,7 +135,7 @@ def frame(s: Sheet) -> None:
 
 
 def title_block(s: Sheet) -> None:
-    """Lower right corner; the sheet frame closes its right and lower side."""
+    """Schriftfeld unten rechts; der Blattrahmen bildet die rechte und untere Kante."""
     s.path([("m", (200, 46)), ("l", (100, 46)), ("l", (100, 10))], EDGE)
     for p, q in [((100, 34), (200, 34)), ((100, 22), (200, 22)), ((160, 22), (160, 34))]:
         s.line(p, q)
@@ -191,7 +191,7 @@ def front_view(s: Sheet) -> None:
     a, t, r = PLATE_W / 2, PLATE_T, BOSS_D / 2
     outline = [(-a, 0), (a, 0), (a, t), (r, t), (r, TOTAL_H), (-r, TOTAL_H), (-r, t), (-a, t)]
     s.path([("m", P(*outline[0]))] + [("l", P(*p)) for p in outline[1:]], EDGE, close=True)
-    s.line(P(-r, t), P(r, t), EDGE)  # edge where the boss meets the plate
+    s.line(P(-r, t), P(r, t), EDGE)  # Kante am Übergang vom Bund zur Platte
     for x in (-BORE_D / 2, BORE_D / 2):
         s.line(P(x, 0), P(x, TOTAL_H), dash=HIDDEN)
     for hx in (-HOLE_DX / 2, HOLE_DX / 2):
@@ -222,7 +222,7 @@ def drawing_page() -> Sheet:
 
 
 def pdf(streams: list[bytes]) -> bytes:
-    """A PDF with one page per content stream: Helvetica as /F1, uncompressed streams, xref table."""
+    """PDF mit einer Seite je Inhaltsstrom: Helvetica als /F1, unkomprimierte Ströme und Querverweistabelle."""
     n = len(streams)
     objs = {
         1: b"<< /Type /Catalog /Pages 2 0 R >>",
@@ -249,7 +249,7 @@ def pdf(streams: list[bytes]) -> bytes:
 
 
 def region(x0: float, y0: float, x1: float, y1: float) -> tuple[float, float, float, float]:
-    """A sheet box in mm (origin lower left) as page fractions (origin top left, like crop)."""
+    """Blattrechteck in mm (Ursprung links unten), angegeben als Seitenanteile (Ursprung oben links, wie bei einem Zuschneidebereich)."""
     fx, fy = PT / PAGE[0], PT / PAGE[1]
     return round(x0 * fx, 3), round(1 - y1 * fy, 3), round(x1 * fx, 3), round(1 - y0 * fy, 3)
 

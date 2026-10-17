@@ -8,7 +8,7 @@ Drei unabhängige Prüfungen werden zu einem gemeinsamen Bericht in issues.json 
 
 Aufruf:
   python issue_check.py extraktion_A.json extraktion_B.json out/teil.step [--freecad "C:/Program Files/FreeCAD 1.0/bin/FreeCADCmd.exe"]
-Rückgabecode 0 = freigegeben, 1 = offene Blocker.
+Rückgabecode 0 = freigegeben, 1 = offene Sperrfehler.
 """
 import json, os, shutil, subprocess, sys, tempfile
 
@@ -31,8 +31,8 @@ def compare(a, b):
     if len(fa) != len(fb):
         out.append(issue("blocker", "FEATURE_COUNT",
                          f"Anzahl der Merkmale: A={len(fa)} im Vergleich zu B={len(fb)}", "features"))
-    # Sortierschluessel gerundet: Kreismuster liefern x = +-1e-15 statt 0 und wuerden sonst
-    # gleiche Bohrungen in unterschiedlicher Reihenfolge paaren (Falschalarm).
+    # Gerundeter Sortierschlüssel: Kreismuster liefern x = ±1e-15 statt 0 und würden sonst
+    # gleiche Bohrungen wegen unterschiedlicher Reihenfolge falsch zuordnen (Fehlalarm).
     key = lambda f: (round(float(f["x"]), 2), round(float(f["y"]), 2))
     holes_a = sorted([f for f in fa if f.get("type") == "hole"], key=key)
     holes_b = sorted([f for f in fb if f.get("type") == "hole"], key=key)
@@ -91,7 +91,7 @@ bb = s.BoundBox
 res = {"valid": s.isValid(), "solids": len(s.Solids), "volume": s.Volume,
        "bbox": [bb.XLength, bb.YLength, bb.ZLength],
        "holes": []}
-# Nur konkave Zylinder mit Achse parallel Z (sonst zaehlen Eckenrundungen als Bohrungen)
+# Nur konkave Zylinder mit Z-paralleler Achse; sonst würden Eckenrundungen als Bohrungen gezählt.
 for f in s.Faces:
     c = f.Surface
     if c.__class__.__name__ != "Cylinder" or abs(abs(c.Axis.z) - 1) > 1e-6:
@@ -150,7 +150,7 @@ def freecad(step, spec, fc_exe):
 
 
 if __name__ == "__main__":
-    from json_builder import normalize  # pattern-Objekte zu Einzelbohrungen expandieren
+    from json_builder import normalize  # Musterobjekte (pattern) zu einzelnen Bohrungen erweitern
     a, b = normalize(json.load(open(sys.argv[1], encoding="utf-8")))[0], normalize(json.load(open(sys.argv[2], encoding="utf-8")))[0]
     step = sys.argv[3]
     fc = sys.argv[sys.argv.index("--freecad") + 1] if "--freecad" in sys.argv else "FreeCADCmd"
