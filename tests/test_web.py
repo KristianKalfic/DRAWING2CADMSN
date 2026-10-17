@@ -101,6 +101,42 @@ def test_eval_row_joins_by_part(client, exported):
         (exported / "EVAL.json").unlink()
 
 
+@pytest.mark.parametrize("filename, value", [
+    ("spec.json", [1]), ("review.json", [1]),
+    ("review.json", {"assumptions": None}), ("review.json", {"assumptions": 3}),
+    ("EVAL.json", [None, "Text", {"Teil": "teil", "MATCH": "ok"}]),
+])
+def test_invalid_result_structure_does_not_block_parts(tmp_path, monkeypatch, filename, value):
+    monkeypatch.setenv("D2C_RESULTS", str(tmp_path))
+    folder = tmp_path / "teil"
+    folder.mkdir()
+    target = tmp_path / filename if filename == "EVAL.json" else folder / filename
+    target.write_text(json.dumps(value), encoding="utf-8")
+    with TestClient(create_app()) as client:
+        response = client.get("/api/parts")
+        assert response.status_code == 200
+        (entry,) = response.json()
+        assert entry["name"] == "teil" and entry["review_count"] == 0
+        detail = client.get("/api/parts/teil")
+        assert detail.status_code == 200
+        if filename == "spec.json":
+            assert detail.json()["spec"] is None
+        if filename == "EVAL.json":
+            assert entry["eval"] == {"Teil": "teil", "MATCH": "ok"}
+
+
+@pytest.mark.parametrize("drawing", [None, [], 12, ""])
+def test_invalid_drawing_reference_returns_german_error(tmp_path, monkeypatch, drawing):
+    monkeypatch.setenv("D2C_RESULTS", str(tmp_path))
+    folder = tmp_path / "teil"
+    folder.mkdir()
+    (folder / "spec.json").write_text(json.dumps({"drawing": drawing}), encoding="utf-8")
+    with TestClient(create_app()) as client:
+        response = client.get("/api/parts/teil/drawing.png")
+    assert response.status_code == 404
+    assert "Keine gültige Zeichnung" in response.json()["error"]
+
+
 def test_file_download_and_traversal_rejected(client):
     with client:
         step = client.get("/files/plate/plate.step")
@@ -196,6 +232,20 @@ def test_upload_rejects_bad_input(monkeypatch, tmp_path, part, pdf):
     assert not (tmp_path / "uploads").exists()
 
 
+def test_upload_rejects_file_in_model_field(monkeypatch, tmp_path):
+    monkeypatch.setenv("D2C_DATA", str(tmp_path))
+    for key, value in LLM_ENV.items():
+        monkeypatch.setenv(key, value)
+    calls = []
+    with TestClient(create_app(fake_agent([], calls))) as client:
+        response = client.post("/api/runs", files={
+            "pdf": ("teil.pdf", PDF.read_bytes(), "application/pdf"),
+            "model": ("modell.txt", b"m", "text/plain"),
+        }, data={"part": "teil"})
+    assert response.status_code == 400 and "Text" in response.json()["error"]
+    assert not calls and not (tmp_path / "uploads").exists()
+
+
 def set_llm_env(monkeypatch, tmp_path, **env):
     """Only the given LLM variables are set."""
     monkeypatch.setenv("D2C_DATA", str(tmp_path))
@@ -240,7 +290,7 @@ def test_run_with_base_url_and_no_model_is_400(monkeypatch, tmp_path):
     set_llm_env(monkeypatch, tmp_path, D2C_LLM_BASE_URL="http://llm.invalid/v1")
     with TestClient(create_app(fake_agent([]))) as client:
         response = upload(client)
-    assert response.status_code == 400 and "model" in response.json()["error"]
+    assert response.status_code == 400 and "Modell" in response.json()["error"]
     assert not (tmp_path / "uploads").exists()
 
 
@@ -279,7 +329,7 @@ def test_upload_broken_image_is_400(monkeypatch, tmp_path):
     set_llm_env(monkeypatch, tmp_path, **LLM_ENV)
     with TestClient(create_app(fake_agent([]))) as client:
         response = upload(client, pdf=b"\x89PNG\r\n\x1a\n" + b"not an image")
-    assert response.status_code == 400 and "image" in response.json()["error"]
+    assert response.status_code == 400 and "Bild" in response.json()["error"]
     assert not (tmp_path / "uploads").exists()
 
 

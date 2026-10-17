@@ -29,7 +29,7 @@ FORM_OVERHEAD = 64 * 1024  # what the other form fields and the multipart framin
 IMAGE_SIGNATURES = {b"\x89PNG\r\n\x1a\n": "png", b"\xff\xd8\xff": "jpeg"}
 CLAUDE_MODELS = (("claude-sonnet-5-5", "Claude Sonnet 5.5"), ("claude-opus-5-5", "Claude Opus 5.5"),
                  ("claude-haiku-5-5", "Claude Haiku 5.5"))
-TOO_LARGE = "the file is larger than 20 MB"
+TOO_LARGE = "Die Datei ist größer als 20 MB"
 
 mimetypes.add_type("font/woff2", ".woff2")  # the platform tables lack it, StaticFiles would send text/plain
 
@@ -45,27 +45,30 @@ def _safe_name(name: str) -> bool:
     return bool(name) and not any(bad in name for bad in ("/", "\\", "\0")) and ".." not in name
 
 
-def _read_json(path: Path) -> object | None:
+def _read_json(path: Path, expected: type[dict] | type[list] = dict) -> dict | list | None:
     try:
-        return json.loads(path.read_text(encoding="utf-8"))
+        value = json.loads(path.read_text(encoding="utf-8"))
+        return value if isinstance(value, expected) else None
     except (OSError, ValueError):
         return None
 
 
 def _eval_row(part: str) -> dict | None:
-    rows = _read_json(results_root() / "EVAL.json")
-    return next((r for r in rows if part in (r.get("Teil"), r.get("part"))), None) if isinstance(rows, list) else None
+    rows = _read_json(results_root() / "EVAL.json", list) or []
+    return next((r for r in rows if isinstance(r, dict) and part in (r.get("Teil"), r.get("part"))), None)
 
 
 def _summary(folder: Path) -> dict:
     spec = _read_json(folder / "spec.json") or {}
     review = _read_json(folder / "review.json") or {}
+    assumptions = review.get("assumptions")
     return {
         "name": folder.name,
         "title": spec.get("title", folder.name),
         "all_ok": review.get("all_ok"),
-        "review_count": len(review.get("assumptions", [])),
-        "issues": sorted({a["issue"] for a in review.get("assumptions", [])}),
+        "review_count": len(assumptions) if isinstance(assumptions, list) else 0,
+        "issues": sorted({a["issue"] for a in assumptions if isinstance(a, dict) and "issue" in a})
+        if isinstance(assumptions, list) else [],
         "eval": _eval_row(folder.name),
         "files": sorted(p.name for p in folder.iterdir() if p.is_file()),
     }
@@ -104,8 +107,8 @@ async def file(request: Request) -> Response:
 async def drawing_png(request: Request) -> Response:
     folder = _part_folder(request.path_params["name"])
     spec = _read_json(folder / "spec.json") if folder else None
-    if not isinstance(spec, dict) or "drawing" not in spec:
-        return _error(404, "Keine Spezifikation für dieses Teil vorhanden")
+    if not isinstance(spec, dict) or not isinstance(spec.get("drawing"), str) or not spec["drawing"]:
+        return _error(404, "Keine gültige Zeichnung für dieses Teil hinterlegt")
     try:
         png = await run_in_threadpool(render, spec["drawing"], spec.get("page", 1), 100)
     except ValueError as e:
@@ -191,12 +194,12 @@ def _as_pdf(content: bytes) -> bytes:
         return content
     kind = next((kind for signature, kind in IMAGE_SIGNATURES.items() if content.startswith(signature)), None)
     if kind is None:
-        raise ValueError("the uploaded file is not a PDF, PNG or JPG")
+        raise ValueError("Die hochgeladene Datei ist keine PDF-, PNG- oder JPG-Datei")
     try:
         with pymupdf.open(stream=content, filetype=kind) as image:
             return image.convert_to_pdf()
     except (RuntimeError, pymupdf.mupdf.FzErrorBase) as e:  # ponytail: no pixel limit, a PNG bomb within 20 MB can cost memory
-        raise ValueError(f"the uploaded image could not be read: {e}") from e
+        raise ValueError(f"Das hochgeladene Bild konnte nicht gelesen werden: {e}") from e
 
 
 async def start_run(request: Request) -> Response:
@@ -208,9 +211,11 @@ async def start_run(request: Request) -> Response:
         upload, model = form.get("pdf"), form.get("model") or None
         name = unicodedata.normalize("NFC", str(form.get("part", "")))
         if not hasattr(upload, "read"):
-            return _error(400, "a drawing file (PDF, PNG or JPG) is required (form field 'pdf')")
+            return _error(400, "Eine Zeichnungsdatei (PDF, PNG oder JPG) ist erforderlich (Formularfeld 'pdf')")
         if not PART_NAME.fullmatch(name):
-            return _error(400, "part name may only contain letters, digits, '_' and '-'")
+            return _error(400, "Der Teilname darf nur Buchstaben, Ziffern, '_' und '-' enthalten")
+        if model is not None and not isinstance(model, str):
+            return _error(400, "Das Modell muss als Text angegeben werden (Formularfeld 'model')")
         content = await upload.read(MAX_UPLOAD + 1)
     if len(content) > MAX_UPLOAD:
         return _error(413, TOO_LARGE)
@@ -220,7 +225,7 @@ async def start_run(request: Request) -> Response:
         return _error(400, str(e))
     settings = _agent_settings(str(model) if model else None)
     if settings["base_url"] and not settings["model"]:
-        return _error(400, "no model given: fill the model field or set D2C_LLM_MODEL")
+        return _error(400, "Kein Modell angegeben: Modell auswählen oder D2C_LLM_MODEL setzen")
     target = data_root() / "uploads" / f"{name}.pdf"
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_bytes(content)
