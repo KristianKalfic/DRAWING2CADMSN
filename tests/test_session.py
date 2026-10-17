@@ -114,6 +114,16 @@ def test_export_writes_files(session):
     assert "Alle Prüfungen bestanden: ja" in (folder / "review.md").read_text()
 
 
+def test_relative_results_folder(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("D2C_RESULTS", "out")
+    s = Session()
+    s.submit_spec(make_spec())
+    s.apply("plate", box())
+    assert s.export("plate")["ok"] is True
+    assert (tmp_path / "out" / "plate" / "plate.step").stat().st_size > 0
+
+
 def test_export_refuses_when_not_ok(session):
     session.apply("plate", box())
     session.apply("plate", box(center=[50, 0]))

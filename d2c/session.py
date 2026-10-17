@@ -15,8 +15,8 @@ PART_NAME = re.compile(r"[\w-]+")  # the same rule as PartSpec.name
 
 
 def results_root() -> Path:
-    """The results folder, read from D2C_RESULTS on every call."""
-    return Path(os.environ.get("D2C_RESULTS", "/app/results"))
+    """The results folder, read from D2C_RESULTS on every call; absolute, as the build worker runs elsewhere."""
+    return Path(os.environ.get("D2C_RESULTS", "/app/results")).absolute()
 
 
 def _write_json(path: Path, data: object) -> None:
