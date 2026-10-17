@@ -1,6 +1,6 @@
 # Drawing2CAD
 
-Drawing2CAD erzeugt aus einer technischen 2D-Zeichnung ein geprüftes 3D-Volumenmodell. Ein Sprachmodell liest die Zeichnung und baut das Teil ausschließlich über die Tools eines lokalen MCP-Servers. Der Server prüft jeden Bauschritt, exportiert STEP AP242 mit semantischem PMI und markiert jede Annahme farbig im Modell.
+Drawing2CAD erzeugt aus einer technischen 2D-Zeichnung ein geprüftes 3D-Volumenmodell. Ein Sprachmodell liest die Zeichnung und baut das Teil ausschließlich über die Tools eines lokalen MCP-Servers. Der Server prüft jeden Bauschritt, exportiert das Modell als STEP und markiert jede Annahme farbig im Modell.
 
 ## Schnellstart
 
@@ -16,12 +16,11 @@ Der Server spricht MCP über stdio und läuft ohne Netzwerk:
 ```
 docker run -i --rm --network none \
   -v "$PWD/drawings":/data:ro \
-  -v "$PWD/tables":/tables:ro \
   -v "$PWD/results":/app/results \
   d2c
 ```
 
-`drawings/` enthält die PDF-Zeichnungen, `tables/` die Toleranztabellen, `results/` nimmt die Ergebnisse auf. Unter Windows PowerShell steht `${PWD}` statt `$PWD`.
+`drawings/` enthält die PDF-Zeichnungen, `results/` nimmt die Ergebnisse auf. Unter Windows PowerShell steht `${PWD}` statt `$PWD`.
 
 ## Ergebnisansicht
 
