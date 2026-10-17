@@ -1,0 +1,15 @@
+OneDrive*/
+.git/
+.env
+data/
+drawings/
+tables/
+results/
+out/
+prototype/
+docs/
+tests/test_bct.py
+**/__pycache__/
+.pytest_cache/
+.venv/
+*.zip

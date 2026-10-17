@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<!-- Test subset of the DIN ISO 2768 general tolerances in mm. Same format as bct_toltabs.xml. -->
+<TOLTABS>
+    <toltable entry="DIN ISO 2768 (fine/fein)" type="general_toltable" desc="According to/nach DIN ISO 2768 (fine/fein)">
+        <LIN_TOLTAB>
+            <value over="6.0" to="30.0" upper="0.1" lower="-0.1"/>
+        </LIN_TOLTAB>
+    </toltable>
+    <toltable entry="DIN ISO 2768 (medium/mittel)" type="general_toltable" desc="According to/nach DIN ISO 2768 (medium/mittel)">
+        <LIN_TOLTAB>
+            <value from="0.0" up_to="0.5" upper="0.0" lower="-0.0"/>
+            <value from="0.5" to="3.0" upper="0.1" lower="-0.1"/>
+            <value over="3.0" to="6.0" upper="0.1" lower="-0.1"/>
+            <value over="6.0" to="30.0" upper="0.2" lower="-0.2"/>
+            <value over="30.0" to="120.0" upper="0.3" lower="-0.3"/>
+        </LIN_TOLTAB>
+    </toltable>
+    <toltable entry="DIN ISO 2768 (coarse/grob)" type="general_toltable" desc="According to/nach DIN ISO 2768 (coarse/grob)">
+        <LIN_TOLTAB>
+            <value over="6.0" to="30.0" upper="0.5" lower="-0.5"/>
+        </LIN_TOLTAB>
+    </toltable>
+    <toltable entry="DIN ISO 2768 (very coarse/sehr grob)" type="general_toltable" desc="According to/nach DIN ISO 2768 (very coarse/sehr grob)">
+        <LIN_TOLTAB>
+            <value over="6.0" to="30.0" upper="1.0" lower="-1.0"/>
+        </LIN_TOLTAB>
+    </toltable>
+</TOLTABS>

@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<!-- Test subset of the ISO 286 limit deviations in mm. Same format as bct_isolim.xml. -->
+<ISOLIM>
+    <H7>
+        <value over="10" to="18" upper="0.018" lower="-0.0"/>
+    </H7>
+    <h10>
+        <value over="3" to="6" upper="0.0" lower="-0.048"/>
+    </h10>
+    <H10>
+        <value over="3" to="6" upper="0.048" lower="-0.0"/>
+    </H10>
+</ISOLIM>

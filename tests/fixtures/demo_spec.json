@@ -1,0 +1,51 @@
+{
+  "name": "demo_bracket",
+  "drawing": "Demo Teil (A)/demo drawing.pdf",
+  "page": 1,
+  "title": "D2C Demo Bracket",
+  "scale": "1:1",
+  "units": "mm",
+  "general_tolerance": "ISO 2768-m",
+  "views": [
+    {"id": "v_top", "kind": "top", "scale": "1:1"},
+    {"id": "v_front", "kind": "front", "scale": "1:1"}
+  ],
+  "dimensions": [
+    {"id": "d80", "kind": "length", "value": 80, "text": "80", "source": {"view": "v_top", "cell": null}, "confidence": 0.95},
+    {"id": "d50", "kind": "length", "value": 50, "text": "50", "source": {"view": "v_top", "cell": null}, "confidence": 0.95},
+    {"id": "r5", "kind": "radius", "value": 5, "text": "R5", "source": {"view": "v_top", "cell": null}, "confidence": 0.95},
+    {"id": "d30", "kind": "diameter", "value": 30, "text": "Ø30", "source": {"view": "v_top", "cell": null}, "confidence": 0.95},
+    {"id": "d16", "kind": "diameter", "value": 16, "text": "Ø16 H7", "source": {"view": "v_top", "cell": null}, "confidence": 0.95, "fit": "H7"},
+    {"id": "d66", "kind": "diameter", "value": 6.6, "text": "4x Ø6,6", "source": {"view": "v_top", "cell": null}, "confidence": 0.95},
+    {"id": "p60", "kind": "length", "value": 60, "text": "60", "source": {"view": "v_top", "cell": null}, "confidence": 0.95},
+    {"id": "p30", "kind": "length", "value": 30, "text": "30", "source": {"view": "v_top", "cell": null}, "confidence": 0.95},
+    {"id": "h25", "kind": "length", "value": 25, "text": "25", "source": {"view": "v_front", "cell": null}, "confidence": 0.95},
+    {"id": "t10", "kind": "length", "value": 10, "text": "", "source": null, "confidence": 0.6, "assumed": true,
+     "assumption_basis": "plate thickness not dimensioned; measured in front view at scale 1:1"}
+  ],
+  "features": [
+    {"id": "f_plate", "type": "base", "dim_ids": ["d80", "d50", "r5", "t10"]},
+    {"id": "f_boss", "type": "boss", "dim_ids": ["d30", "h25"]},
+    {"id": "f_bore", "type": "hole", "dim_ids": ["d16"]},
+    {"id": "f_holes", "type": "hole", "dim_ids": ["d66", "p60", "p30"]}
+  ],
+  "notes": [
+    {"id": "n1", "text": "Material S235JR", "source": null},
+    {"id": "n2", "text": "Deburr all edges", "source": null}
+  ],
+  "expected": {
+    "bbox": [80, 50, 25],
+    "holes": [
+      {"d": 16, "at": [0, 0, 0], "axis": [0, 0, 1], "dim_ids": ["d16"]},
+      {"d": 6.6, "at": [30, 15, 0], "axis": [0, 0, 1], "dim_ids": ["d66"]},
+      {"d": 6.6, "at": [-30, 15, 0], "axis": [0, 0, 1], "dim_ids": ["d66"]},
+      {"d": 6.6, "at": [30, -15, 0], "axis": [0, 0, 1], "dim_ids": ["d66"]},
+      {"d": 6.6, "at": [-30, -15, 0], "axis": [0, 0, 1], "dim_ids": ["d66"]}
+    ]
+  },
+  "review": [
+    {"id": "rv1", "refs": ["t10"], "issue": "missing", "assumption": "plate thickness 10 mm",
+     "reason": "the plate thickness is not dimensioned; measured in the front view at scale 1:1",
+     "mark_near": [[35, 0, 0], [35, 0, 10]]}
+  ]
+}

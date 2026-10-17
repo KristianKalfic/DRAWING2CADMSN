@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "d2c"
+version = "0.1.0"
+description = "MCP server that turns 2D technical drawings into validated STEP models"
+requires-python = ">=3.12,<3.13"
+dependencies = ["cadquery==2.8.0", "mcp==2.3.0", "pydantic>=2,<3", "pymupdf==1.28.2"]
+
+[project.optional-dependencies]
+dev = ["pytest==8.*"]
+
+# Explicit package list: the repo root also holds data/, docs/, run/ ... and
+# flat-layout auto-discovery would count them as top-level packages.
+[tool.setuptools]
+packages = ["d2c"]
+
+[tool.setuptools.package-data]
+d2c = ["instructions.md"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = ["bct: needs the BCT sample data mounted at /app/data"]

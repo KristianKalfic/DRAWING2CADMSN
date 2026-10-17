@@ -1,0 +1,6 @@
+* text=auto eol=lf
+*.pdf binary
+*.png binary
+*.jpg binary
+*.glb binary
+d2c/web/static/vendor/** -text
