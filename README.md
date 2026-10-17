@@ -25,13 +25,25 @@ docker run -i --rm --network none \
 
 `drawings/` enthält die PDF-Zeichnungen, `results/` nimmt die Ergebnisse auf. Unter Windows PowerShell steht `${PWD}` statt `$PWD`. Über HTTP: `python -m d2c.server --http 0.0.0.0:8765`, Endpunkt `/mcp`.
 
-## Ergebnisansicht
+## Web-Oberfläche: Zeichnung hochladen, Modell wählen, STEP erstellen
 
 ```
-docker run --rm -p 8080:8080 -v "$PWD/results":/app/results -v "$PWD/drawings":/data d2c python -m d2c.web
+docker compose up --build
 ```
 
-Danach im Browser `http://localhost:8080` öffnen.
+Danach `http://localhost:8080` öffnen:
+
+1. Zeichnung (PDF, PNG oder JPG) ablegen und einen Teilnamen eingeben.
+2. Modell auswählen.
+3. „STEP erstellen“ klicken. Der Lauf erscheint live; danach stehen STEP-Datei, 3D-Ansicht und Prüfliste bereit.
+
+Die Auswahl bietet:
+
+- **Claude** (Sonnet, Opus, Haiku): im Container mit `CLAUDE_CODE_OAUTH_TOKEN` aus `claude setup-token` oder mit `ANTHROPIC_API_KEY` in `.env`.
+- **Ollama:** alle lokal installierten Modelle. Ollama muss mit großem Kontext laufen: `OLLAMA_CONTEXT_LENGTH=64000 ollama serve`.
+- **OpenRouter oder ein anderer Anthropic-kompatibler Endpunkt:** `D2C_LLM_BASE_URL`, `D2C_LLM_API_KEY` und `D2C_LLM_MODEL` in `.env`.
+
+Alle Variablen stehen in `.env.example`. Der MCP-Server läuft in einem eigenen Container ohne Internetzugang; nur die Web-App erreicht ihn. Die Ergebnisse liegen unter `results/<teil>/`.
 
 ## Dokumentation
 

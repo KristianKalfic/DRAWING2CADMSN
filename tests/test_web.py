@@ -9,12 +9,12 @@ from starlette.testclient import TestClient
 
 from d2c.session import Session
 from d2c.spec import PartSpec
-from d2c.web.app import create_app
+from d2c.web.app import _agent_settings, create_app
 
 FIXTURES = Path(__file__).parent / "fixtures"
 PDF = FIXTURES / "demo_drawing.pdf"
 LLM_ENV = {"D2C_LLM_BASE_URL": "http://llm.invalid/v1", "D2C_LLM_MODEL": "m"}
-LLM_VARS = ("D2C_LLM_BASE_URL", "D2C_LLM_MODEL", "ANTHROPIC_API_KEY", "CLAUDE_CODE_OAUTH_TOKEN")
+LLM_VARS = ("D2C_LLM_BASE_URL", "D2C_LLM_MODEL", "D2C_LLM_API_KEY", "D2C_OLLAMA_URL", "ANTHROPIC_API_KEY", "CLAUDE_CODE_OAUTH_TOKEN")
 
 
 def _dimension(dim_id: str, kind: str, value: float, text: str, **more) -> dict:
@@ -125,7 +125,7 @@ def test_drawing_png_renders_the_page_of_the_spec(client, monkeypatch, tmp_path)
     with client:
         first, second, missing = (client.get(f"/api/parts/p{page}/drawing.png") for page in (1, 2, 3))
     assert first.status_code == second.status_code == 200 and first.content != second.content
-    assert missing.status_code == 404 and "page 3" in missing.json()["error"]
+    assert missing.status_code == 404 and "`page` 3" in missing.json()["error"]
 
 
 def fake_agent(events: list[dict], calls: list[dict] | None = None):
@@ -204,14 +204,25 @@ def set_llm_env(monkeypatch, tmp_path, **env):
         monkeypatch.setenv(key, value)
 
 
-def test_run_without_llm_settings_is_503(monkeypatch, tmp_path):
+def test_run_without_llm_settings_starts(monkeypatch, tmp_path):
     set_llm_env(monkeypatch, tmp_path)
     with TestClient(create_app(fake_agent([]))) as client:
-        response = upload(client)
-    message = response.json()["error"]
-    assert response.status_code == 503
-    assert all(name in message for name in ("D2C_LLM_BASE_URL", "ANTHROPIC_API_KEY", "CLAUDE_CODE_OAUTH_TOKEN", ".env.example"))
-    assert not (tmp_path / "uploads").exists()
+        assert upload(client).status_code == 200
+
+
+def test_model_choices_and_their_settings(monkeypatch, tmp_path):
+    set_llm_env(monkeypatch, tmp_path, D2C_LLM_BASE_URL="http://llm.invalid", D2C_LLM_MODEL="m",
+                D2C_LLM_API_KEY="k", D2C_OLLAMA_URL="http://127.0.0.1:9")
+    with TestClient(create_app(fake_agent([]))) as client:
+        values = [m["value"] for m in client.get("/api/models").json()["models"]]
+    assert values[:3] == ["claude/claude-sonnet-5-5", "claude/claude-opus-5-5", "claude/claude-haiku-5-5"]
+    assert values[3:] == ["custom/m"]  # no Ollama answers on port 9
+    claude = _agent_settings("claude/claude-haiku-5-5")
+    assert (claude["model"], claude["base_url"], claude["api_key"]) == ("claude-haiku-5-5", None, None)
+    ollama = _agent_settings("ollama/qwen3:8b")
+    assert (ollama["model"], ollama["base_url"], ollama["api_key"]) == ("qwen3:8b", "http://127.0.0.1:9", None)
+    custom = _agent_settings("custom/z-ai/glm")
+    assert (custom["model"], custom["base_url"], custom["api_key"]) == ("z-ai/glm", "http://llm.invalid", "k")
 
 
 def test_run_with_oauth_token_only_starts_with_model_none(monkeypatch, tmp_path):
@@ -301,7 +312,7 @@ def test_index_and_vendored_viewer_served(client):
     with client:
         html = client.get("/").text
         assert '<html lang="de">' in html
-        assert "Zeichnung (PDF)" in html and "Teilname" in html
-        assert "Agenten starten" in html and 'aria-label="Teile"' in html
+        assert "Zeichnung (PDF, PNG, JPG)" in html and "Teilname" in html
+        assert "STEP erstellen" in html and 'id="model"' in html and 'aria-label="Teile"' in html
         assert "model-viewer" in html
         assert client.get("/static/vendor/model-viewer.min.js").status_code == 200

@@ -23,6 +23,7 @@ services:
       - "8080:8080"
     environment:
       D2C_MCP_URL: http://mcp:8765/mcp
+      D2C_OLLAMA_URL: ${D2C_OLLAMA_URL:-http://host.docker.internal:11434}
     env_file:
       - path: .env
         required: false

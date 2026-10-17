@@ -5,6 +5,7 @@ import json
 import mimetypes
 import os
 import unicodedata
+import urllib.request
 import uuid
 from collections.abc import AsyncIterator, Awaitable, Callable
 from pathlib import Path
@@ -26,8 +27,8 @@ SSE_POLL_SECONDS = 0.05  # ponytail: polling a list, a per-run queue only if man
 MAX_UPLOAD = 20 * 1024 * 1024
 FORM_OVERHEAD = 64 * 1024  # what the other form fields and the multipart framing may add to a maximal upload
 IMAGE_SIGNATURES = {b"\x89PNG\r\n\x1a\n": "png", b"\xff\xd8\xff": "jpeg"}
-LLM_ACCESS = ("D2C_LLM_BASE_URL", "ANTHROPIC_API_KEY", "CLAUDE_CODE_OAUTH_TOKEN")  # one of them lets a run start
-NO_LLM = f"no LLM access configured: set {', '.join(LLM_ACCESS[:-1])} or {LLM_ACCESS[-1]} (see .env.example)"
+CLAUDE_MODELS = (("claude-sonnet-5-5", "Claude Sonnet 5.5"), ("claude-opus-5-5", "Claude Opus 5.5"),
+                 ("claude-haiku-5-5", "Claude Haiku 5.5"))
 TOO_LARGE = "the file is larger than 20 MB"
 
 mimetypes.add_type("font/woff2", ".woff2")  # the platform tables lack it, StaticFiles would send text/plain
@@ -137,15 +138,49 @@ def _default_agent(**kwargs: object) -> Awaitable[dict]:
     return run_agent(**kwargs)
 
 
+def _ollama_url() -> str:
+    return (os.environ.get("D2C_OLLAMA_URL") or "http://localhost:11434").rstrip("/")
+
+
+def _ollama_models() -> list[str]:
+    """The models of the Ollama at D2C_OLLAMA_URL, [] if it does not answer within 1.5 s."""
+    try:
+        with urllib.request.urlopen(_ollama_url() + "/api/tags", timeout=1.5) as response:
+            return sorted(m["name"] for m in json.load(response)["models"])
+    except (OSError, ValueError, KeyError, TypeError):
+        return []
+
+
+def _model_choices() -> list[dict]:
+    """What the model field offers: value "<backend>/<model>", the label and the group it is listed under."""
+    choices = [{"value": f"claude/{m}", "label": label, "group": "Claude (Login oder API-Schlüssel)"}
+               for m, label in CLAUDE_MODELS]
+    base_url, model = os.environ.get("D2C_LLM_BASE_URL"), os.environ.get("D2C_LLM_MODEL")
+    if base_url and model:
+        choices.append({"value": f"custom/{model}", "label": model, "group": base_url})
+    return choices + [{"value": f"ollama/{m}", "label": m, "group": "Ollama (lokal)"} for m in _ollama_models() if "embed" not in m]
+
+
+async def models(request: Request) -> Response:
+    return JSONResponse({"models": await run_in_threadpool(_model_choices)})
+
+
 def _agent_settings(model: str | None) -> dict[str, object]:
-    """What the agent gets from the environment; empty values count as unset. Without D2C_LLM_BASE_URL the
-    agent talks to Anthropic with its own credentials and picks the model itself."""
+    """What the agent gets for a run. A choice "claude/<m>" uses the Claude login or Anthropic key of the agent,
+    "ollama/<m>" the Ollama at D2C_OLLAMA_URL; anything else (also "custom/<m>" and a free model name) the endpoint
+    of D2C_LLM_BASE_URL, or Anthropic without it. Empty values count as unset."""
+    backend, _, name = (model or "").partition("/")
+    server = os.environ.get("D2C_MCP_URL", "stdio")
+    if backend == "claude" and name:
+        return {"model": name, "base_url": None, "api_key": None, "build_model": None, "server": server}
+    if backend == "ollama" and name:
+        return {"model": name, "base_url": _ollama_url(), "api_key": None, "build_model": None, "server": server}
     return {
-        "model": model or os.environ.get("D2C_LLM_MODEL") or None,
+        "model": (name if backend == "custom" and name else model) or os.environ.get("D2C_LLM_MODEL") or None,
         "base_url": os.environ.get("D2C_LLM_BASE_URL") or None,
         "api_key": os.environ.get("D2C_LLM_API_KEY") or None,
         "build_model": os.environ.get("D2C_LLM_BUILD_MODEL") or None,
-        "server": os.environ.get("D2C_MCP_URL", "stdio"),
+        "server": server,
     }
 
 
@@ -170,8 +205,6 @@ async def start_run(request: Request) -> Response:
     if declared.isdigit() and int(declared) > MAX_UPLOAD + FORM_OVERHEAD:
         return _error(413, TOO_LARGE)
     async with request.form() as form:  # reads the whole body first: an answer sent before it ends can reset the connection
-        if not any(os.environ.get(key) for key in LLM_ACCESS):
-            return _error(503, NO_LLM)
         upload, model = form.get("pdf"), form.get("model") or None
         name = unicodedata.normalize("NFC", str(form.get("part", "")))
         if not hasattr(upload, "read"):
@@ -220,6 +253,7 @@ def create_app(agent: Agent | None = None) -> Starlette:
     """The app; `agent` replaces d2c.agent.run_agent (tests inject a fake)."""
     app = Starlette(routes=[
         Route("/", index),
+        Route("/api/models", models),
         Route("/api/parts", parts),
         Route("/api/parts/{name}", part),
         Route("/api/parts/{name}/drawing.png", drawing_png),

@@ -552,7 +552,7 @@ function initViewer() {
 }
 
 /** The 3D window without a model: the dot floor and a sentence (the message can say why). */
-function reset3D(message = "3D model appears after export with colors.") {
+function reset3D(message = "Das 3D-Modell erscheint nach dem Export, mit Farben.") {
   removeHotspot();
   view.materials = [];
   view.glowing = false;
@@ -1247,6 +1247,26 @@ document.fonts?.ready.then(fitTitle);
 initPartsList();
 initTabs();
 initViewer();
+/** The model choices of the server (Claude, a configured endpoint, the local Ollama models), grouped. */
+async function loadModels() {
+  const select = $("#model");
+  try {
+    const { models } = await getJson("/api/models");
+    const groups = new Map();
+    for (const m of models) {
+      if (!groups.has(m.group)) {
+        const group = document.createElement("optgroup");
+        group.label = m.group;
+        groups.set(m.group, group);
+        select.append(group);
+      }
+      groups.get(m.group).append(new Option(m.label, m.value));
+    }
+    if (models.length) select.value = models[0].value;
+  } catch { /* without the list the agent picks its own model */ }
+}
+
 initUpload();
+loadModels();
 renderParts();
 reload();
