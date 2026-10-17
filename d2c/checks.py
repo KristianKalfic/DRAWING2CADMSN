@@ -52,10 +52,12 @@ def _is_concave(face: cq.Face, cylinder: gp_Cylinder) -> bool:
     """
     axis = cylinder.Axis()
     direction = cq.Vector(axis.Direction().X(), axis.Direction().Y(), axis.Direction().Z())
-    point = face.positionAt(0.5, 0.5)
+    # The middle of the face's own parameter range: a trimmed surface (STEP readers make them) has no point outside it.
+    u0, u1, v0, v1 = face.uvBounds()
+    point = face.positionAt((u0 + u1) / 2, (v0 + v1) / 2)
     offset = point - cq.Vector(axis.Location().X(), axis.Location().Y(), axis.Location().Z())
     radial = offset - direction * offset.dot(direction)
-    return face.normalAt(point).dot(radial) < 0
+    return face.normalAt().dot(radial) < 0  # without a location: the normal at that same middle
 
 
 def _cylinders(shape: cq.Shape) -> list[tuple[gp_Cylinder, bool]]:

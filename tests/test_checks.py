@@ -4,6 +4,9 @@ import math
 
 import cadquery as cq
 import pytest
+from OCP.BRepBuilderAPI import BRepBuilderAPI_MakeFace
+from OCP.Geom import Geom_CylindricalSurface, Geom_RectangularTrimmedSurface
+from OCP.gp import gp_Ax3
 
 from d2c.checks import dimension_check, metrics, solid_check, step_roundtrip
 from d2c.spec import Expected, ExpectedHole
@@ -218,3 +221,15 @@ def test_metrics_cyl_diameters():
     assert result["bbox_sorted"] == pytest.approx([10, 30, 40])
     removed = math.pi * (2.5**2 + 2.502**2 + 4**2) * 10
     assert result["volume"] == pytest.approx(40 * 30 * 10 - removed)
+
+
+def test_cylinder_on_trimmed_surface():
+    """STEP readers put cylinders on trimmed surfaces. Such a face has no point at the parameters (0.5, 0.5)."""
+    surface = Geom_RectangularTrimmedSurface(Geom_CylindricalSurface(gp_Ax3(), 5.0), 2.0, 3.0, 2.0, 4.0)
+    outside = cq.Face(BRepBuilderAPI_MakeFace(surface, 1e-7).Face())  # its normals point away from the Z axis
+    inside = cq.Face(outside.wrapped.Reversed())  # its normals point to the axis, like those of a hole
+    assert metrics(outside)["cyl_diameters"] == [10.0]
+    hole = ExpectedHole(d=10, at=(0, 0, 0), axis=(0, 0, 1), dim_ids=[])
+    for face, concave in ((outside, False), (inside, True)):
+        entry = dimension_check(cq.Workplane().add(face), Expected(bbox=(1, 1, 1), holes=[hole]))[-1]
+        assert (entry["ok"], entry["actual"]["concave"]) == (concave, concave)
