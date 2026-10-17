@@ -7,7 +7,7 @@
 // ---------------------------------------------------------------------------
 // CadQuery is Z-up, glTF is Y-up: these camera orbits were calibrated on the demo part.
 const VIEWS = { front: "0deg 90deg auto", top: "0deg 0deg auto", side: "90deg 90deg auto", iso: "45deg 60deg auto" };
-const VIEW_BUTTONS = [["front", "Front"], ["top", "Top"], ["side", "Side"], ["iso", "Iso"]];
+const VIEW_BUTTONS = [["front", "Vorne"], ["top", "Oben"], ["side", "Seite"], ["iso", "Iso"]];
 const GLOW = [0.5, 0.12, 0]; // emissive factor of the orange faces while a review row is hovered
 const DIMMED = 0.35; // share of its color the other materials keep meanwhile
 // Margins of the sheet frame as fractions of the rendered page, calibrated on the demo drawing.
@@ -23,7 +23,7 @@ const STAGE_OF = {
 };
 const NEUTRAL_TOOLS = new Set(["get_state"]); // called in the middle of building, shown in the log only
 const PHASE_STAGE = { read: "read", build: "build" };
-const TABS = [["review", "Review"], ["validation", "Validation"], ["traceability", "Traceability"], ["benchmark", "Benchmark"], ["files", "Files"]];
+const TABS = [["review", "Prüfliste"], ["validation", "Prüfungen"], ["traceability", "Rückverfolgung"], ["benchmark", "Referenz"], ["files", "Dateien"]];
 const FILE_ORDER = ["STEP", "MID STEP", "GLB", "MD", "JSON"];
 
 // ---------------------------------------------------------------------------
@@ -91,7 +91,7 @@ async function errorMessage(response) {
   } catch { /* not JSON */ }
   return `${response.status} ${response.statusText}`.trim();
 }
-const friendly = (e) => (e instanceof TypeError ? "The server is not reachable." : e.message);
+const friendly = (e) => (e instanceof TypeError ? "Der Server ist nicht erreichbar." : e.message);
 async function getJson(url) {
   const response = await fetch(url);
   if (!response.ok) throw new Error(await errorMessage(response));
@@ -149,7 +149,7 @@ function renderParts() {
   if (state.loadError) {
     list.replaceChildren();
     box.hidden = false;
-    box.replaceChildren(hatchBox("", "Could not load parts.", h("button", { type: "button", class: "btn btn-secondary", onclick: () => reload() }, "Retry")));
+    box.replaceChildren(hatchBox("", "Die Teile konnten nicht geladen werden.", h("button", { type: "button", class: "btn btn-secondary", onclick: () => reload() }, "Retry")));
     return;
   }
   if (!state.loaded) {
@@ -160,7 +160,7 @@ function renderParts() {
   list.replaceChildren(...state.parts.map((part, i) => partRow(part, i, focusName)));
   if (!state.parts.length) {
     box.hidden = false;
-    box.replaceChildren(plainBox("No parts yet."));
+    box.replaceChildren(plainBox("Noch keine Teile."));
   }
   if (hadFocus) $("li[tabindex='0']", list)?.focus();
 }
@@ -279,12 +279,12 @@ function renderRunTitleBlock(run) {
   $("#tb-page").textContent = "";
   $("#tb-scale").textContent = "-";
   $("#tb-tolerance").textContent = "-";
-  $("#tb-status").replaceChildren(h("span", { class: "tag tag-outline tag-big" }, run.done ? (run.result?.ok ? "DONE" : "BLOCKED") : "RUNNING"));
+  $("#tb-status").replaceChildren(h("span", { class: "tag tag-outline tag-big" }, run.done ? (run.result?.ok ? "FERTIG" : "GESTOPPT") : "LÄUFT"));
   restartDraw();
 }
 
 function renderEmptyTitleBlock() {
-  setTitle("No part", false);
+  setTitle("Kein Teil", false);
   $("#tb-drawing").textContent = "-";
   $("#tb-page").textContent = "";
   $("#tb-scale").textContent = "-";
@@ -370,7 +370,7 @@ function renderDrawing(detail) {
   Object.assign(drawing, { k: 1, x: 0, y: 0, cols: 8, iw: 1414, ih: 1000 });
   const spec = detail.spec;
   if (!spec || !spec.drawing) {
-    area.append(hatchBox("", "This part has no spec, so there is no drawing to show."));
+    area.append(hatchBox("", "Für dieses Teil gibt es noch keine Spezifikation und daher keine Zeichnung."));
     return;
   }
   const title = spec.title || detail.name, page = spec.page ?? 1;
@@ -398,7 +398,7 @@ function renderDrawing(detail) {
     fitPaper();
   });
   img.addEventListener("error", async () => {
-    let message = "The drawing could not be rendered.";
+    let message = "Die Zeichnung konnte nicht dargestellt werden.";
     try { message = await errorMessage(await fetch(img.src)); } catch { /* keep the generic text */ }
     area.replaceChildren(hatchBox("", message));
   });
@@ -541,7 +541,7 @@ function initViewer() {
     viewer.jumpCameraToGoal();
     requestAnimationFrame(() => setView("iso"));
   });
-  viewer.addEventListener("error", () => reset3D("The 3D model could not be loaded."));
+  viewer.addEventListener("error", () => reset3D("Das 3D-Modell konnte nicht geladen werden."));
   viewer.addEventListener("camera-change", (e) => { if (e.detail?.source === "user-interaction") pressedView(null); });
   viewer.addEventListener("pointerdown", (e) => { view.down = { x: e.clientX, y: e.clientY }; });
   viewer.addEventListener("pointerup", (e) => {
@@ -591,7 +591,7 @@ async function setup3D(detail, token) {
   viewer.alt = `3D model of ${detail.spec?.title || detail.name}, ${assumed} ${assumed === 1 ? "assumption" : "assumptions"} marked in orange`;
   viewer.classList.add("is-pending"); // the previous model must not show under the loading sentence
   hint.hidden = false;
-  hint.textContent = "Loading 3D model...";
+  hint.textContent = "3D-Modell wird geladen …";
   const url = `/files/${enc(detail.name)}/${enc(glb)}`;
   if (viewer.getAttribute("src") === url) { // the same file again does not fire load: clear it first
     viewer.removeAttribute("src");
@@ -624,7 +624,7 @@ function assumptionsOf(detail) {
 function tabList() {
   const detail = state.detail;
   const tabs = [];
-  if (state.run) tabs.push(["run", "Run", ""]);
+  if (state.run) tabs.push(["run", "Lauf", ""]);
   const rows = detail?.review?.validation ?? [];
   const counts = {
     review: detail ? String(assumptionsOf(detail).length) : "",
@@ -704,7 +704,7 @@ function renderReview(detail) {
   const dims = new Map((detail.spec?.dimensions ?? []).map((d) => [d.id, d]));
   const parts = [];
   if (!rows.length) {
-    parts.push(plainBox("No assumptions: every value was read from the drawing."));
+    parts.push(plainBox("Keine Annahmen: Jeder Wert stammt aus der Zeichnung."));
   } else {
     const body = rows.map((a, i) => {
       const row = h("tr", { class: "assumed-row", tabindex: "0", "data-id": a.id },
@@ -854,8 +854,8 @@ function renderFiles(detail) {
   const rows = files.map((f) => h("li", { class: "file" },
     h("span", { class: "kind" }, fileKind(f)),
     h("span", { class: "mono filename" }, f),
-    h("a", { class: "btn btn-link", href: `/files/${enc(detail.name)}/${enc(f)}`, download: f }, "Download", sr(` ${f}`))));
-  const blocked = hasStep ? null : hatchBox("BLOCKED", "No STEP file: export only runs when every check passes.");
+    h("a", { class: "btn btn-link", href: `/files/${enc(detail.name)}/${enc(f)}`, download: f }, "Herunterladen", sr(` ${f}`))));
+  const blocked = hasStep ? null : hatchBox("GESTOPPT", "Keine STEP-Datei: Der Export läuft nur, wenn jede Prüfung besteht.");
   fill(panel, blocked, files.length ? h("ul", { class: "files" }, rows) : plainBox("No files."));
 }
 
@@ -1020,7 +1020,7 @@ function chainView(run, now) {
     const ok = run.result.ok;
     items.push(h("li", { class: `result ${ok ? "is-yes" : "is-no"}` },
       ok ? h("p", { class: "result-word" }, "EXPORTED")
-        : hatchBox("BLOCKED", run.result.reason || "The run ended without an export.")));
+        : hatchBox("GESTOPPT", run.result.reason || "Der Lauf endete ohne Export.")));
   }
   return h("ol", { class: "chain", "aria-label": "Run stages" }, items);
 }
@@ -1135,7 +1135,7 @@ function initUpload() {
     clearErrors();
     const chosen = file.files[0];
     const name = part.value.trim();
-    if (!chosen) { fieldError("file", "Choose a drawing file (PDF, PNG or JPG)."); file.focus(); return; }
+    if (!chosen) { fieldError("file", "Bitte eine Zeichnungsdatei wählen (PDF, PNG oder JPG)."); file.focus(); return; }
     if (chosen.size > MAX_UPLOAD) { fieldError("file", "The file is larger than 20 MB."); file.focus(); return; }
     if (!/^[\w-]+$/.test(name)) { fieldError("part", "Use letters, digits, '_' and '-' only."); part.focus(); return; }
     if (state.run && !state.run.done && !state.run.lost) { showNotice("A run is still in progress."); return; }
@@ -1214,7 +1214,7 @@ function showEmpty() {
   state.name = null;
   state.detail = null;
   renderEmptyTitleBlock();
-  $("#drawing").replaceChildren(h("p", { class: "empty empty-sheet" }, "No parts yet. Run the demo or drop a drawing."));
+  $("#drawing").replaceChildren(h("p", { class: "empty empty-sheet" }, "Noch keine Teile. Zeichnung links unten ablegen und STEP erstellen."));
   reset3D();
   renderTabs();
   $("#panel").replaceChildren();
