@@ -1,19 +1,19 @@
 "use strict";
-/* Drawing2CAD results browser: parts list, drawing, 3D view, review tables and the live run log.
-   Plain JavaScript, no build step; the only library is the vendored model-viewer. */
+/* Drawing2CAD Ergebnisanzeige: Teileliste, Zeichnung, 3D-Ansicht, Prüftabellen und das laufende Laufprotokoll.
+   Einfaches JavaScript ohne Build-Schritt; einzige Bibliothek ist das mitgelieferte model-viewer. */
 
 // ---------------------------------------------------------------------------
-// Constants
+// Konstanten
 // ---------------------------------------------------------------------------
-// CadQuery is Z-up, glTF is Y-up: these camera orbits were calibrated on the demo part.
+// CadQuery ist Z-up, glTF ist Y-up: diese Kamerapositionen wurden am Demoteil kalibriert.
 const VIEWS = { front: "0deg 90deg auto", top: "0deg 0deg auto", side: "90deg 90deg auto", iso: "45deg 60deg auto" };
 const VIEW_BUTTONS = [["front", "Vorne"], ["top", "Oben"], ["side", "Seite"], ["iso", "Iso"]];
-const GLOW = [0.5, 0.12, 0]; // emissive factor of the orange faces while a review row is hovered
-const DIMMED = 0.35; // share of its color the other materials keep meanwhile
-// Margins of the sheet frame as fractions of the rendered page, calibrated on the demo drawing.
+const GLOW = [0.5, 0.12, 0]; // Emissionsfaktor der orangefarbenen Flächen, während eine Prüfzeile überfahren wird
+const DIMMED = 0.35; // Farbanteil, den die anderen Materialien solange behalten
+// Ränder des Blattrahmens als Anteile der dargestellten Seite, an der Demo-Zeichnung kalibriert.
 const FRAME = { l: 0.048, t: 0.034, r: 0.047, b: 0.034 };
 const MAX_UPLOAD = 20 * 1024 * 1024;
-const STAGES = [["read", "READ", "A"], ["describe", "DESCRIBE", "B"], ["build", "BUILD", "C"], ["check", "CHECK", "D"], ["export", "EXPORT", "E"]];
+const STAGES = [["read", "LESEN", "A"], ["describe", "BESCHREIBEN", "B"], ["build", "KONSTRUIEREN", "C"], ["check", "PRÜFEN", "D"], ["export", "EXPORTIEREN", "E"]];
 const STAGE_OF = {
   render_drawing: "read", read_drawing_text: "read", measure_drawing: "read",
   submit_spec: "describe", check_spec: "describe",
@@ -21,19 +21,23 @@ const STAGE_OF = {
   edit_op: "build", delete_op: "build", move_op: "build",
   export_step: "export",
 };
-const NEUTRAL_TOOLS = new Set(["get_state"]); // called in the middle of building, shown in the log only
+const NEUTRAL_TOOLS = new Set(["get_state"]); // wird mitten im Aufbau gerufen, nur im Protokoll sichtbar
 const PHASE_STAGE = { read: "read", build: "build" };
 const TABS = [["review", "Prüfliste"], ["validation", "Prüfungen"], ["traceability", "Rückverfolgung"], ["benchmark", "Referenz"], ["files", "Dateien"]];
 const FILE_ORDER = ["STEP", "MID STEP", "GLB", "MD", "JSON"];
+// Anzeige der Prüfcodes aus review.json; der Serverwert bleibt, unbekannte Codes erscheinen unverändert.
+const ISSUE_LABEL = {
+  missing: "fehlt", ambiguous: "mehrdeutig", low_confidence: "unsicher", conflict: "Widerspruch", convention: "Konvention",
+};
 
 // ---------------------------------------------------------------------------
-// Helpers
+// Hilfsfunktionen
 // ---------------------------------------------------------------------------
 const $ = (selector, root = document) => root.querySelector(selector);
 const reducedMotion = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
 const enc = encodeURIComponent;
 
-/** Element builder. Text goes in as text nodes only, never as markup. */
+/** Erzeugt ein Element. Text kommt nur als Textknoten hinein, nie als Markup. */
 function h(tag, props = {}, ...children) {
   const el = document.createElement(tag);
   for (const [key, value] of Object.entries(props)) {
@@ -49,7 +53,7 @@ function h(tag, props = {}, ...children) {
   return el;
 }
 
-// Drawing symbols as inline SVG: the Latin font subset has no triangle, check mark or arrows.
+// Zeichnungssymbole als inline SVG: der lateinische Schnitt der Schrift hat kein Dreieck, Häkchen oder Pfeile.
 const ICONS = {
   triangle: '<path d="M8 2.2 14.6 13.8H1.4Z" fill="none" stroke="currentColor" stroke-width="1.6"/>',
   check: '<path d="M2.5 8.6 6.3 12.4 13.6 3.8" fill="none" stroke="currentColor" stroke-width="2"/>',
@@ -65,7 +69,7 @@ function icon(name, size = 14) {
   return template.content.firstElementChild;
 }
 
-/** Replace the content of an element; empty values (null from a conditional) are skipped, not printed as "null". */
+/** Ersetzt den Inhalt eines Elements; leere Werte (null aus einer Bedingung) werden übersprungen, nicht als "null" ausgegeben. */
 const fill = (el, ...nodes) => el.replaceChildren(...nodes.flat(Infinity).filter((n) => n !== null && n !== undefined && n !== false));
 
 const sr = (text) => h("span", { class: "sr-only" }, text);
@@ -88,7 +92,7 @@ async function errorMessage(response) {
   try {
     const body = await response.json();
     if (body && body.error) return String(body.error);
-  } catch { /* not JSON */ }
+  } catch { /* kein JSON */ }
   return `${response.status} ${response.statusText}`.trim();
 }
 const friendly = (e) => (e instanceof TypeError ? "Der Server ist nicht erreichbar." : e.message);
@@ -98,7 +102,7 @@ async function getJson(url) {
   return response.json();
 }
 
-/** A box with a 45 degree section-hatch border; the word sits on a white field, never on the hatch. */
+/** Ein Kasten mit 45-Grad-Schnittschraffur als Rand; das Wort sitzt auf weißem Feld, nie auf der Schraffur. */
 function hatchBox(word, text, action) {
   return h("div", { class: "hatch" },
     h("div", { class: "hatch-inner" },
@@ -109,7 +113,7 @@ function hatchBox(word, text, action) {
 const plainBox = (text) => h("p", { class: "empty" }, text);
 
 // ---------------------------------------------------------------------------
-// State
+// Zustand
 // ---------------------------------------------------------------------------
 const state = {
   parts: [], loaded: false, loadError: null,
@@ -120,14 +124,14 @@ let openToken = 0;
 let panelToken = 0;
 
 // ---------------------------------------------------------------------------
-// Parts list
+// Teileliste
 // ---------------------------------------------------------------------------
 function partRow(part, index, focusName) {
   const exported = part.all_ok === true;
   const count = part.review_count ?? 0;
   const tags = [
-    (part.issues ?? []).includes("conflict") ? h("span", { class: "tag", title: "The review lists a conflict" }, "SCALE") : null,
-    exported ? null : h("span", { class: "tag tag-outline" }, "NOT EXPORTED"),
+    (part.issues ?? []).includes("conflict") ? h("span", { class: "tag", title: "Die Prüfliste enthält einen Widerspruch" }, "MASSSTAB") : null,
+    exported ? null : h("span", { class: "tag tag-outline" }, "NICHT EXPORTIERT"),
   ].filter(Boolean);
   return h("li", {
     class: "part", role: "option", "data-name": part.name, title: part.name,
@@ -135,8 +139,8 @@ function partRow(part, index, focusName) {
   },
     h("span", { class: "pos mono" }, String(index + 1).padStart(2, "0")),
     h("span", { class: "name" }, part.title || part.name),
-    count ? h("span", { class: "assumed", title: `${count} assumed` }, icon("triangle", 12), String(count), sr(" assumed")) : null,
-    exported ? h("span", { class: "ok" }, icon("check", 14), sr("Exported and checked")) : null,
+    count ? h("span", { class: "assumed", title: `${count} angenommen` }, icon("triangle", 12), String(count), sr(" angenommen")) : null,
+    exported ? h("span", { class: "ok" }, icon("check", 14), sr("Exportiert und geprüft")) : null,
     tags.length ? h("span", { class: "tags" }, tags) : null);
 }
 
@@ -149,7 +153,7 @@ function renderParts() {
   if (state.loadError) {
     list.replaceChildren();
     box.hidden = false;
-    box.replaceChildren(hatchBox("", "Die Teile konnten nicht geladen werden.", h("button", { type: "button", class: "btn btn-secondary", onclick: () => reload() }, "Retry")));
+    box.replaceChildren(hatchBox("", "Die Teile konnten nicht geladen werden.", h("button", { type: "button", class: "btn btn-secondary", onclick: () => reload() }, "Erneut versuchen")));
     return;
   }
   if (!state.loaded) {
@@ -201,7 +205,7 @@ function initPartsList() {
 }
 
 // ---------------------------------------------------------------------------
-// Title block
+// Schriftfeld
 // ---------------------------------------------------------------------------
 const printedScale = (entry, scale) =>
   [...`${entry.assumption} ${entry.reason}`.matchAll(/\d+:\d+/g)].map((m) => m[0]).find((s) => s !== scale);
@@ -215,7 +219,7 @@ function scaleConflict(detail) {
 function restartDraw() {
   const block = $("#titleblock");
   block.classList.remove("draw");
-  void block.offsetWidth; // restart the line-drawing animation
+  void block.offsetWidth; // die Linien-Animation neu starten
   block.classList.add("draw");
 }
 
@@ -225,7 +229,7 @@ function fitTitle() {
   if (!outline) return;
   let size = 48;
   title.style.fontSize = "";
-  while (size > 32 && outline.scrollWidth > outline.clientWidth) title.style.fontSize = `${(size -= 2)}px`; // outlines get ragged below 32 px
+  while (size > 32 && outline.scrollWidth > outline.clientWidth) title.style.fontSize = `${(size -= 2)}px`; // unter 32 px wirkt die Kontur ausgefranst
 }
 
 function setTitle(text, ok) {
@@ -244,28 +248,28 @@ function renderTitleBlock(detail) {
   document.title = `${title} - Drawing2CAD`;
   $("#tb-drawing").textContent = spec.drawing ? basename(spec.drawing) : "-";
   $("#tb-drawing").title = spec.drawing ?? "";
-  $("#tb-page").textContent = spec.drawing ? `page ${spec.page ?? 1}` : "";
+  $("#tb-page").textContent = spec.drawing ? `Blatt ${spec.page ?? 1}` : "";
   const scale = $("#tb-scale");
   scale.replaceChildren(spec.scale ?? "-");
   const conflict = scaleConflict(detail);
   if (conflict) {
     const other = printedScale(conflict.entry, spec.scale);
-    if (other) scale.prepend(h("s", { class: "struck", title: "Scale read from the drawing" }, other), " ");
+    if (other) scale.prepend(h("s", { class: "struck", title: "Maßstab aus der Zeichnung" }, other), " ");
     scale.append(" ", h("a", {
-      href: `#${enc(detail.name)}/review`, class: "delta-link", title: `Review item ${conflict.number}: ${conflict.entry.assumption}`,
+      href: `#${enc(detail.name)}/review`, class: "delta-link", title: `Prüfpunkt ${conflict.number}: ${conflict.entry.assumption}`,
       onclick: (e) => { e.preventDefault(); setTab("review"); flashRows([conflict.entry.id]); },
-    }, icon("triangle", 14), String(conflict.number), sr(` Review item ${conflict.number}, scale conflict`)));
+    }, icon("triangle", 14), String(conflict.number), sr(` Prüfpunkt ${conflict.number}, Maßstabswiderspruch`)));
   }
-  $("#tb-tolerance").textContent = spec.general_tolerance || "not stated";
+  $("#tb-tolerance").textContent = spec.general_tolerance || "nicht angegeben";
   const status = $("#tb-status");
   if (!exported) {
-    status.replaceChildren(h("span", { class: "tag tag-outline tag-big" }, "NOT EXPORTED"));
+    status.replaceChildren(h("span", { class: "tag tag-outline tag-big" }, "NICHT EXPORTIERT"));
   } else {
     const rows = detail.review?.validation ?? [];
     const passed = rows.filter((r) => r.ok).length;
     const assumed = detail.review?.assumptions?.length ?? 0;
     status.replaceChildren(
-      h("span", { class: "assumed-line" }, `${assumed} ASSUMED`),
+      h("span", { class: "assumed-line" }, `${assumed} ANGENOMMEN`),
       h("span", { class: "ok-line" }, `${passed}/${rows.length} OK`, icon("check", 16)));
   }
   restartDraw();
@@ -295,7 +299,7 @@ function renderEmptyTitleBlock() {
 }
 
 // ---------------------------------------------------------------------------
-// Drawing with grid ruler, zoom and cell highlight
+// Zeichnung mit Rasterlineal, Zoom und Zellen-Hervorhebung
 // ---------------------------------------------------------------------------
 const drawing = { k: 1, x: 0, y: 0, cols: 8, iw: 1414, ih: 1000 };
 
@@ -325,7 +329,7 @@ function zoomAt(factor, px, py) {
 function fitPaper() {
   const stage = $(".sheet-area"), frame = $(".frame");
   if (!stage || !frame) return;
-  const ruler = 32; // two strips of 16 px around the paper
+  const ruler = 32; // zwei Leisten von 16 px rund um das Blatt
   const aw = stage.clientWidth - ruler, ah = stage.clientHeight - ruler;
   const scale = Math.max(0, Math.min(aw / drawing.iw, ah / drawing.ih));
   frame.style.setProperty("--pw", `${Math.floor(drawing.iw * scale)}px`);
@@ -374,32 +378,32 @@ function renderDrawing(detail) {
     return;
   }
   const title = spec.title || detail.name, page = spec.page ?? 1;
-  const img = h("img", { class: "paper-img", alt: `Drawing of ${title}, page ${page}`, draggable: "false" });
+  const img = h("img", { class: "paper-img", alt: `Zeichnung von ${title}, Blatt ${page}`, draggable: "false" });
   const paper = h("div", {
     class: "paper is-loading", tabindex: "0", role: "group",
-    "aria-label": "Drawing. The plus, minus and zero keys zoom.",
+    "aria-label": "Zeichnung. Die Tasten Plus, Minus und Null zoomen.",
   }, h("div", { class: "paper-inner" }, img));
   const zoomButton = (name, label, handler) => h("button", { type: "button", class: "icon-btn", "aria-label": label, title: label, onclick: handler }, icon(name, 16));
   const frame = h("div", { class: "frame" }, paper);
   area.append(h("div", { class: "sheet-area" }, frame),
     h("div", { class: "zoom", role: "group", "aria-label": "Zoom" },
-      zoomButton("plus", "Zoom in", () => zoomAt(1.4)),
-      zoomButton("minus", "Zoom out", () => zoomAt(1 / 1.4)),
-      zoomButton("reset", "Reset zoom", () => { drawing.k = 1; drawing.x = drawing.y = 0; applyZoom(); })));
+      zoomButton("plus", "Vergrößern", () => zoomAt(1.4)),
+      zoomButton("minus", "Verkleinern", () => zoomAt(1 / 1.4)),
+      zoomButton("reset", "Zoom zurücksetzen", () => { drawing.k = 1; drawing.x = drawing.y = 0; applyZoom(); })));
   buildRulers(frame);
   fitPaper();
 
   img.addEventListener("load", () => {
     drawing.iw = img.naturalWidth || drawing.iw;
     drawing.ih = img.naturalHeight || drawing.ih;
-    drawing.cols = Math.max(drawing.iw, drawing.ih) <= 1400 ? 4 : 8; // A4 has 4 columns, A3 and larger 8
+    drawing.cols = Math.max(drawing.iw, drawing.ih) <= 1400 ? 4 : 8; // A4 hat 4 Spalten, A3 und größer 8
     paper.classList.remove("is-loading");
     buildRulers(frame);
     fitPaper();
   });
   img.addEventListener("error", async () => {
     let message = "Die Zeichnung konnte nicht dargestellt werden.";
-    try { message = await errorMessage(await fetch(img.src)); } catch { /* keep the generic text */ }
+    try { message = await errorMessage(await fetch(img.src)); } catch { /* Hinweistext bleibt stehen */ }
     area.replaceChildren(hatchBox("", message));
   });
   img.src = `/api/parts/${enc(detail.name)}/drawing.png`;
@@ -435,13 +439,13 @@ function renderDrawing(detail) {
 }
 
 // ---------------------------------------------------------------------------
-// 3D view: model-viewer, the link between orange faces and review rows
+// 3D-Ansicht: model-viewer, die Verbindung der orangen Flächen zu den Prüfzeilen
 // ---------------------------------------------------------------------------
 const viewer = $("#viewer");
 const view = { materials: [], base: new Map(), glowing: false, down: null };
 
 const toSrgb = (c) => (c <= 0.0031308 ? 12.92 * c : 1.055 * c ** (1 / 2.4) - 0.055) * 255;
-// The exporter stores orange as [1, 0.214, 0], exactly 127.5 in the green channel: compare with a tolerance.
+// Der Export schreibt Orange als [1, 0.214, 0], genau 127,5 im Grünkanal: Vergleich mit Toleranz.
 const sameColor = (factor, hex) =>
   [1, 3, 5].every((i, k) => Math.abs(toSrgb(factor[k]) - parseInt(hex.slice(i, i + 2), 16)) <= 2);
 const isOrange = (material) =>
@@ -482,14 +486,14 @@ function markedIds() {
 
 function onViewerClick(event) {
   if (!marksActive()) return;
-  const x = event.clientX, y = event.clientY; // this model-viewer takes viewport coordinates and subtracts its own box
+  const x = event.clientX, y = event.clientY; // dieses model-viewer liest Viewport-Koordinaten und zieht sein eigenes Feld ab
   const material = viewer.materialFromPoint(x, y);
-  if (!material || !isOrange(material)) return; // background and other faces do nothing
+  if (!material || !isOrange(material)) return; // Hintergrund und andere Flächen tun nichts
   const ids = markedIds();
   setTab("review");
   flashRows(ids);
   const hit = viewer.positionAndNormalFromPoint(x, y);
-  removeHotspot(); // there is only ever one
+  removeHotspot(); // es gibt immer nur einen
   if (hit) {
     viewer.append(h("button", {
       type: "button", slot: "hotspot-mark", class: "hotspot", tabindex: "-1",
@@ -499,7 +503,7 @@ function onViewerClick(event) {
 }
 
 function focusSources(sources) {
-  /* sources: [{view, cell}]; the camera turns to the first view, every cell gets a frame on the drawing. */
+  /* sources: [{view, cell}]; die Kamera dreht zur ersten Ansicht, jede Zelle bekommt einen Rahmen auf der Zeichnung. */
   const views = new Map((state.detail?.spec?.views ?? []).map((v) => [v.id, v.kind]));
   const first = sources.find((s) => VIEWS[views.get(s.view)]);
   if (first && !viewer.hidden) {
@@ -537,7 +541,7 @@ function initViewer() {
     view.materials = viewer.model?.materials ?? [];
     view.base = new Map(view.materials.map((m) => [m, [...m.pbrMetallicRoughness.baseColorFactor]]));
     view.glowing = false;
-    viewer.cameraOrbit = VIEWS.front; // the model rises from the front view into the isometric one
+    viewer.cameraOrbit = VIEWS.front; // das Modell erhebt sich aus der Frontansicht in die Isometrie
     viewer.jumpCameraToGoal();
     requestAnimationFrame(() => setView("iso"));
   });
@@ -547,11 +551,11 @@ function initViewer() {
   viewer.addEventListener("pointerup", (e) => {
     const down = view.down;
     view.down = null;
-    if (down && Math.hypot(e.clientX - down.x, e.clientY - down.y) < 5) onViewerClick(e); // a click, not an orbit drag
+    if (down && Math.hypot(e.clientX - down.x, e.clientY - down.y) < 5) onViewerClick(e); // ein Klick, kein Schwenken
   });
 }
 
-/** The 3D window without a model: the dot floor and a sentence (the message can say why). */
+/** Das 3D-Fenster ohne Modell: der Punkteboden und ein Satz (die Meldung kann den Grund nennen). */
 function reset3D(message = "Das 3D-Modell erscheint nach dem Export, mit Farben.") {
   removeHotspot();
   view.materials = [];
@@ -567,7 +571,7 @@ function reset3D(message = "Das 3D-Modell erscheint nach dem Export, mit Farben.
   hint.textContent = message;
 }
 
-/** The nominal STEP file of an exported part is one click away, whatever tab is open. */
+/** Die nominale STEP-Datei eines exportierten Teils ist einen Klick entfernt, egal welcher Tab offen ist. */
 function showStepLink(detail) {
   const step = (detail.files ?? []).find((f) => /\.(step|stp)$/i.test(f) && !/_mid\.(step|stp)$/i.test(f));
   const link = $("#step-link");
@@ -588,12 +592,12 @@ async function setup3D(detail, token) {
   viewer.hidden = false;
   $("#view-buttons").hidden = false;
   const assumed = detail.review?.assumptions?.length ?? 0;
-  viewer.alt = `3D model of ${detail.spec?.title || detail.name}, ${assumed} ${assumed === 1 ? "assumption" : "assumptions"} marked in orange`;
-  viewer.classList.add("is-pending"); // the previous model must not show under the loading sentence
+  viewer.alt = `3D-Modell von ${detail.spec?.title || detail.name}, ${assumed} ${assumed === 1 ? "Annahme" : "Annahmen"} orange markiert`;
+  viewer.classList.add("is-pending"); // das bisherige Modell darf unter der Lademitteilung nicht sichtbar sein
   hint.hidden = false;
   hint.textContent = "3D-Modell wird geladen …";
   const url = `/files/${enc(detail.name)}/${enc(glb)}`;
-  if (viewer.getAttribute("src") === url) { // the same file again does not fire load: clear it first
+  if (viewer.getAttribute("src") === url) { // dieselbe Datei erneut feuert kein load: erst leeren
     viewer.removeAttribute("src");
     await new Promise(requestAnimationFrame);
     if (token !== openToken) return;
@@ -603,16 +607,16 @@ async function setup3D(detail, token) {
     try {
       const marks = await getJson(`/files/${enc(detail.name)}/marks.json`);
       if (token === openToken && marks && Object.keys(marks).length) state.marks = marks;
-    } catch { /* without marks the 3D view just shows the model */ }
+    } catch { /* ohne Markierungen zeigt die 3D-Ansicht nur das Modell */ }
   }
 }
 
 // ---------------------------------------------------------------------------
-// Tabs and panels
+// Tabs und Bereiche
 // ---------------------------------------------------------------------------
 function assumptionsOf(detail) {
   if (detail?.review?.assumptions) return detail.review.assumptions;
-  // Not exported: no review.json yet, but the spec already carries the assumptions.
+  // Nicht exportiert: noch keine review.json, aber die Spezifikation enthält die Annahmen bereits.
   const dims = new Map((detail?.spec?.dimensions ?? []).map((d) => [d.id, d]));
   return (detail?.spec?.review ?? []).map((r) => ({
     id: r.id, issue: r.issue, assumption: r.assumption, reason: r.reason, marked_faces: null,
@@ -677,7 +681,7 @@ function flashRows(ids) {
   rows.forEach((row, i) => {
     if (i === 0) row.scrollIntoView({ block: "nearest", behavior: reducedMotion() ? "auto" : "smooth" });
     row.classList.remove("flash");
-    void row.offsetWidth; // restart the animation
+    void row.offsetWidth; // die Animation neu starten
     row.classList.add("flash");
     setTimeout(() => row.classList.remove("flash"), 1300);
   });
@@ -693,8 +697,8 @@ function dimensionCell(refs, dims) {
   return refs.map((ref) => {
     if (ref.text) return h("span", { class: "dim" }, ref.text);
     const dim = dims.get(ref.id);
-    // No printed text: the value was assumed, drawn as an auxiliary dimension in brackets.
-    return dim ? h("span", { class: "dim dim-assumed", title: `Assumed value of ${ref.id}` }, `(${num(dim.value)})`) : h("span", { class: "mono" }, ref.id);
+    // Kein gedruckter Text: der Wert war angenommen, gezeichnet als Hilfsbemaßung in Klammern.
+    return dim ? h("span", { class: "dim dim-assumed", title: `Angenommener Wert von ${ref.id}` }, `(${num(dim.value)})`) : h("span", { class: "mono" }, ref.id);
   }).flatMap((node, i) => (i ? [" ", node] : [node]));
 }
 
@@ -708,23 +712,23 @@ function renderReview(detail) {
   } else {
     const body = rows.map((a, i) => {
       const row = h("tr", { class: "assumed-row", tabindex: "0", "data-id": a.id },
-        h("td", { class: "col-delta", "data-label": "No." }, h("span", { class: "delta" }, icon("triangle", 12), String(i + 1))),
+        h("td", { class: "col-delta", "data-label": "Pos." }, h("span", { class: "delta" }, icon("triangle", 12), String(i + 1))),
         h("td", { class: "mono", "data-label": "ID" }, a.id),
-        h("td", { "data-label": "Dimension" }, a.refs.length ? dimensionCell(a.refs, dims) : "-"),
-        h("td", { "data-label": "Issue" }, h("span", { class: "tag" }, a.issue)),
-        h("td", { "data-label": "Assumption" }, a.assumption),
-        h("td", { "data-label": "Reason" }, a.reason),
-        h("td", { class: "mono", "data-label": "Source" }, (a.sources ?? []).length ? a.sources.join(", ") : "-"),
-        h("td", { class: "mono", "data-label": "Faces" }, a.marked_faces == null ? "-" : String(a.marked_faces)));
+        h("td", { "data-label": "Maß" }, a.refs.length ? dimensionCell(a.refs, dims) : "-"),
+        h("td", { "data-label": "Befund" }, h("span", { class: "tag" }, ISSUE_LABEL[a.issue] ?? a.issue)),
+        h("td", { "data-label": "Annahme" }, a.assumption),
+        h("td", { "data-label": "Begründung" }, a.reason),
+        h("td", { class: "mono", "data-label": "Quelle" }, (a.sources ?? []).length ? a.sources.join(", ") : "-"),
+        h("td", { class: "mono", "data-label": "Flächen" }, a.marked_faces == null ? "-" : String(a.marked_faces)));
       linkRow(row, parseSources(a.sources));
       return row;
     });
-    parts.push(table(["No.", "ID", "Dimension", "Issue", "Assumption", "Reason", "Source", "Faces"], body, "review"));
+    parts.push(table(["Pos.", "ID", "Maß", "Befund", "Annahme", "Begründung", "Quelle", "Flächen"], body, "review"));
   }
   const notes = detail.review?.notes ?? detail.spec?.notes ?? [];
   if (notes.length) {
     parts.push(h("div", { class: "notes" },
-      h("h3", {}, "Drawing notes"),
+      h("h3", {}, "Zeichnungshinweise"),
       h("ul", {}, notes.map((n) => h("li", {}, h("span", { class: "mono" }, n.id), " ", n.text)))));
   }
   fill(panel, ...parts);
@@ -734,27 +738,27 @@ function renderValidation(detail) {
   const panel = $("#panel");
   const rows = detail.review?.validation;
   if (!rows) {
-    fill(panel, plainBox("No validation yet. The last export did not pass, or the part was never exported."));
+    fill(panel, plainBox("Noch keine Prüfungen. Der letzte Export bestand nicht, oder das Teil wurde nie exportiert."));
     return;
   }
   const passed = rows.filter((r) => r.ok).length;
   const status = (ok) => ok
-    ? h("span", { class: "ok" }, icon("check", 14), " ", sr("ok"))
-    : h("span", { class: "fail" }, icon("cross", 14), " FAIL");
+    ? h("span", { class: "ok" }, icon("check", 14), " ", sr("bestanden"))
+    : h("span", { class: "fail" }, icon("cross", 14), " FEHLGESCHLAGEN");
   fill(panel,
-    h("div", { class: "kpi" }, h("span", { class: "kpi-number" }, `${passed}/${rows.length}`), h("span", { class: "label" }, "checks passed")),
-    table(["Check", "Expected", "Actual", "Result"], rows.map((r) => h("tr", {},
-      h("td", { class: "mono", "data-label": "Check" }, r.check),
-      h("td", { class: "mono", "data-label": "Expected" }, r.expected),
-      h("td", { class: "mono", "data-label": "Actual" }, r.actual),
-      h("td", { "data-label": "Result" }, status(r.ok)))), "validation"));
+    h("div", { class: "kpi" }, h("span", { class: "kpi-number" }, `${passed}/${rows.length}`), h("span", { class: "label" }, "bestandene Prüfungen")),
+    table(["Prüfung", "Soll", "Ist", "Ergebnis"], rows.map((r) => h("tr", {},
+      h("td", { class: "mono", "data-label": "Prüfung" }, r.check),
+      h("td", { class: "mono", "data-label": "Soll" }, r.expected),
+      h("td", { class: "mono", "data-label": "Ist" }, r.actual),
+      h("td", { "data-label": "Ergebnis" }, status(r.ok)))), "validation"));
 }
 
 async function renderTraceability(detail) {
   const panel = $("#panel");
   const review = detail.review;
   if (!review) {
-    fill(panel, plainBox("No traceability yet. It is written with the export."));
+    fill(panel, plainBox("Noch keine Rückverfolgung. Sie entsteht mit dem Export."));
     return;
   }
   const token = ++panelToken;
@@ -766,9 +770,9 @@ async function renderTraceability(detail) {
   const opName = (i) => state.ops[i]?.op ?? "op";
   const line = (t, linked) => {
     const row = h("li", { class: `trace mono${linked ? "" : " unreferenced"}`, tabindex: "0" },
-      `op ${t.op_index + 1} `, h("span", { class: "opname" }, opName(t.op_index)), ` · ${t.path} = ${num(t.value)}`,
-      linked ? [h("span", { class: "back" }, icon("back", 14), sr(" from")), ` ${t.dimension} `,
-        t.text ? h("span", { class: "dim" }, `"${t.text}"`) : h("span", { class: "dim dim-assumed" }, "(assumed)")] : null);
+      `Op. ${t.op_index + 1} `, h("span", { class: "opname" }, opName(t.op_index)), ` · ${t.path} = ${num(t.value)}`,
+      linked ? [h("span", { class: "back" }, icon("back", 14), sr(" aus")), ` ${t.dimension} `,
+        t.text ? h("span", { class: "dim" }, `"${t.text}"`) : h("span", { class: "dim dim-assumed" }, "(angenommen)")] : null);
     if (linked) {
       const source = dims.get(t.dimension)?.source;
       linkRow(row, source ? [{ view: source.view, cell: source.cell }] : []);
@@ -777,18 +781,21 @@ async function renderTraceability(detail) {
   };
   const traced = review.traceability ?? [], loose = review.unreferenced ?? [];
   fill(panel,
-    traced.length ? h("ul", { class: "trace-list" }, traced.map((t) => line(t, true))) : plainBox("No values trace back to a dimension."),
+    traced.length ? h("ul", { class: "trace-list" }, traced.map((t) => line(t, true))) : plainBox("Kein Wert geht auf ein Maß zurück."),
     h("div", { class: "loose" },
-      h("h3", {}, "Values without dimension reference"),
-      loose.length ? h("ul", { class: "trace-list" }, loose.map((t) => line(t, false))) : h("p", { class: "muted" }, "None.")));
+      h("h3", {}, "Werte ohne Maßbezug"),
+      loose.length ? h("ul", { class: "trace-list" }, loose.map((t) => line(t, false))) : h("p", { class: "muted" }, "Keine.")));
 }
 
 function matchWord(row) {
   const raw = row.match ?? row.MATCH;
-  if (raw === "MATCH") return h("span", { class: "match match-yes" }, "MATCH");
-  if (raw === "DIFF") return h("span", { class: "match match-diff" }, "DIFF");
-  return h("span", { class: "match match-invalid" }, "reference invalid");
+  if (raw === "MATCH") return h("span", { class: "match match-yes" }, "TREFFER");
+  if (raw === "DIFF") return h("span", { class: "match match-diff" }, "ABWEICHUNG");
+  return h("span", { class: "match match-invalid" }, "Referenz ungültig");
 }
+
+// Anzeige für die Benchmark-Marks; die Werte (MATCH, DIFF, …) bleiben Serverdaten.
+const KIND_LABEL = { yes: "Treffer", diff: "Abweichung", invalid: "Referenz ungültig", none: "keine Referenz" };
 
 function benchmarkTally() {
   const rows = state.parts.filter((p) => p.eval).map((p) => p.eval);
@@ -806,12 +813,12 @@ function ruler() {
     return raw === "MATCH" ? "yes" : raw === "DIFF" ? "diff" : "invalid";
   };
   return h("div", { class: "ruler-bar" },
-    h("p", { class: "kpi-line" }, h("span", { class: "kpi-number" }, `${tally.matched}/${tally.total}`), h("span", { class: "label" }, "match"),
-      tally.invalid ? h("span", { class: "muted" }, `${tally.invalid} with invalid reference not counted`) : null),
-    h("div", { class: "ticks", role: "group", "aria-label": "Parts on the benchmark ruler" },
+    h("p", { class: "kpi-line" }, h("span", { class: "kpi-number" }, `${tally.matched}/${tally.total}`), h("span", { class: "label" }, "Treffer"),
+      tally.invalid ? h("span", { class: "muted" }, `${tally.invalid} mit ungültiger Referenz, nicht gezählt`) : null),
+    h("div", { class: "ticks", role: "group", "aria-label": "Teile auf dem Referenzlineal" },
       state.parts.map((p) => h("button", {
-        type: "button", class: `tick tick-${kind(p)}${p.name === state.name ? " is-current" : ""}`, title: `${p.title || p.name}: ${kind(p) === "none" ? "no reference" : kind(p)}`,
-        "aria-label": `${p.title || p.name}, ${kind(p) === "none" ? "no reference" : kind(p)}`, onclick: () => go(p.name, "benchmark"),
+        type: "button", class: `tick tick-${kind(p)}${p.name === state.name ? " is-current" : ""}`, title: `${p.title || p.name}: ${KIND_LABEL[kind(p)]}`,
+        "aria-label": `${p.title || p.name}, ${KIND_LABEL[kind(p)]}`, onclick: () => go(p.name, "benchmark"),
       }))));
 }
 
@@ -820,7 +827,7 @@ function renderBenchmark(detail) {
   const row = detail.eval;
   const bar = ruler();
   if (!row) {
-    fill(panel, bar, plainBox("No reference for this part."));
+    fill(panel, bar, plainBox("Keine Referenz für dieses Teil."));
     return;
   }
   const sorted = (list) => (Array.isArray(list) ? list : []);
@@ -829,13 +836,13 @@ function renderBenchmark(detail) {
   fill(panel, bar,
     h("div", { class: "bench" },
       h("div", { class: "bench-head" }, matchWord(row),
-        h("div", { class: "kpi" }, h("span", { class: "kpi-number" }, unit(row.dv_pct, "%")), h("span", { class: "label" }, "volume difference")),
-        h("div", { class: "kpi" }, h("span", { class: "kpi-number" }, unit(row.dbbox_max_mm, "mm")), h("span", { class: "label" }, "largest box difference"))),
+        h("div", { class: "kpi" }, h("span", { class: "kpi-number" }, unit(row.dv_pct, "%")), h("span", { class: "label" }, "Volumenabweichung")),
+        h("div", { class: "kpi" }, h("span", { class: "kpi-number" }, unit(row.dbbox_max_mm, "mm")), h("span", { class: "label" }, "größte Abweichung des Hüllquaders"))),
       h("div", { class: "bench-box" },
-        h("p", { class: "label" }, "Bounding box, sorted (own / reference)"),
+        h("p", { class: "label" }, "Hüllquader, sortiert (eigen / Referenz)"),
         [0, 1, 2].map((i) => h("p", { class: "mono" }, `${num(own[i], 3)}  /  ${num(ref[i], 3)}`)),
-        row.missing_d?.length ? h("p", { class: "mono" }, `missing diameters: ${row.missing_d.join(", ")}`) : null,
-        row.extra_d?.length ? h("p", { class: "mono" }, `extra diameters: ${row.extra_d.join(", ")}`) : null)));
+        row.missing_d?.length ? h("p", { class: "mono" }, `fehlende Durchmesser: ${row.missing_d.join(", ")}`) : null,
+        row.extra_d?.length ? h("p", { class: "mono" }, `zusätzliche Durchmesser: ${row.extra_d.join(", ")}`) : null)));
 }
 
 function fileKind(name) {
@@ -856,7 +863,7 @@ function renderFiles(detail) {
     h("span", { class: "mono filename" }, f),
     h("a", { class: "btn btn-link", href: `/files/${enc(detail.name)}/${enc(f)}`, download: f }, "Herunterladen", sr(` ${f}`))));
   const blocked = hasStep ? null : hatchBox("GESTOPPT", "Keine STEP-Datei: Der Export läuft nur, wenn jede Prüfung besteht.");
-  fill(panel, blocked, files.length ? h("ul", { class: "files" }, rows) : plainBox("No files."));
+  fill(panel, blocked, files.length ? h("ul", { class: "files" }, rows) : plainBox("Keine Dateien."));
 }
 
 function renderPanel() {
@@ -865,7 +872,7 @@ function renderPanel() {
   const detail = state.detail;
   if (state.tab === "run" && state.run) { renderRun(); return; }
   if (!detail) {
-    fill(panel, plainBox(state.run ? "Select a part to see its details." : "Select a part."));
+    fill(panel, plainBox(state.run ? "Ein Teil auswählen, um die Details zu sehen." : "Ein Teil auswählen."));
     return;
   }
   panelToken++;
@@ -873,7 +880,7 @@ function renderPanel() {
 }
 
 // ---------------------------------------------------------------------------
-// Live run: stages as a dimension chain, log as a change table
+// Live-Lauf: Phasen als Maßkette, Protokoll als Änderungstabelle
 // ---------------------------------------------------------------------------
 const toolStage = (run, name) => {
   if (NEUTRAL_TOOLS.has(name)) return null;
@@ -893,7 +900,7 @@ function activate(run, key) {
   const order = STAGES.map(([k]) => k);
   run.current = key;
   for (const [k, stage] of Object.entries(run.stages)) {
-    // CHECK is driven by export_step alone: the checks run inside the export
+    // PRÜFEN wird allein von export_step gelenkt: die Prüfungen laufen innerhalb des Exports
     if (k !== "check" && order.indexOf(k) < order.indexOf(key) && stage.state !== "failed") stage.state = "done";
   }
   if (run.stages[key].state === "pending") run.stages[key].state = "active";
@@ -943,7 +950,7 @@ function handleEvent(run, event, now = performance.now()) {
 function finishRun(run, event, now = performance.now()) {
   if (run.done) return;
   run.done = true;
-  run.es?.close(); // the server ends the stream after done; without this EventSource would reconnect and replay everything
+  run.es?.close(); // der Server beendet den Stream nach done; sonst würde das EventSource neu verbinden und alles wiederholen
   clearInterval(run.timer);
   const ok = event.ok === true;
   run.result = { ok, reason: event.reason ? String(event.reason) : "" };
@@ -951,7 +958,7 @@ function finishRun(run, event, now = performance.now()) {
   run.open.clear();
   if (!ok && run.current) run.stages[run.current].state = "failed";
   if (ok) for (const stage of Object.values(run.stages)) if (stage.state === "active") stage.state = "done";
-  run.log.push({ at: now - run.t0, kind: "DONE", label: ok ? "exported" : "blocked", summary: run.result.reason, detail: "" });
+  run.log.push({ at: now - run.t0, kind: "DONE", label: ok ? "exportiert" : "gestoppt", summary: run.result.reason, detail: "" });
   refreshRun(run);
   if (state.run === run && !state.name) renderRunTitleBlock(run);
   afterRun(run);
@@ -965,15 +972,15 @@ function connectionLost(run) {
   const now = performance.now();
   for (const seg of [...run.open.values()].flat()) { seg.dur = now - seg.start; seg.ok = false; }
   run.open.clear();
-  run.log.push({ at: now - run.t0, kind: "LOST", label: "", summary: `Connection lost at ${clock(now - run.t0, false)}` });
+  run.log.push({ at: now - run.t0, kind: "LOST", label: "", summary: `Verbindung verloren bei ${clock(now - run.t0, false)}` });
   refreshRun(run);
 }
 
 async function afterRun(run) {
   if (run.reloaded) return;
-  run.reloaded = true; // exactly one reload of the parts list per run
+  run.reloaded = true; // genau ein Neuladen der Teileliste pro Lauf
   await loadParts();
-  // a blocked run keeps its log in view next to the part it left behind
+  // ein gestoppter Lauf behält sein Protokoll im Blick, neben dem Teil, das er hinterlässt
   if (state.parts.some((p) => p.name === run.part)) go(run.part, run.result?.ok ? "review" : "run");
 }
 
@@ -983,7 +990,7 @@ function segSeconds(seg, now) {
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 
-/** A dimension line; the arrowhead marker lives once in index.html. Open segments have a start arrow only. */
+/** Eine Bemaßungslinie; der Pfeilspitzen-Marker steht einmal in index.html. Offene Segmente haben nur einen Startpfeil. */
 function dimLine(closed) {
   const svg = document.createElementNS(SVG_NS, "svg");
   const line = document.createElementNS(SVG_NS, "line");
@@ -1013,23 +1020,23 @@ function chainView(run, now) {
       h("span", { class: "stage-head" },
         h("span", { class: "marker" }, icon("triangle", 12), letter),
         h("span", { class: "stage-name" }, label),
-        stage.state === "failed" ? sr(" blocked") : null),
+        stage.state === "failed" ? sr(" gestoppt") : null),
       h("div", { class: "segs" }, stage.segs.map((seg) => segView(seg, now, still))));
   });
   if (run.done) {
     const ok = run.result.ok;
     items.push(h("li", { class: `result ${ok ? "is-yes" : "is-no"}` },
-      ok ? h("p", { class: "result-word" }, "EXPORTED")
+      ok ? h("p", { class: "result-word" }, "EXPORTIERT")
         : hatchBox("GESTOPPT", run.result.reason || "Der Lauf endete ohne Export.")));
   }
-  return h("ol", { class: "chain", "aria-label": "Run stages" }, items);
+  return h("ol", { class: "chain", "aria-label": "Laufphasen" }, items);
 }
 
 function logRow(entry) {
-  const detail = entry.detail ? h("details", {}, h("summary", {}, entry.kind === "CALL" ? "args" : "text"), h("pre", {}, entry.detail)) : null;
+  const detail = entry.detail ? h("details", {}, h("summary", {}, entry.kind === "CALL" ? "Argumente" : "Text"), h("pre", {}, entry.detail)) : null;
   return h("tr", { class: `log-${entry.kind.toLowerCase()}` },
     h("td", { class: "mono t" }, clock(entry.at)),
-    h("td", { class: "mono kind" }, entry.kind === "FAIL" ? h("span", { class: "fail" }, icon("cross", 12), " FAIL") : entry.kind),
+    h("td", { class: "mono kind" }, entry.kind === "FAIL" ? h("span", { class: "fail" }, icon("cross", 12), " FEHLGESCHLAGEN") : entry.kind),
     h("td", { class: "mono tool" }, entry.label),
     h("td", { class: "mono what" }, entry.dur != null ? `${(entry.dur / 1000).toFixed(1)} s  ` : "", entry.summary, detail));
 }
@@ -1040,7 +1047,7 @@ function renderRun() {
   fill(panel,
     h("div", { class: "run" },
       h("div", { id: "chain-host" }, chainView(run, performance.now())),
-      h("div", { class: "log", id: "log", role: "log", "aria-live": "polite", "aria-label": "Run log" },
+      h("div", { class: "log", id: "log", role: "log", "aria-live": "polite", "aria-label": "Laufprotokoll" },
         h("table", { class: "grid log-table" }, h("tbody", {}, run.log.map(logRow))))));
   const log = $("#log");
   log.addEventListener("scroll", () => { run.stick = log.scrollTop + log.clientHeight >= log.scrollHeight - 8; });
@@ -1075,17 +1082,17 @@ function startRun(id, part, fileName) {
     try { event = JSON.parse(message.data); } catch { event = { raw: message.data }; }
     handleEvent(run, event);
   };
-  run.es.onerror = () => connectionLost(run); // the browser would reconnect and replay all events: stop here instead
+  run.es.onerror = () => connectionLost(run); // der Browser würde neu verbinden und alle Ereignisse wiederholen: hier lieber stoppen
   if (!reducedMotion()) run.timer = setInterval(() => refreshRun(run), 250);
 }
 
 function renderRunStage(run) {
-  $("#drawing").replaceChildren(hatchBox("", `The drawing of ${run.part} appears here once the agent has submitted its spec.`));
+  $("#drawing").replaceChildren(hatchBox("", `Die Zeichnung von ${run.part} erscheint hier, sobald der Agent die Spezifikation eingereicht hat.`));
   reset3D();
 }
 
 // ---------------------------------------------------------------------------
-// Upload form
+// Hochladen
 // ---------------------------------------------------------------------------
 function fieldError(id, message) {
   const el = $(`#${id}-error`);
@@ -1106,8 +1113,8 @@ function showNotice(text) {
 }
 
 function showServerError(status, message) {
-  if (status === 503) { showNotice(`${message} Recorded parts stay browsable.`); return; }
-  if (status === 0) { showNotice(message); return; } // no answer at all
+  if (status === 503) { showNotice(`${message} Aufgenommene Teile bleiben aufrufbar.`); return; }
+  if (status === 0) { showNotice(message); return; } // gar keine Antwort
 
   const target = /part name/i.test(message) ? "part" : /\bmodel\b/i.test(message) ? "model" : "file";
   fieldError(target, message);
@@ -1136,9 +1143,9 @@ function initUpload() {
     const chosen = file.files[0];
     const name = part.value.trim();
     if (!chosen) { fieldError("file", "Bitte eine Zeichnungsdatei wählen (PDF, PNG oder JPG)."); file.focus(); return; }
-    if (chosen.size > MAX_UPLOAD) { fieldError("file", "The file is larger than 20 MB."); file.focus(); return; }
-    if (!/^[\w-]+$/.test(name)) { fieldError("part", "Use letters, digits, '_' and '-' only."); part.focus(); return; }
-    if (state.run && !state.run.done && !state.run.lost) { showNotice("A run is still in progress."); return; }
+    if (chosen.size > MAX_UPLOAD) { fieldError("file", "Die Datei ist größer als 20 MB."); file.focus(); return; }
+    if (!/^[\w-]+$/.test(name)) { fieldError("part", "Nur Buchstaben, Ziffern, '_' und '-' verwenden."); part.focus(); return; }
+    if (state.run && !state.run.done && !state.run.lost) { showNotice("Ein Lauf läuft noch."); return; }
     const body = new FormData();
     body.append("pdf", chosen);
     body.append("part", name);
@@ -1161,7 +1168,7 @@ function initUpload() {
 }
 
 // ---------------------------------------------------------------------------
-// Opening a part, routing, start
+// Teil öffnen, Routing, Start
 // ---------------------------------------------------------------------------
 function go(name, tab) {
   const hash = `#${enc(name)}${tab ? `/${tab}` : ""}`;
@@ -1183,7 +1190,7 @@ async function openPart(name, tab) {
     state.detail = null;
     renderEmptyTitleBlock();
     reset3D();
-    $("#drawing").replaceChildren(hatchBox("", `Could not load ${name}: ${friendly(error)}`, h("button", { type: "button", class: "btn btn-secondary", onclick: () => openPart(name, tab) }, "Retry")));
+    $("#drawing").replaceChildren(hatchBox("", `${name} konnte nicht geladen werden: ${friendly(error)}`, h("button", { type: "button", class: "btn btn-secondary", onclick: () => openPart(name, tab) }, "Erneut versuchen")));
     renderTabs();
     renderPanel();
     return;
@@ -1196,7 +1203,7 @@ async function openPart(name, tab) {
   renderDrawing(detail);
   renderTabs();
   renderPanel();
-  announce(`Opened ${detail.spec?.title || name}`);
+  announce(`Geöffnet: ${detail.spec?.title || name}`);
   setup3D(detail, token);
   showStepLink(detail); // after setup3D, which clears the link when it finds no model
 }
@@ -1204,7 +1211,7 @@ async function openPart(name, tab) {
 function route() {
   const [rawName, rawTab] = location.hash.slice(1).split("/");
   let name = rawName ?? "";
-  try { name = decodeURIComponent(name); } catch { /* keep a malformed hash as typed */ }
+  try { name = decodeURIComponent(name); } catch { /* fehlerhaften Hash so lassen, wie er ist */ }
   if (name) { openPart(name, rawTab); return; }
   if (state.parts.length && !state.run) { go(state.parts[0].name); return; }
   if (!state.parts.length && !state.run) showEmpty();
@@ -1247,7 +1254,7 @@ document.fonts?.ready.then(fitTitle);
 initPartsList();
 initTabs();
 initViewer();
-/** The model choices of the server (Claude, a configured endpoint, the local Ollama models), grouped. */
+/** Die Modellauswahl des Servers (Claude, ein konfigurierter Endpunkt, die lokalen Ollama-Modelle), gruppiert. */
 async function loadModels() {
   const select = $("#model");
   try {
@@ -1266,7 +1273,7 @@ async function loadModels() {
     }
     const first = models.find((m) => !m.disabled);
     if (first) select.value = first.value;
-  } catch { /* without the list the agent picks its own model */ }
+  } catch { /* ohne die Liste wählt der Agent selbst sein Modell */ }
 }
 
 initUpload();

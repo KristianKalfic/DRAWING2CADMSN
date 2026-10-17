@@ -1,5 +1,5 @@
-/* Drawing2CAD: a checked drawing sheet. Orange means assumed, never anything else;
-   an error is a hatched box, not a red one; outline means not confirmed, filled means read and checked. */
+/* Drawing2CAD: ein geprüftes Zeichnungsblatt. Orange bedeutet angenommen, niemals etwas anderes;
+   ein Fehler ist eine schraffierte Box, keine rote; Kontur heißt unbestätigt, Fläche heißt gelesen und geprüft. */
 
 @font-face {
   font-family: "Inter Tight"; font-style: normal; font-weight: 100 900; font-display: swap;
@@ -9,8 +9,8 @@
   font-family: "Inter Tight"; font-style: italic; font-weight: 100 900; font-display: swap;
   src: url("/static/vendor/fonts/InterTight-wght-italic.woff2") format("woff2");
 }
-/* Weight 800 comes from the static instance: the variable file keeps overlapping contours, which an outlined
-   (stroked) title would show as inner lines. Declared after the variable face, so it wins at exactly 800. */
+/* Gewicht 800 kommt aus der statischen Instanz: die variable Datei enthält überlappende Konturen, die eine umrandete
+   (gestrichelte) Überschrift als innere Linien zeigen würde. Nach der variablen Schrift deklariert, damit sie bei genau 800 gewinnt. */
 @font-face {
   font-family: "Inter Tight"; font-style: normal; font-weight: 800; font-display: swap;
   src: url("/static/vendor/fonts/InterTight-800.woff2") format("woff2");
@@ -100,7 +100,7 @@ s { text-decoration-color: var(--assume-line); text-decoration-thickness: 2px; }
   .main { grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); }
 }
 
-/* ---------- Buttons and fields ---------- */
+/* ---------- Schaltflächen und Felder ---------- */
 .btn {
   display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 36px; padding: 9px 16px;
   border: var(--line) solid transparent; border-radius: 3px; background: none; text-decoration: none;
@@ -133,7 +133,7 @@ input[type="file"]::file-selector-button {
 }
 input[aria-invalid="true"] { border-color: var(--ink); box-shadow: inset 0 0 0 1px var(--ink); }
 
-/* ---------- Tags and hatch ---------- */
+/* ---------- Ausschriftungen und Schraffur ---------- */
 .tag {
   display: inline-block; padding: 0 6px; border: 1px solid var(--ink-2); font: 500 12px/18px var(--mono); color: var(--ink);
   white-space: nowrap;
@@ -148,7 +148,7 @@ input[aria-invalid="true"] { border-color: var(--ink); box-shadow: inset 0 0 0 1
 .box { margin: 12px 16px; }
 .empty { padding: 20px 16px; color: var(--ink-2); max-width: 70ch; }
 
-/* ---------- Title block ---------- */
+/* ---------- Schriftfeld ---------- */
 .brand {
   display: flex; flex-direction: column; justify-content: center; gap: 10px; padding: 0 16px; background: var(--paper);
   border-bottom: var(--line) solid var(--frame);
@@ -188,7 +188,7 @@ input[aria-invalid="true"] { border-color: var(--ink); box-shadow: inset 0 0 0 1
 .struck { font: italic 500 14px/1 var(--sans); color: var(--ink-2); }
 #tb-scale { font-variant-numeric: tabular-nums; overflow: visible; }
 
-/* On opening a part the lines of the sheet are drawn, then the title fills */
+/* Beim Öffnen eines Teils werden die Linien des Blatts gezeichnet, danach füllt sich die Überschrift */
 .titleblock.draw::after {
   content: ""; position: absolute; left: 0; right: 0; bottom: calc(var(--line) * -1); height: var(--line); background: var(--frame);
   transform-origin: left; animation: draw-x var(--dur-draw) var(--ease-draw) both;
@@ -200,7 +200,7 @@ input[aria-invalid="true"] { border-color: var(--ink); box-shadow: inset 0 0 0 1
 @keyframes draw-y { from { transform: scaleY(0); } to { transform: scaleY(1); } }
 @keyframes fill { from { clip-path: inset(0 100% 0 0); } to { clip-path: inset(0 0 0 0); } }
 
-/* ---------- Parts list ---------- */
+/* ---------- Teileliste ---------- */
 .bom-head { display: flex; align-items: baseline; gap: 8px; padding: 14px 16px 8px; font: 700 12px/1.2 var(--sans); letter-spacing: 1px; text-transform: uppercase; color: var(--ink-2); }
 .count { font-family: var(--mono); font-weight: 500; letter-spacing: 0; color: var(--ink); }
 .bom-scroll { overflow-y: auto; min-height: 0; }
@@ -222,7 +222,7 @@ input[aria-invalid="true"] { border-color: var(--ink); box-shadow: inset 0 0 0 1
 .part.skeleton::before { content: ""; grid-column: 2; height: 0; border-top: 1.5px dashed var(--ink-2); }
 .fail { display: inline-flex; align-items: center; gap: 4px; font: 700 12px/1 var(--sans); letter-spacing: 1px; color: var(--ink); }
 
-/* ---------- Upload ---------- */
+/* ---------- Hochladen ---------- */
 .dropzone {
   display: grid; gap: 4px; margin: 10px 14px 14px; padding: 10px 12px 12px; background: var(--paper);
   border: var(--line) dashed var(--ink-2);
@@ -240,7 +240,7 @@ input[aria-invalid="true"] { border-color: var(--ink); box-shadow: inset 0 0 0 1
 }
 .notice { margin-top: 4px; padding: 6px 10px; border-left: 4px solid var(--petrol); background: var(--band); font-size: 13px; line-height: 1.4; }
 
-/* ---------- Stage: drawing and 3D window ---------- */
+/* ---------- Bühne: Zeichnung und 3D-Fenster ---------- */
 .drawing {
   position: relative; display: grid; grid-template-rows: minmax(0, 1fr) auto; min-width: 0; min-height: 0; padding: 16px 20px 10px; overflow: hidden;
   border-right: var(--line) solid var(--frame);
@@ -305,7 +305,7 @@ model-viewer:focus-visible { outline: 2px solid #fff; outline-offset: -4px; }
   font: 700 12px/20px var(--mono); transform: translate(-50%, -150%);
 }
 
-/* ---------- Tabs and panel ---------- */
+/* ---------- Reiter und Anzeigebereich ---------- */
 .tabs {
   grid-column: 1 / -1; display: flex; overflow-x: auto; background: var(--band);
   border-top: var(--line) solid var(--frame); border-bottom: var(--line) solid var(--frame);
@@ -322,7 +322,7 @@ model-viewer:focus-visible { outline: 2px solid #fff; outline-offset: -4px; }
 .panel { grid-column: 1 / -1; min-height: 0; overflow: auto; background: var(--paper); }
 .panel:focus-visible { outline-offset: -3px; }
 
-/* ---------- Tables ---------- */
+/* ---------- Tabellen ---------- */
 .grid { width: 100%; border-collapse: collapse; font-size: 14px; }
 .grid th {
   position: sticky; top: 0; z-index: 1; padding: 9px 12px; background: var(--paper); text-align: left;
@@ -388,7 +388,7 @@ model-viewer:focus-visible { outline: 2px solid #fff; outline-offset: -4px; }
 .filename { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .panel > .hatch { margin: 12px 16px; max-width: 520px; }
 
-/* ---------- Run: dimension chain and log ---------- */
+/* ---------- Lauf: Maßkette und Protokoll ---------- */
 .run { display: grid; grid-template-rows: auto minmax(0, 1fr); height: 100%; min-height: 0; }
 .chain { display: flex; align-items: stretch; padding: 8px 16px 6px; border-bottom: 1px solid var(--hair); }
 .stage { position: relative; flex: 1 1 100px; min-width: 100px; padding: 0 8px 6px 10px; border-left: var(--line) solid var(--frame); }
@@ -427,7 +427,7 @@ details { display: inline-block; vertical-align: top; margin-left: 10px; }
 summary { cursor: pointer; color: var(--petrol); text-decoration: underline; text-underline-offset: 3px; }
 details pre { margin: 4px 0 0; padding: 6px 8px; background: var(--band); white-space: pre-wrap; word-break: break-word; max-height: 160px; overflow: auto; font-size: 12px; }
 
-/* ---------- Loading ---------- */
+/* ---------- Laden ---------- */
 body.loading .cell + .cell::before { background: repeating-linear-gradient(to bottom, var(--frame) 0 4px, transparent 4px 8px); }
 body.loading .drawing, .main.is-loading .drawing {
   background:
@@ -436,7 +436,7 @@ body.loading .drawing, .main.is-loading .drawing {
 }
 .main.is-loading .panel { opacity: .5; }
 
-/* ---------- Narrow screens ---------- */
+/* ---------- Schmale Bildschirme ---------- */
 @media (max-width: 1100px) {
   .titleblock { grid-template-columns: minmax(0, 2.7fr) minmax(0, 1.2fr) minmax(0, .9fr) minmax(0, 1fr) minmax(0, 1.1fr); }
   .cell { padding-left: 12px; padding-right: 8px; }
@@ -486,7 +486,7 @@ body.loading .drawing, .main.is-loading .drawing {
   .cell:nth-child(2)::before, .cell:nth-child(4)::before { display: none; }
 }
 
-/* ---------- Accessibility modes ---------- */
+/* ---------- Barrierefreiheit ---------- */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .001ms !important; animation-delay: 0s !important; transition-duration: .001ms !important; }
   .assumed-row.flash td::after { animation: none; opacity: .3; }
