@@ -5,13 +5,18 @@ import os
 import re
 import unicodedata
 from pathlib import Path
+from typing import get_args
 
 from d2c import review
+from d2c.checks import LINEAR_TOL
 from d2c.sandbox import run_worker
 from d2c.spec import PartSpec
+from d2c.tolerances import NO_TABLES, Variant, apply_mode, compliance, limits, mid_value, tables_found
 
 
 PART_NAME = re.compile(r"[\w-]+")  # the same rule as PartSpec.name
+MID_FILES = ("{part}_mid.step", "report_mid.json")  # what a mid export writes
+NOMINAL_FILES = ("{part}.step", "{part}.glb", "marks.json", "pmi.json", "report.json", "review.md", "review.json")
 
 
 def results_root() -> Path:
@@ -21,6 +26,20 @@ def results_root() -> Path:
 
 def _write_json(path: Path, data: object) -> None:
     path.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+
+
+def _tolerance_rows(spec: PartSpec, ops: list[dict], nominal: list[dict]) -> list[dict]:
+    """The rows of the review's tolerance table: the nominal compliance entries, the tolerance mid of each
+    dimension and whether a model on the mid keeps its tolerance. That verdict is taken from the values the ops
+    get on the mid; measuring the holes is left to the report of the mid export."""
+    dims = {d.id: d for d in spec.dimensions}
+    on_mid = {c["dim_id"]: c["in_tolerance"] for c in compliance(spec, ops, {}, "mid")}
+    return [
+        {"dim_id": c["dim_id"], "text": c["text"], "nominal": c["nominal"], "lower": c["lower"], "upper": c["upper"],
+         "mid": mid_value(dims[c["dim_id"]], spec.general_tolerance), "source": c["source"],
+         "in_tolerance_nominal": c["in_tolerance"], "in_tolerance_mid": on_mid[c["dim_id"]]}
+        for c in nominal
+    ]
 
 
 class Session:
@@ -64,7 +83,8 @@ class Session:
         _write_json(folder / "spec.json", self.specs[part].model_dump(mode="json"))
         _write_json(folder / "ops.json", self.ops[part])
 
-    def _build(self, part: str, ops: list[dict], export_path: Path | None = None) -> dict:
+    def _build(self, part: str, ops: list[dict], **export: object) -> dict:
+        """Build the ops in a worker; `export` adds payload keys (export_path, glb_path, pmi_spec, tol)."""
         spec = self.specs[part]
         known = {d.id for d in spec.dimensions}
         for op in ops:
@@ -78,8 +98,8 @@ class Session:
             "ops": ops,
             "expected": spec.expected.model_dump(mode="json"),
             "marks": [{"id": r.id, "near": r.mark_near} for r in spec.review if r.mark_near],
-            "export_path": str(export_path) if export_path else None,
-        })
+            "export_path": None,
+        } | export)
 
     def _commit(self, part: str, ops: list[dict], op_index: int) -> dict:
         """Build the new op list and adopt it unless the build has an error (ok=false is adopted)."""
@@ -134,23 +154,47 @@ class Session:
                    "review_items": len(spec.review), "expected_bbox": spec.expected.bbox}
         return {"spec_summary": summary, "ops": self.ops[part], "last_report": self.last.get(part)}
 
-    def export(self, part: str) -> dict:
-        """Build with the STEP export and write the result files; a model that is not ok writes none."""
+    def export(self, part: str, variant: Variant = "nominal") -> dict:
+        """Build with the STEP export and write the result files; a model that is not ok writes none.
+
+        "nominal" writes the STEP, GLB, marks.json, pmi.json, report and review list. "mid" builds the part with
+        every toleranced dimension at its tolerance mid and writes <part>_mid.step and report_mid.json; it needs
+        the tolerance tables. Without them the nominal export still works and its compliance is None.
+        """
         part = self._load(part)
+        if variant not in get_args(Variant):
+            raise ValueError(f"variant must be one of {', '.join(get_args(Variant))}, not {variant!r}")
+        spec, ops, mid, tables = self.specs[part], self.ops[part], variant == "mid", tables_found()
+        if mid and not tables:
+            raise ValueError(NO_TABLES)
+        if tables:
+            for dim in spec.dimensions:
+                limits(dim, spec.general_tolerance)  # a class or size the tables lack raises now, before any build
         folder = self._folder(part)
         folder.mkdir(parents=True, exist_ok=True)
-        step = folder / f"{part}.step"
-        report = self._build(part, self.ops[part], export_path=step)
+        step = folder / (f"{part}_mid.step" if mid else f"{part}.step")
+        built, shifts = apply_mode(ops, spec, variant)
+        # the dimension checks allow what the shifted values can add up to; a radius moves a diameter twice as far
+        tol = LINEAR_TOL + 2 * sum(abs(c["mid"] - c["nominal"]) for c in shifts)
+        report = self._build(part, built, export_path=str(step), pmi_spec=spec.model_dump(mode="json"), tol=tol,
+                             glb_path=None if mid else str(folder / f"{part}.glb"))
         if not report["ok"]:
-            for name in (step.name, "report.json", "review.md", "review.json"):
-                (folder / name).unlink(missing_ok=True)
+            for name in MID_FILES if mid else NOMINAL_FILES + MID_FILES:
+                (folder / name.format(part=part)).unlink(missing_ok=True)
             return {"ok": False, "error": "Prüfung fehlgeschlagen", "report": report}
+        report["compliance"] = compliance(spec, ops, report, variant) if tables else None
+        if mid:
+            _write_json(folder / "report_mid.json", report)
+            files = {"step": str(step), "report": str(folder / "report_mid.json")}
+            return {"ok": True, "files": files, "report": report}
         self.last[part] = report
         self._write_state(part)
-        spec, ops = self.specs[part], self.ops[part]
+        pmi = json.loads((folder / "pmi.json").read_text(encoding="utf-8"))["dimensions"]  # the worker read it back
+        rows = _tolerance_rows(spec, ops, report["compliance"]) if tables else None
         _write_json(folder / "report.json", report)
-        _write_json(folder / "review.json", review.to_json(spec, ops, report))
-        (folder / "review.md").write_text(review.render(spec, ops, report), encoding="utf-8")
+        _write_json(folder / "review.json", review.to_json(spec, ops, report, rows, pmi))
+        (folder / "review.md").write_text(review.render(spec, ops, report, rows, pmi), encoding="utf-8")
         names = {"step": step.name, "report": "report.json", "review": "review.md", "review_json": "review.json",
-                 "ops": "ops.json", "spec": "spec.json"}
+                 "ops": "ops.json", "spec": "spec.json", "glb": f"{part}.glb", "marks": "marks.json",
+                 "pmi": "pmi.json"}
         return {"ok": True, "files": {key: str(folder / name) for key, name in names.items()}, "report": report}

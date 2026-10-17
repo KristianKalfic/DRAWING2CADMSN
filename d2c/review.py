@@ -1,14 +1,15 @@
 """The review list of one part: what was assumed, where every value came from, what the checks found.
 
-Pure functions over the spec, the dumped ops and the worker report; the session writes the files.
-Each section of the Markdown is one function, render() joins them.
+Pure functions over the spec, the dumped ops, the worker report and the tolerance and PMI rows the session
+hands in; the session writes the files. Each section of the Markdown is one function, render() joins them.
 """
 
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
 
 from d2c.checks import VOLUME_REL_TOL
 from d2c.ops import get_path
 from d2c.spec import PartSpec
+from d2c.tolerances import NO_TABLES
 
 # Op parameters that are sizes; revolve points count through the r of each (r, z) point.
 SIZE_NAMES = frozenset(
@@ -107,6 +108,7 @@ def validation(report: dict) -> list[dict]:
     if report["error"]:
         return [{"check": "Aufbau", "expected": "kein Fehler", "actual": report["error"], "ok": False}]
     solid, trip = report["solid"], report["roundtrip"]
+    pmi = trip["pmi"]
     rows = [
         ("Gültiger Volumenkörper", True, solid["valid"], solid["valid"]),
         ("Anzahl Volumenkörper", "1", solid["solids"], solid["solids"] == 1),
@@ -117,6 +119,7 @@ def validation(report: dict) -> list[dict]:
         ("Volumenkörper im STEP-Rückimport", "1", trip["solids"], trip["solids"] == 1),
         ("Volumenänderung beim STEP-Rückimport", f"<= {VOLUME_REL_TOL:g}", f"{trip['volume_rel_diff']:.2e}",
          trip["volume_rel_diff"] <= VOLUME_REL_TOL),
+        ("STEP-PMI zurückgelesen", pmi["written"], pmi["read_back"], pmi["read_back"] == pmi["written"]),
         *((f"Markierte Flächen {m['id']}", "> 0", m["faces"], m["faces"] > 0) for m in trip["marks"]),
     ]
     return [{"check": c, "expected": "ja" if e is True else "nein" if e is False else str(e),
@@ -124,14 +127,24 @@ def validation(report: dict) -> list[dict]:
             for c, e, a, ok in rows]
 
 
-def to_json(spec: PartSpec, ops: list[dict], report: dict) -> dict:
-    """The review list as data, for the web view and the evaluation."""
+def to_json(
+    spec: PartSpec, ops: list[dict], report: dict, tolerances: list[dict] | None = None, pmi: Sequence[dict] = ()
+) -> dict:
+    """The review list as data, for the web view and the evaluation.
+
+    tolerances are the rows of the tolerance table: {"dim_id", "text", "nominal", "lower", "upper", "mid",
+    "source", "in_tolerance_nominal", "in_tolerance_mid"}, with None as a verdict for "not checked". None
+    instead of the list means the tolerance tables were not found. pmi are the dimensions that read_pmi
+    finds in the STEP file.
+    """
     rows = validation(report)
     return {
         "assumptions": assumptions(spec, report),
         "notes": [{"id": n.id, "text": n.text} for n in spec.notes],
         "traceability": traceability(spec, ops),
         "unreferenced": unreferenced(spec, ops),
+        "tolerances": tolerances,
+        "pmi": list(pmi),
         "validation": rows,
         "all_ok": all(r["ok"] for r in rows),
     }
@@ -175,6 +188,42 @@ def _unreferenced_section(data: dict) -> str:
     return "## Werte ohne Maßbezug\n" + _table(["Vorgang", "Parameter", "Wert"], rows)
 
 
+def _verdict(ok: bool | None) -> str:
+    return "nicht geprüft" if ok is None else "ja" if ok else "nein"
+
+
+def _tolerances_section(data: dict) -> str:
+    if data["tolerances"] is None:
+        return "## Toleranzen\n" + NO_TABLES
+    rows = [
+        [t["dim_id"], t["text"], _g(t["nominal"]), _g(t["lower"]), _g(t["upper"]), _g(t["mid"]), t["source"],
+         _verdict(t["in_tolerance_nominal"]), _verdict(t["in_tolerance_mid"])]
+        for t in data["tolerances"]
+    ]
+    headers = ["Maß", "Gedruckter Text", "Nennmaß", "Mindestmaß", "Höchstmaß", "Toleranzmitte", "Quelle",
+               "Eingehalten (Nennmaß)", "Eingehalten (Toleranzmitte)"]
+    return "## Toleranzen\n" + _table(headers, rows)
+
+
+def _deviation(x: float) -> str:
+    return "0" if x == 0 else f"{x:+g}"
+
+
+def _pmi_tolerance(entry: dict) -> str:
+    """The fit of a PMI dimension, or its deviations like +0.2/0."""
+    if entry["fit"]:
+        return entry["fit"]
+    if entry["tol_upper"] is not None:
+        return f"{_deviation(entry['tol_upper'])}/{_deviation(entry['tol_lower'])}"
+    return "-"
+
+
+def _pmi_section(data: dict) -> str:
+    rows = [[p["type"], _g(p["value"]), _pmi_tolerance(p), ", ".join(p["faces"]), "; ".join(p["descriptions"]) or "-"]
+            for p in data["pmi"]]
+    return "## PMI in der STEP-Datei\n" + _table(["Art", "Wert", "Toleranz", "Flächen", "Beschreibung"], rows)
+
+
 def _validation_section(data: dict) -> str:
     labels = {"hole": "Bohrung", "bbox_x": "Außenmaß X", "bbox_y": "Außenmaß Y", "bbox_z": "Außenmaß Z"}
     rows = []
@@ -184,15 +233,19 @@ def _validation_section(data: dict) -> str:
     return "## Prüfungen\n" + _table(["Prüfung", "Erwartet", "Tatsächlich", "in Ordnung"], rows)
 
 
-def render(spec: PartSpec, ops: list[dict], report: dict) -> str:
-    """Die Prüfliste als deutsches Markdown."""
-    data = to_json(spec, ops, report)
+def render(
+    spec: PartSpec, ops: list[dict], report: dict, tolerances: list[dict] | None = None, pmi: Sequence[dict] = ()
+) -> str:
+    """Die Prüfliste als deutsches Markdown; die Argumente sind die von to_json."""
+    data = to_json(spec, ops, report, tolerances, pmi)
     sections = [
         _header(spec),
         _assumptions_section(data),
         _notes_section(data),
         _traceability_section(data),
         _unreferenced_section(data),
+        _tolerances_section(data),
+        _pmi_section(data),
         _validation_section(data),
         f"Alle Prüfungen bestanden: {'ja' if data['all_ok'] else 'nein'}",
     ]

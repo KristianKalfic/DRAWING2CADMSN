@@ -80,6 +80,14 @@ def test_tool_docstrings_state_conventions():
     assert "auch `_` als Schleifenvariable" in docs["run_script"]
 
 
+def test_export_step_takes_a_variant():
+    schema = {t.name: t.input_schema for t in asyncio.run(srv.server.list_tools())}["export_step"]
+    assert schema["required"] == ["part"]
+    assert schema["properties"]["variant"]["enum"] == ["nominal", "mid"]
+    assert schema["properties"]["variant"]["default"] == "nominal"
+    assert 'export_step(part, variant="mid")' in srv.server.instructions
+
+
 def test_render_returns_png_and_info(data):
     image, info = call("render_drawing", pdf=DRAWING, page=1, dpi=100).content
     assert image.mime_type == "image/png"
@@ -128,6 +136,11 @@ def test_demo_end_to_end(data):
     result = call_json("export_step", part="demo_bracket")
     assert result["ok"] is True
     assert "COLOUR_RGB" in Path(result["files"]["step"]).read_text("utf-8", errors="replace")
+    assert Path(result["files"]["glb"]).read_bytes()[:4] == b"glTF"
+    mid = call_json("export_step", part="demo_bracket", variant="mid")
+    assert mid["ok"] is True and Path(mid["files"]["step"]).name == "demo_bracket_mid.step"
+    with pytest.raises(ToolError, match="variant"):
+        call("export_step", part="demo_bracket", variant="max")
     review = Path(result["files"]["review"]).read_text("utf-8")
     assert "Alle Prüfungen bestanden: ja" in review
     open_issues = review.split("## Annahmen und offene Punkte")[1].split("##")[0]

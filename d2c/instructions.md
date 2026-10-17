@@ -26,7 +26,7 @@ Geometrie aufbauen
    - Bei `error`, `solid.ok=false` oder `roundtrip.ok=false` behebe den Fehler sofort.
    - Fehlgeschlagene `dims`-Prüfungen für noch nicht gebaute Merkmale sind bis zum letzten Vorgang normal.
    - Vor `export_step` müssen alle `dims` in Ordnung sein. Lies andernfalls die Ursache und behebe sie mit `edit_op` oder `delete_op`, höchstens drei Versuche je Merkmal. Füge danach lieber einen Prüfeintrag hinzu, statt weiter zu raten.
-13. Rufe `export_step` auf.
+13. Rufe `export_step` auf. Hat die Zeichnung Abmaße oder Passungen, rufe zusätzlich `export_step(part, variant="mid")` für das Modell auf Toleranzmitte auf.
 
 Regeln
 - Gewinde: Ein Innengewinde ist ein Aufruf von `add_holes` mit `kind="tapped"`. Für ein Außengewinde verwende den Nenndurchmesser und füge einen Prüfeintrag mit `issue="convention"` hinzu.

@@ -27,7 +27,7 @@ GENERAL_ENTRIES = {
     "ISO 2768-c": "DIN ISO 2768 (coarse/grob)",
     "ISO 2768-v": "DIN ISO 2768 (very coarse/sehr grob)",
 }
-NO_TABLES = "tolerance tables not found (D2C_TABLES)"  # what a caller says when tables_found() is False
+NO_TABLES = "Toleranztabellen nicht gefunden (D2C_TABLES)"  # what a caller says when tables_found() is False
 
 
 class ToleranceError(ValueError):

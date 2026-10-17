@@ -18,6 +18,7 @@ from d2c.sandbox import validation_error_message
 from d2c.session import Session
 from d2c.spec import PartSpec
 from d2c.text import read_text
+from d2c.tolerances import Variant
 
 MAX_TEXT_ITEMS = 300
 MAX_SHAPES = 12  # circles and arcs measure_drawing lists
@@ -325,15 +326,20 @@ def get_state(part: str) -> dict:
 
 
 @_tool
-def export_step(part: str) -> dict:
+def export_step(part: str, variant: Variant = "nominal") -> dict:
     """Baue das Bauteil und schreibe bei bestandenen Prüfungen die STEP-Datei, den Bericht und die Prüfliste (review.md).
 
-    Längen in der STEP-Datei sind mm. Das Ergebnis enthält {"ok", "files", "report"}; bei ok=false wird
-    nichts geschrieben und der Bericht nennt die fehlgeschlagenen Prüfungen.
+    Längen in der STEP-Datei sind mm. Die STEP-Datei ist AP242, mit den Prüfmarkierungen in Orange und semantischem PMI für
+    Lochdurchmesser (Passung oder Abmaße) und angenommene Längen; dazu kommen eine GLB-Datei, marks.json und pmi.json.
+    variant="mid" baut das Bauteil stattdessen mit jedem tolerierten Maß auf Toleranzmitte und schreibt nur
+    <part>_mid.step und report_mid.json (braucht die Toleranztabellen). Das Ergebnis enthält {"ok", "files", "report"};
+    bei ok=false wird nichts geschrieben und der Bericht nennt die fehlgeschlagenen Prüfungen. report["compliance"] führt
+    jedes tolerierte Maß mit in_tolerance true, false oder null (nichts daran gebunden, nicht geprüft) und ist ohne
+    Toleranztabellen null.
 
-    Beispiel: export_step(part="plate")
+    Beispiel: export_step(part="plate", variant="mid")
     """
-    return session.export(part)
+    return session.export(part, variant)
 
 
 def main() -> None:
