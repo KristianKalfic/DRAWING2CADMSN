@@ -26,7 +26,7 @@ TOP_VIEW = [0.21, 0.404, 0.781, 0.69]
 TITLE_BLOCK = [0.467, 0.838, 0.962, 0.973]
 TOOLS = {
     "render_drawing", "read_drawing_text", "measure_drawing", "submit_spec", "extrude", "revolve", "add_holes",
-    "edge_finish", "run_script", "edit_op", "delete_op", "move_op", "get_state", "export_step",
+    "edge_finish", "run_script", "edit_op", "delete_op", "move_op", "get_state", "export_step", "check_spec",
 }
 TOOL_OF_OP = {"extrude": "extrude", "revolve": "revolve", "holes": "add_holes", "edge_finish": "edge_finish",
               "script": "run_script"}
@@ -56,7 +56,7 @@ def call_json(name: str, **args) -> dict:
     return json.loads(call(name, **args).content[0].text)
 
 
-def test_lists_14_tools():
+def test_lists_all_tools():
     assert {t.name for t in asyncio.run(srv.server.list_tools())} == TOOLS
 
 

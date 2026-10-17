@@ -14,7 +14,7 @@ Spezifikation erfassen
 7. Prüfe die Hauptmaße mit `measure_drawing` und `expect` gegen (zum Beispiel `["L=80", "d=30"]`). Ein `MISMATCH` wird zu einem Prüfeintrag mit `issue="conflict"`.
 8. Erfasse Hinweise unter `notes`.
 9. Fülle `expected` aus: den Gesamt-Begrenzungsrahmen in Modellkoordinaten und jedes Loch mit Position und Achse.
-10. Setze für jeden Prüfeintrag `mark_near`: einen Punkt auf jeder Fläche, deren Form durch das unklare Maß bestimmt wird. Rufe danach `submit_spec` auf.
+10. Setze für jeden Prüfeintrag `mark_near`: einen Punkt auf jeder Fläche, deren Form durch das unklare Maß bestimmt wird. Rufe danach einmal `check_spec` auf: Jeder Befund wird zu einem Prüfeintrag (ausgehend von seinem `suggested_review`, ergänzt um `mark_near`) oder in der Spezifikation behoben. Rufe danach `submit_spec` auf.
 
 Geometrie aufbauen
 11. Baue zuerst den Grundkörper; danach ist die Reihenfolge frei, solange der Bericht gültig bleibt.

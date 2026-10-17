@@ -12,7 +12,7 @@ from mcp.server.mcpserver import Image, MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 from pydantic import Field, ValidationError
 
-from d2c import drawing, vector
+from d2c import crosscheck, drawing, vector
 from d2c.ops import EdgeFinishOp, ExtrudeOp, HolesOp, Op, OpBase, RevolveOp, ScriptOp
 from d2c.sandbox import validation_error_message
 from d2c.session import Session
@@ -170,6 +170,25 @@ def measure_drawing(
     if expect:
         out["verify"] = vector.verify(res, expect)
     return out | {"notes": _scale_notes(scale, suggestion, len(printed_dims))}
+
+
+@_tool
+def check_spec(spec: PartSpec, second: PartSpec | None = None) -> dict:
+    """Check a spec for values that cannot be right, before `submit_spec`. Nothing is registered.
+
+    Returns {"findings": [...], "count": n}; count 0 means nothing was found. A finding has `code`, `message`,
+    `where` and `suggested_review`, the draft of a review item (issue, refs, assumption, reason). Rules: a hole
+    that cannot sit inside the expected bbox (HOLE_OUTSIDE_BBOX), overlapping holes (HOLES_OVERLAP), a fillet
+    radius above half the middle bbox edge (FILLET_TOO_BIG). With `second`, an independent second reading of
+    the same page, every difference to `spec` is a finding too (A is `spec`, B is `second`): EXTRACTION_MISMATCH,
+    ONLY_IN_A, ONLY_IN_B, HOLE_COUNT.
+
+    Example: check_spec(spec=<the spec as for submit_spec>, second=<another reading of the page, optional>)
+    """
+    findings = crosscheck.plausibility(spec)
+    if second is not None:
+        findings += crosscheck.compare_specs(spec, second)
+    return {"findings": findings, "count": len(findings)}
 
 
 @_tool
