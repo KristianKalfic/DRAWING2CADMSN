@@ -21,8 +21,8 @@ from contextlib import aclosing
 from pathlib import Path
 
 from claude_agent_sdk import (
-    AssistantMessage, ClaudeAgentOptions, ClaudeSDKError, ResultMessage, TextBlock, ToolResultBlock, ToolUseBlock,
-    UserMessage, query,
+    AssistantMessage, ClaudeAgentOptions, ClaudeSDKError, ResultMessage, SystemMessage, TextBlock, ToolResultBlock,
+    ToolUseBlock, UserMessage, query,
 )
 
 SERVER = "d2c"  # the key the server is registered under: its tools are called mcp__d2c__<tool>
@@ -31,7 +31,12 @@ READ_TOOLS = ("render_drawing", "read_drawing_text", "measure_drawing", "check_s
 BUILD_TOOLS = ("extrude", "revolve", "add_holes", "edge_finish", "run_script", "edit_op", "delete_op", "move_op", "get_state", "export_step")
 # So that no request carries an Anthropic model name: the aliases and the background and subagent models.
 MODEL_VARS = ("ANTHROPIC_DEFAULT_HAIKU_MODEL", "ANTHROPIC_DEFAULT_SONNET_MODEL", "ANTHROPIC_DEFAULT_OPUS_MODEL", "CLAUDE_CODE_SUBAGENT_MODEL")
-SESSION_ENV = {"CLAUDE_CODE_MAX_MCP_DESCRIPTION_LENGTH": "16000"}  # the CLI cuts server instructions at 4096 characters
+SESSION_ENV = {
+    "CLAUDE_CODE_MAX_MCP_DESCRIPTION_LENGTH": "16000",  # the CLI cuts server instructions at 4096 characters
+    # Every tool in the first request. With tool search (on by default for the Anthropic API) the model would first have to
+    # find the tools, and without built-in tools it has nothing to search with.
+    "ENABLE_TOOL_SEARCH": "false",
+}
 SECRETS = ("D2C_LLM_API_KEY", "ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "CLAUDE_CODE_OAUTH_TOKEN")
 TOKENS = ("input_tokens", "output_tokens", "cache_read_input_tokens", "cache_creation_input_tokens")
 MAX_TEXT = 500  # characters of a tool result in its event
@@ -136,6 +141,10 @@ class _Run:
                         for key in TOKENS:
                             self.usage[key] += (msg.usage or {}).get(key) or 0
                         reason = _why(msg) if msg.is_error else reason
+                    elif isinstance(msg, SystemMessage) and msg.subtype == "init":
+                        status = {x.get("name"): x.get("status") for x in msg.data.get("mcp_servers", [])}.get(SERVER)
+                        if status not in (None, "connected", "pending"):  # pending: still connecting
+                            return f"the MCP server {SERVER} is {status}: check the server setting"
                     elif isinstance(msg, AssistantMessage):
                         self.turns.add(msg.message_id or id(msg))  # one response can arrive as several messages
                         for block in msg.content:

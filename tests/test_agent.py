@@ -6,7 +6,9 @@ import sys
 from itertools import count
 
 import pytest
-from claude_agent_sdk import AssistantMessage, ResultError, ResultMessage, TextBlock, ToolResultBlock, ToolUseBlock, UserMessage
+from claude_agent_sdk import (
+    AssistantMessage, ResultError, ResultMessage, SystemMessage, TextBlock, ToolResultBlock, ToolUseBlock, UserMessage,
+)
 
 from d2c import agent
 
@@ -155,6 +157,15 @@ def test_build_session_uses_the_name_the_reader_submitted(monkeypatch):
     assert 'part "other"' in fake.calls[1][0] and (result["ok"], result["part"]) == (True, "other")
 
 
+def test_server_that_failed_to_connect_is_the_reason(monkeypatch):
+    init = lambda status: SystemMessage(subtype="init", data={"mcp_servers": [{"name": "d2c", "status": status, "source": "dynamic"}]})
+    result, events, fake = run(monkeypatch, [init("failed"), say("TOOL-MISSING"), ended()])
+    assert result["ok"] is False and "d2c" in result["reason"] and "failed" in result["reason"] and fake.cut == 1
+    assert [e["type"] for e in events] == ["phase", "done"]
+    result, _, fake = run(monkeypatch, [init("pending"), init("connected"), *EXPORT, say("Done."), ended()])  # still connecting is fine
+    assert result["ok"] and fake.cut == 0
+
+
 def test_reader_without_spec_stops_the_run(monkeypatch):
     result, events, fake = run(monkeypatch, [say("I cannot read this."), ended()], model="reader", build_model="builder")
     assert result["ok"] is False and "submit_spec" in result["reason"] and len(fake.calls) == 1
@@ -293,6 +304,7 @@ def test_backend_env_reaches_the_session(monkeypatch):
     options = fake.calls[0][1]
     assert options.model == "qwen" and options.env == agent.SESSION_ENV | agent.backend_env("http://localhost:11434", "local-test", "qwen")
     assert int(options.env["CLAUDE_CODE_MAX_MCP_DESCRIPTION_LENGTH"]) >= 16000  # the server instructions are never cut
+    assert options.env["ENABLE_TOOL_SEARCH"] == "false"  # all tools in the first request: the model has no tool to search with
     _, _, fake = run(monkeypatch, [ended()])
     assert fake.calls[0][1].model is None and fake.calls[0][1].env == agent.SESSION_ENV
 
