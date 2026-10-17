@@ -197,7 +197,7 @@ def test_marked_faces_colored(tmp_path):
     assert result["ok"] is True
     text = path.read_text()
     assert text.count("COLOUR_RGB") >= 2  # steel body and the orange face
-    assert "ADVANCED_FACE('CHECK rv1'" in text
+    assert "ADVANCED_FACE('PRUEFEN rv1'" in text
     assert "AP242_MANAGED_MODEL_BASED_3D_ENGINEERING_MIM_LF" in text
     back = cq.importers.importStep(str(path)).val()
     assert back.isValid()

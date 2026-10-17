@@ -165,7 +165,7 @@ def test_assumed_thickness_as_semantic_distance(demo):
     assert thickness["value"] == 10.0
     assert sorted(thickness["faces"]) == ["plane z=0", "plane z=10"]
     assert thickness["descriptions"] == [
-        "ANNAHME: plate thickness 10 mm - not dimensioned; measured in the front view - bitte prufen"]
+        "ANNAHME: plate thickness 10 mm - not dimensioned; measured in the front view - bitte pruefen"]
 
 
 def test_pmi_from_skips_what_it_cannot_place(demo):
@@ -209,7 +209,7 @@ def test_mark_and_thread_colors(demo, tmp_path):
     info = read_pmi(demo.path)
     assert info["colors"] == {STEEL: 1, ORANGE: 2}
     assert info["layers"] == {"ASSUMED_CHECK": 2}
-    assert demo.text.count("ADVANCED_FACE('PRUFEN rv1'") == 2
+    assert demo.text.count("ADVANCED_FACE('PRUEFEN rv1'") == 2
 
     # an M5 hole is drilled to 4.2: its cylinder turns green
     tapped = drilled(d=5, kind="tapped", thread="M5")
@@ -235,7 +235,7 @@ def test_two_marks_on_one_face_share_one_color(tmp_path):
     top = [(35, 0, 10)]  # the plate top, for both marks
     marks = [{"id": "rv1", "near": top}, {"id": "rv2", "near": top + [(-35, 0, 10)]}]
     path = export(tmp_path, built(DEMO_OPS), marks=marks)
-    assert Path(path).read_text().count("ADVANCED_FACE('PRUFEN rv1 rv2'") == 1
+    assert Path(path).read_text().count("ADVANCED_FACE('PRUEFEN rv1 rv2'") == 1
     assert read_pmi(path)["colors"] == {STEEL: 1, ORANGE: 1}
 
 
@@ -249,7 +249,7 @@ def test_strings_in_the_file_are_ascii(tmp_path):
     shape = drilled()
     path = export(tmp_path, shape, bore_entry(shape, description="Ø10 Dicke geschätzt"))
     assert Path(path).read_bytes().isascii()
-    assert [d["descriptions"] for d in read_pmi(path)["dimensions"]] == [["dia 10 Dicke geschatzt"]]
+    assert [d["descriptions"] for d in read_pmi(path)["dimensions"]] == [["dia 10 Dicke geschaetzt"]]
 
 
 def test_pmi_face_must_belong_to_the_shape(tmp_path):

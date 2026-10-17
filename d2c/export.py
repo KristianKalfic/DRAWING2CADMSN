@@ -1,6 +1,6 @@
 """Export für NX und die Webansicht: STEP AP242 mit semantischer PMI und Prüfmarkierungen, GLB und einem PMI-Leser.
 
-Eine Prüfmarkierung färbt die Flächen nahe ihren Punkten orange, benennt sie "PRÜFEN <id>" und legt sie
+Eine Prüfmarkierung färbt die Flächen nahe ihren Punkten orange, benennt sie "PRUEFEN <id>" und legt sie
 auf den Layer ASSUMED_CHECK. Gewindebohrungen werden wie in den BCT-Referenzen grün. Maße werden als
 semantische PMI abgelegt: DIMENSIONAL_SIZE für einen Durchmesser, DIMENSIONAL_LOCATION für den Abstand
 zwischen zwei Flächen. Zeichen in der Datei werden in ASCII umgesetzt, da OCCT andere Zeichen roh als
@@ -64,7 +64,7 @@ _COLOR_TYPES = (
     XCAFDoc_ColorType.XCAFDoc_ColorCurv,
 )
 _FOLD = str.maketrans(
-    {"Ø": "dia ", "ø": "dia ", "⌀": "dia ", "°": " deg", "±": "+-", "×": "x", "ß": "ss", "–": "-", "—": "-", "−": "-"}
+    {"Ø": "dia ", "ø": "dia ", "⌀": "dia ", "°": " deg", "±": "+-", "×": "x", "ß": "ss", "ä": "ae", "ö": "oe", "ü": "ue", "Ä": "Ae", "Ö": "Oe", "Ü": "Ue", "–": "-", "—": "-", "−": "-"}
 )
 # XCAFDoc_Dimension keeps [hole, form variance, grade] on this child label. GetClassOfTolerance drops
 # those out-arguments under OCP, so the reader takes them from here.
@@ -72,7 +72,7 @@ _CLASS_TAG = 4
 
 
 def _ascii(text: str) -> str:
-    """The text on one line, with Ø, ° and the like spelled out and accents dropped."""
+    """The text on one line, with Ø, ° and the like spelled out, umlauts as ae, oe, ue and other accents dropped."""
     folded = unicodedata.normalize("NFKD", text.translate(_FOLD)).encode("ascii", "ignore").decode()
     return " ".join(folded.split())
 
@@ -194,7 +194,7 @@ class _Writer:
 
     def mark(self, face: cq.Face, ids: list[str]) -> None:
         label = self.color(face, ORANGE)
-        TDataStd_Name.Set_s(label, ES(_ascii("PRÜFEN " + " ".join(ids))))
+        TDataStd_Name.Set_s(label, ES(_ascii("PRUEFEN " + " ".join(ids))))
         self.layers.SetLayer(label, ES(MARK_LAYER))
 
     def dimension(self, entry: dict) -> None:
@@ -240,7 +240,7 @@ def write_step(
     """Schreibe die Form als STEP AP242 mit Farben, Namen, dem Layer ASSUMED_CHECK und semantischer PMI.
 
     `marks` enthält {"id", "near": [(x, y, z), ...]}: Die Flächen nahe den Punkten werden orange und
-    "PRÜFEN <id>" genannt; trifft eine Fläche mehrere Markierungen, enthält ihr Name alle IDs. `threads`
+    "PRUEFEN <id>" genannt; trifft eine Fläche mehrere Markierungen, enthält ihr Name alle IDs. `threads`
     enthält {"at", "axis", "d"}, wobei d der gebohrte Durchmesser ist: passende Zylinder werden grün.
     PMI-Einträge kommen aus pmi_from (ihre Flächen müssen zu `shape` gehören): {"type": "diameter",
     "face", "value", "tol_upper", "tol_lower", "fit"} oder {"type": "distance", "faces": [a, b],
@@ -349,7 +349,7 @@ def write_glb(shape: cq.Shape, path: str, marks: Sequence[dict], threads: Sequen
     for face in threaded:
         assembly.addSubshape(face, name="thread", color=cq.Color(*GREEN))
     for face, ids in marked.items():
-        assembly.addSubshape(face, name="PRÜFEN " + " ".join(ids), color=cq.Color(*ORANGE))
+        assembly.addSubshape(face, name="PRUEFEN " + " ".join(ids), color=cq.Color(*ORANGE))
     assembly.export(path, tolerance=0.01, angularTolerance=0.1)
     _patch_materials(path)
     hit = {i for ids in marked.values() for i in ids}
