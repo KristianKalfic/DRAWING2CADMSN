@@ -4,6 +4,8 @@ import asyncio
 import json
 import mimetypes
 import os
+import subprocess
+import sys
 import unicodedata
 import urllib.request
 import uuid
@@ -154,9 +156,27 @@ def _ollama_models() -> list[str]:
         return []
 
 
+def _claude_login() -> bool:
+    """Ob der Agent Claude erreicht: Schlüssel oder Token in der Umgebung oder die Anmeldung von Claude Code auf diesem
+    Rechner (unter Linux eine Datei, unter macOS ein Schlüsselbund-Eintrag, der nur gesucht und nicht gelesen wird)."""
+    if os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("CLAUDE_CODE_OAUTH_TOKEN"):
+        return True
+    if (Path.home() / ".claude" / ".credentials.json").is_file():
+        return True
+    if sys.platform != "darwin":
+        return False
+    try:
+        return subprocess.run(["security", "find-generic-password", "-s", "Claude Code-credentials"],
+                              capture_output=True, timeout=5).returncode == 0
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+
+
 def _model_choices() -> list[dict]:
-    """What the model field offers: value "<backend>/<model>", the label and the group it is listed under."""
-    choices = [{"value": f"claude/{m}", "label": label, "group": "Claude (Login oder API-Schlüssel)"}
+    """Was das Modellfeld anbietet: Wert "<backend>/<modell>", Beschriftung, Gruppe und ob die Wahl gesperrt ist."""
+    login = _claude_login()
+    group = "Claude" if login else "Claude (keine Anmeldung gefunden)"
+    choices = [{"value": f"claude/{m}", "label": label, "group": group, "disabled": not login}
                for m, label in CLAUDE_MODELS]
     base_url, model = os.environ.get("D2C_LLM_BASE_URL"), os.environ.get("D2C_LLM_MODEL")
     if base_url and model:

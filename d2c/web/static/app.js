@@ -1260,9 +1260,12 @@ async function loadModels() {
         groups.set(m.group, group);
         select.append(group);
       }
-      groups.get(m.group).append(new Option(m.label, m.value));
+      const option = new Option(m.label, m.value);
+      option.disabled = Boolean(m.disabled);
+      groups.get(m.group).append(option);
     }
-    if (models.length) select.value = models[0].value;
+    const first = models.find((m) => !m.disabled);
+    if (first) select.value = first.value;
   } catch { /* without the list the agent picks its own model */ }
 }
 

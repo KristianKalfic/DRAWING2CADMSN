@@ -27,11 +27,21 @@ docker run -i --rm --network none \
 
 ## Web-Oberfläche: Zeichnung hochladen, Modell wählen, STEP erstellen
 
+Auf dem eigenen Rechner mit Claude Code (Docker und [uv](https://docs.astral.sh/uv/) vorausgesetzt):
+
+```
+./start.sh
+```
+
+Die Web-Oberfläche nutzt dann die Anmeldung von Claude Code, ein Schlüssel ist nicht nötig. Das CAD-Werkzeug läuft je Lauf in einem Docker-Container ohne Netz.
+
+Alles in Containern (Claude dann mit `CLAUDE_CODE_OAUTH_TOKEN` oder `ANTHROPIC_API_KEY` in `.env`):
+
 ```
 docker compose up --build
 ```
 
-Danach `http://localhost:8080` öffnen:
+In beiden Fällen `http://localhost:8080` öffnen:
 
 1. Zeichnung (PDF, PNG oder JPG) ablegen und einen Teilnamen eingeben.
 2. Modell auswählen.
@@ -39,7 +49,7 @@ Danach `http://localhost:8080` öffnen:
 
 Die Auswahl bietet:
 
-- **Claude** (Sonnet, Opus, Haiku): im Container mit `CLAUDE_CODE_OAUTH_TOKEN` aus `claude setup-token` oder mit `ANTHROPIC_API_KEY` in `.env`.
+- **Claude** (Sonnet, Opus, Haiku): mit `./start.sh` über die Anmeldung von Claude Code, im Container mit `CLAUDE_CODE_OAUTH_TOKEN` aus `claude setup-token` oder mit `ANTHROPIC_API_KEY` in `.env`. Findet die Web-Oberfläche keine Anmeldung, ist Claude in der Auswahl gesperrt.
 - **Ollama:** alle lokal installierten Modelle. Ollama muss mit großem Kontext laufen: `OLLAMA_CONTEXT_LENGTH=64000 ollama serve`.
 - **OpenRouter oder ein anderer Anthropic-kompatibler Endpunkt:** `D2C_LLM_BASE_URL`, `D2C_LLM_API_KEY` und `D2C_LLM_MODEL` in `.env`.
 

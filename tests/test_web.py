@@ -1,6 +1,7 @@
 """Web app: part list and detail, file downloads, upload and live run events, on a really exported part."""
 import json
 import shutil
+import sys
 from pathlib import Path
 
 import pymupdf
@@ -9,7 +10,7 @@ from starlette.testclient import TestClient
 
 from d2c.session import Session
 from d2c.spec import PartSpec
-from d2c.web.app import _agent_settings, create_app
+from d2c.web.app import _agent_settings, _model_choices, create_app
 
 FIXTURES = Path(__file__).parent / "fixtures"
 PDF = FIXTURES / "demo_drawing.pdf"
@@ -367,3 +368,17 @@ def test_index_and_vendored_viewer_served(client):
         assert "STEP erstellen" in html and 'id="model"' in html and 'aria-label="Teile"' in html
         assert "model-viewer" in html
         assert client.get("/static/vendor/model-viewer.min.js").status_code == 200
+
+
+def test_claude_choices_follow_the_login(monkeypatch, tmp_path):
+    set_llm_env(monkeypatch, tmp_path, D2C_OLLAMA_URL="http://127.0.0.1:9")
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    monkeypatch.setattr(sys, "platform", "linux")
+    claude = lambda: [m for m in _model_choices() if m["value"].startswith("claude/")]  # noqa: E731
+    assert len(claude()) == 3 and all(m["disabled"] for m in claude())
+    (tmp_path / ".claude").mkdir()
+    (tmp_path / ".claude" / ".credentials.json").write_text("{}")
+    assert not any(m["disabled"] for m in claude()) and claude()[0]["group"] == "Claude"
+    (tmp_path / ".claude" / ".credentials.json").unlink()
+    monkeypatch.setenv("CLAUDE_CODE_OAUTH_TOKEN", "token")
+    assert not any(m["disabled"] for m in claude())
