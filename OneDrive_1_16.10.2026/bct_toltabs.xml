@@ -1,0 +1,197 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<!-- PLEASE PUT YOUR COMMENT HERE OR BELOW THIS ENTRY!!! -->
+<TOLTABS>
+    <toltable entry="decimal_places" type="decimal_places_toltable" desc="Decimal places type">
+        <LIN_TOLTAB>
+            <!-- Defines a specific tolerance only for fractions.
+                 Note: This tolerance will be used for all
+                       upcoming fractions.
+            <value format="x/y"    upper="0.3"  lower="-0.3"/>
+            -->
+            <value format="x"      upper="0.3"  lower="-0.3"/>
+            <value format="x.x"    upper="0.2"  lower="-0.2"/>
+            <value format="x.xx"   upper="0.1"  lower="-0.1"/>
+            <value format="x.xxx"  upper="0.05" lower="-0.05"/>
+            <value format="x.xxxx" upper="0.01" lower="-0.01"/>
+        </LIN_TOLTAB>
+        <ANGLE_TOLTAB>
+            <value format="x"      upper="0.3"  lower="-0.3"/>
+            <value format="x.x"    upper="0.2"  lower="-0.2"/>
+            <value format="x.xx"   upper="0.1"  lower="-0.1"/>
+            <value format="x.xxx"  upper="0.05" lower="-0.05"/>
+            <value format="x.xxxx" upper="0.01" lower="-0.01"/>
+        </ANGLE_TOLTAB>
+        <BORE_TOLTAB>
+            <value format="x"      upper="0.3"  lower="-0.3"/>
+            <value format="x.x"    upper="0.2"  lower="-0.2"/>
+            <value format="x.xx"   upper="0.1"  lower="-0.1"/>
+            <value format="x.xxx"  upper="0.05" lower="-0.05"/>
+            <value format="x.xxxx" upper="0.01" lower="-0.01"/>
+        </BORE_TOLTAB>
+        <CHAMFER_TOLTAB>
+            <value format="x"      upper="0.3"  lower="-0.3"/>
+            <value format="x.x"    upper="0.2"  lower="-0.2"/>
+            <value format="x.xx"   upper="0.1"  lower="-0.1"/>
+            <value format="x.xxx"  upper="0.05" lower="-0.05"/>
+            <value format="x.xxxx" upper="0.01" lower="-0.01"/>
+        </CHAMFER_TOLTAB>
+    </toltable>
+    <toltable entry="DIN ISO 2768 (fine/fein)" type="general_toltable" desc="According to/nach DIN ISO 2768 (fine/fein)">
+        <LIN_TOLTAB>
+            <value from="0.0" up_to="0.5"    upper="0.0"  lower="-0.0"/>
+            <value from="0.5"    to="3.0"    upper="0.05" lower="-0.05"/>
+            <value over="3.0"    to="6.0"    upper="0.05" lower="-0.05"/>
+            <value over="6.0"    to="30.0"   upper="0.1"  lower="-0.1"/>
+            <value over="30.0"   to="120.0"  upper="0.15" lower="-0.15"/>
+            <value over="120.0"  to="400.0"  upper="0.2"  lower="-0.2"/>
+            <value over="400.0"  to="1000.0" upper="0.3"  lower="-0.3"/>
+            <value over="1000.0" to="2000.0" upper="0.5"  lower="-0.5"/>
+        </LIN_TOLTAB>
+        <ANGLE_TOLTAB>
+            <value over="0.0"    to="0.5"    upper="0.0"  lower="-0.0"/>
+            <value over="0.5"    to="3.0"    upper="0.05" lower="-0.05"/>
+            <value over="3.0"    to="6.0"    upper="0.05" lower="-0.05"/>
+            <value over="6.0"    to="30.0"   upper="0.1"  lower="-0.1"/>
+            <value over="30.0"   to="120.0"  upper="0.15" lower="-0.15"/>
+            <value over="120.0"  to="400.0"  upper="0.2"  lower="-0.2"/>
+            <value over="400.0"  to="1000.0" upper="0.3"  lower="-0.3"/>
+            <value over="1000.0" to="2000.0" upper="0.5"  lower="-0.5"/>
+        </ANGLE_TOLTAB>
+        <BORE_TOLTAB>
+            <value over="0.0"    to="0.5"    upper="0.0"  lower="-0.0"/>
+            <value over="0.5"    to="3.0"    upper="0.05" lower="-0.05"/>
+            <value over="3.0"    to="6.0"    upper="0.05" lower="-0.05"/>
+            <value over="6.0"    to="30.0"   upper="0.1"  lower="-0.1"/>
+            <value over="30.0"   to="120.0"  upper="0.15" lower="-0.15"/>
+            <value over="120.0"  to="400.0"  upper="0.2"  lower="-0.2"/>
+            <value over="400.0"  to="1000.0" upper="0.3"  lower="-0.3"/>
+            <value over="1000.0" to="2000.0" upper="0.5"  lower="-0.5"/>
+        </BORE_TOLTAB>
+        <CHAMFER_TOLTAB>
+            <value over="0.0" to="0.5"    upper="0.0" lower="-0.0"/>
+            <value over="0.5" to="3.0"    upper="0.2" lower="-0.2"/>
+            <value over="3.0" to="6.0"    upper="0.5" lower="-0.5"/>
+            <value over="6.0" to="2000.0" upper="1.0" lower="-1.0"/>
+        </CHAMFER_TOLTAB>
+    </toltable>
+    <toltable entry="DIN ISO 2768 (medium/mittel)" type="general_toltable" desc="According to/nach DIN ISO 2768 (medium/mittel)">
+        <LIN_TOLTAB>
+            <value from="0.0" up_to="0.5"    upper="0.0" lower="-0.0"/>
+            <value from="0.5"    to="3.0"    upper="0.1" lower="-0.1"/>
+            <value over="3.0"    to="6.0"    upper="0.1" lower="-0.1"/>
+            <value over="6.0"    to="30.0"   upper="0.2" lower="-0.2"/>
+            <value over="30.0"   to="120.0"  upper="0.3" lower="-0.3"/>
+            <value over="120.0"  to="400.0"  upper="0.5" lower="-0.5"/>
+            <value over="400.0"  to="1000.0" upper="0.8" lower="-0.8"/>
+            <value over="1000.0" to="2000.0" upper="1.2" lower="-1.2"/>
+            <value over="2000.0" to="4000.0" upper="2.0" lower="-2.0"/>
+        </LIN_TOLTAB>
+        <ANGLE_TOLTAB>
+            <value over="0.0"    to="0.5"    upper="0.0" lower="-0.0"/>
+            <value over="0.5"    to="3.0"    upper="0.1" lower="-0.1"/>
+            <value over="3.0"    to="6.0"    upper="0.1" lower="-0.1"/>
+            <value over="6.0"    to="30.0"   upper="0.2" lower="-0.2"/>
+            <value over="30.0"   to="120.0"  upper="0.3" lower="-0.3"/>
+            <value over="120.0"  to="400.0"  upper="0.5" lower="-0.5"/>
+            <value over="400.0"  to="1000.0" upper="0.8" lower="-0.8"/>
+            <value over="1000.0" to="2000.0" upper="1.2" lower="-1.2"/>
+            <value over="2000.0" to="4000.0" upper="2.0" lower="-2.0"/>
+        </ANGLE_TOLTAB>
+        <BORE_TOLTAB>
+            <value over="0.0"    to="0.5"    upper="0.0" lower="-0.0"/>
+            <value over="0.5"    to="3.0"    upper="0.1" lower="-0.1"/>
+            <value over="3.0"    to="6.0"    upper="0.1" lower="-0.1"/>
+            <value over="6.0"    to="30.0"   upper="0.2" lower="-0.2"/>
+            <value over="30.0"   to="120.0"  upper="0.3" lower="-0.3"/>
+            <value over="120.0"  to="400.0"  upper="0.5" lower="-0.5"/>
+            <value over="400.0"  to="1000.0" upper="0.8" lower="-0.8"/>
+            <value over="1000.0" to="2000.0" upper="1.2" lower="-1.2"/>
+            <value over="2000.0" to="4000.0" upper="2.0" lower="-2.0"/>
+        </BORE_TOLTAB>
+        <CHAMFER_TOLTAB>
+            <value over="0.0" to="0.5"    upper="0.0" lower="-0.0"/>
+            <value over="0.5" to="3.0"    upper="0.2" lower="-0.2"/>
+            <value over="3.0" to="6.0"    upper="0.5" lower="-0.5"/>
+            <value over="6.0" to="4000.0" upper="1.0" lower="-1.0"/>
+        </CHAMFER_TOLTAB>
+    </toltable>
+    <toltable entry="DIN ISO 2768 (coarse/grob)" type="general_toltable" desc="According to/nach DIN ISO 2768 (coarse/grob)">
+        <LIN_TOLTAB>
+            <value from="0.0" up_to="0.5"    upper="0.0"  lower="-0.0"/>
+            <value from="0.5"    to="3.0"    upper="0.2"  lower="-0.2"/>
+            <value over="3.0"    to="6.0"    upper="0.3"  lower="-0.3"/>
+            <value over="6.0"    to="30.0"   upper="0.5"  lower="-0.5"/>
+            <value over="30.0"   to="120.0"  upper="0.8"  lower="-0.8"/>
+            <value over="120.0"  to="400.0"  upper="1.2"  lower="-1.2"/>
+            <value over="400.0"  to="1000.0" upper="2.0"  lower="-2.0"/>
+            <value over="1000.0" to="2000.0" upper="3.0"  lower="-3.0"/>
+            <value over="2000.0" to="4000.0" upper="4.0"  lower="-4.0"/>
+        </LIN_TOLTAB>
+        <ANGLE_TOLTAB>
+            <value over="0.0"    to="0.5"    upper="0.0"  lower="-0.0"/>
+            <value over="0.5"    to="3.0"    upper="0.15" lower="-0.15"/>
+            <value over="3.0"    to="6.0"    upper="0.2"  lower="-0.2"/>
+            <value over="6.0"    to="30.0"   upper="0.5"  lower="-0.5"/>
+            <value over="30.0"   to="120.0"  upper="0.8"  lower="-0.8"/>
+            <value over="120.0"  to="400.0"  upper="1.2"  lower="-1.2"/>
+            <value over="400.0"  to="1000.0" upper="2.0"  lower="-2.0"/>
+            <value over="1000.0" to="2000.0" upper="3.0"  lower="-3.0"/>
+            <value over="2000.0" to="4000.0" upper="4.0"  lower="-4.0"/>
+        </ANGLE_TOLTAB>
+        <BORE_TOLTAB>
+            <value over="0.0"    to="0.5"    upper="0.0"  lower="-0.0"/>
+            <value over="0.5"    to="3.0"    upper="0.2"  lower="-0.2"/>
+            <value over="3.0"    to="6.0"    upper="0.3"  lower="-0.3"/>
+            <value over="6.0"    to="30.0"   upper="0.5"  lower="-0.5"/>
+            <value over="30.0"   to="120.0"  upper="0.8"  lower="-0.8"/>
+            <value over="120.0"  to="400.0"  upper="1.2"  lower="-1.2"/>
+            <value over="400.0"  to="1000.0" upper="2.0"  lower="-2.0"/>
+            <value over="1000.0" to="2000.0" upper="3.0"  lower="-3.0"/>
+            <value over="2000.0" to="4000.0" upper="4.0"  lower="-4.0"/>
+        </BORE_TOLTAB>
+        <CHAMFER_TOLTAB>
+            <value over="0.0" to="0.5"    upper="0.0" lower="-0.0"/>
+            <value over="0.5" to="3.0"    upper="0.4" lower="-0.4"/>
+            <value over="3.0" to="6.0"    upper="1.0" lower="-1.0"/>
+            <value over="6.0" to="4000.0" upper="2.0" lower="-2.0"/>
+        </CHAMFER_TOLTAB>
+    </toltable>
+    <toltable entry="DIN ISO 2768 (very coarse/sehr grob)" type="general_toltable" desc="According to/nach DIN ISO 2768 (very coarse/sehr grob)">
+        <LIN_TOLTAB>
+            <value from="0.0"    to="3.0"    upper="0.0" lower="-0.0"/>
+            <value over="3.0"    to="6.0"    upper="0.5" lower="-0.5"/>
+            <value over="6.0"    to="30.0"   upper="1.0" lower="-1.0"/>
+            <value over="30.0"   to="120.0"  upper="1.5" lower="-1.5"/>
+            <value over="120.0"  to="400.0"  upper="2.5" lower="-2.5"/>
+            <value over="400.0"  to="1000.0" upper="4.0" lower="-4.0"/>
+            <value over="1000.0" to="2000.0" upper="6.0" lower="-6.0"/>
+            <value over="2000.0" to="4000.0" upper="8.0" lower="-8.0"/>
+        </LIN_TOLTAB>
+        <ANGLE_TOLTAB>
+            <value over="0.0"    to="3.0"    upper="0.0" lower="-0.0"/>
+            <value over="3.0"    to="6.0"    upper="0.5" lower="-0.5"/>
+            <value over="6.0"    to="30.0"   upper="1.0" lower="-1.0"/>
+            <value over="30.0"   to="120.0"  upper="1.5" lower="-1.5"/>
+            <value over="120.0"  to="400.0"  upper="2.5" lower="-2.5"/>
+            <value over="400.0"  to="1000.0" upper="4.0" lower="-4.0"/>
+            <value over="1000.0" to="2000.0" upper="6.0" lower="-6.0"/>
+            <value over="2000.0" to="4000.0" upper="8.0" lower="-8.0"/>
+        </ANGLE_TOLTAB>
+        <BORE_TOLTAB>
+            <value over="0.0"    to="3.0"    upper="0.0" lower="-0.0"/>
+            <value over="3.0"    to="6.0"    upper="0.5" lower="-0.5"/>
+            <value over="6.0"    to="30.0"   upper="1.0" lower="-1.0"/>
+            <value over="30.0"   to="120.0"  upper="1.5" lower="-1.5"/>
+            <value over="120.0"  to="400.0"  upper="2.5" lower="-2.5"/>
+            <value over="400.0"  to="1000.0" upper="4.0" lower="-4.0"/>
+            <value over="1000.0" to="2000.0" upper="6.0" lower="-6.0"/>
+            <value over="2000.0" to="4000.0" upper="8.0" lower="-8.0"/>
+        </BORE_TOLTAB>
+        <CHAMFER_TOLTAB>
+            <value over="0.0" to="0.5"    upper="0.0" lower="-0.0"/>
+            <value over="0.5" to="3.0"    upper="0.4" lower="-0.4"/>
+            <value over="3.0" to="6.0"    upper="1.0" lower="-1.0"/>
+            <value over="6.0" to="4000.0" upper="2.0" lower="-2.0"/>
+        </CHAMFER_TOLTAB>
+    </toltable>
+</TOLTABS>
