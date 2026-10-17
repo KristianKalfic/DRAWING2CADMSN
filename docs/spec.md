@@ -2,7 +2,7 @@
 
 ## 1. Zweck
 
-Drawing2CAD erzeugt aus einer technischen 2D-Zeichnung (Vektor-PDF) ein geprüftes 3D-Volumenmodell im STEP-Format. Ein Sprachmodell liest die Zeichnung und baut das Teil ausschließlich über die Tools eines lokal laufenden MCP-Servers. Der Server prüft nach jedem Bauschritt den Volumenkörper, die Maße und den STEP-Export und meldet das Ergebnis maschinenlesbar zurück. Jede Annahme steht mit Begründung in einer Review-Liste und ist im STEP farbig markiert.
+Drawing2CAD erzeugt aus einer technischen 2D-Zeichnung (Vektor-PDF) ein geprüftes 3D-Volumenmodell im STEP-Format. Ein Sprachmodell liest die Zeichnung und baut das Teil ausschließlich über die Werkzeuge eines lokal laufenden MCP-Servers. Der Server prüft nach jedem Bauschritt den Volumenkörper, die Maße und den STEP-Export und meldet das Ergebnis maschinenlesbar zurück. Jede Annahme steht mit Begründung in einer Prüfliste und ist im STEP farbig markiert.
 
 ## 2. Geltungsbereich
 
@@ -18,16 +18,16 @@ Drawing2CAD erzeugt aus einer technischen 2D-Zeichnung (Vektor-PDF) ein geprüft
 | ID | Anforderung | Umsetzung |
 | --- | --- | --- |
 | A1 | Konturen, Maße, Bohrungen, Grund-Features und Hinweise einer Zeichnung erkennen | `render_drawing`, `read_drawing_text`, `measure_drawing`; Ergebnis ist die `PartSpec` (5.1) |
-| A2 | Mehrdeutige oder fehlende Information markieren statt ungeprüft interpretieren | Review-Pflicht der `PartSpec` (5.1), Review-Liste (9) |
-| A3 | Das 3D-Modell entsteht ausschließlich über den MCP-Server und wird als STEP exportiert | Bau-Tools und `export_step` (6) |
+| A2 | Mehrdeutige oder fehlende Information markieren statt ungeprüft interpretieren | Prüfvermerkpflicht der `PartSpec` (5.1), Prüfliste (9) |
+| A3 | Das 3D-Modell entsteht ausschließlich über den MCP-Server und wird als STEP exportiert | Bauwerkzeuge und `export_step` (6) |
 | A4 | Der MCP-Server läuft vollständig lokal, ohne Cloud-Abhängigkeit | Docker-Image, Transport stdio, Start mit `--network none` (14) |
-| A5 | Modellskripte laufen isoliert: ohne Netzwerk, mit Zeitlimit | Build-Unterprozess mit Timeout und Ressourcengrenzen (14) |
-| A6 | Skriptbarer Open-Source-CAD-Kern auf OpenCascade-Basis | CadQuery 2.8.0 mit OCP 7.9.3 |
-| A7 | Wenige Tools mit strukturierten Parametern, freier Code nur als Rückfall | 14 Tools, `run_script` als Rückfall (6) |
-| A8 | Nach jedem Build prüfen und maschinenlesbar zurückmelden: gültiger Volumenkörper, Maße gegen die Zeichnung, fehlerfreier STEP-Re-Import | `checks.py`, BuildReport (5.3, 7) |
+| A5 | Modellskripte laufen isoliert: ohne Netzwerk, mit Zeitlimit | Unterprozess für den Modellaufbau mit Zeitlimit und Ressourcengrenzen (14) |
+| A6 | Skriptgesteuerter quelloffener CAD-Kern auf OpenCascade-Basis | CadQuery 2.8.0 mit OCP 7.9.3 |
+| A7 | Wenige Werkzeuge mit strukturierten Parametern, freier Code nur als Rückfall | 14 Werkzeuge, `run_script` als Rückfall (6) |
+| A8 | Nach jedem Modellaufbau prüfen und maschinenlesbar zurückmelden: gültiger Volumenkörper, Maße gegen die Zeichnung, fehlerfreier STEP-Rückimport | `checks.py`, BuildReport (5.3, 7) |
 | A9 | Unabhängig vom verwendeten Sprachmodell | MCP-Standard, Arbeitsanleitung `instructions.md` (6) |
-| A10 | Unklare Information im 3D-Modell markieren | Orange Flächen, benannt nach dem Review-Eintrag (8.1) |
-| A11 | Fehlende Maße aus der Zeichnungsgeometrie annehmen und mit Begründung führen | `measure_drawing`, `assumed` mit `assumption_basis` und Review-Eintrag (5.1) |
+| A10 | Unklare Information im 3D-Modell markieren | Orange Flächen, benannt nach dem Prüfeintrag (8.1) |
+| A11 | Fehlende Maße aus der Zeichnungsgeometrie annehmen und mit Begründung führen | `measure_drawing`, `assumed` mit `assumption_basis` und Prüfeintrag (5.1) |
 | A12 | Toleranzen auslesen, auf Toleranzmitte legen, Einhaltung prüfen | Textebene liest Toleranzen und Passungen; Bibliothek `tolerances.py` (10) |
 | A13 | STEP AP242 mit semantischem PMI | Bibliothek `export.py` (8.2) |
 
@@ -42,42 +42,42 @@ Quelle der Grafik: `architektur.excalidraw` (Excalidraw).
 ### 4.2 Ablauf
 
 1. **Zeichnung lesen:** `render_drawing` für jede Seite und für Ausschnitte, `read_drawing_text` für die Textebene, `measure_drawing` für Maße aus der Vektorgeometrie und die Prüfung des Maßstabs.
-2. **Beschreibung einreichen:** `submit_spec` prüft die `PartSpec` gegen Schema, Konsistenz- und Review-Regeln und legt das Teil an.
+2. **Beschreibung einreichen:** `submit_spec` prüft die `PartSpec` gegen Schema, Konsistenz- und Prüfvermerkregeln und legt das Teil an.
 3. **Bauen:** `extrude`, `revolve`, `add_holes` und `edge_finish`, als Rückfall `run_script`. Jede Änderung baut alle Operationen in einem neuen Unterprozess neu und prüft das Ergebnis.
 4. **Korrigieren:** `edit_op`, `delete_op` und `move_op` ändern die Liste der Operationen, `get_state` zeigt den Stand.
-5. **Exportieren:** `export_step` schreibt STEP, Prüfbericht und Review-Liste, wenn alle Prüfungen bestehen.
+5. **Exportieren:** `export_step` schreibt STEP, Prüfbericht und Prüfliste, wenn alle Prüfungen bestehen.
 
 ### 4.3 Entwurfsentscheidungen
 
-1. **Das Modell ist eine Liste von Operationen.** Jede Änderung baut alle Operationen in einem frischen Prozess neu. Jeder Build ist damit isoliert, aus `ops.json` reproduzierbar und per `edit_op` änderbar.
+1. **Das Modell ist eine Liste von Operationen.** Jede Änderung baut alle Operationen in einem frischen Prozess neu. Jeder Neuaufbau ist damit isoliert, aus `ops.json` reproduzierbar und per `edit_op` änderbar.
 2. **Explizite globale Koordinaten statt Flächen-Selektoren.** Jede Operation nennt ihre Ebene (`XY`, `XZ`, `YZ` oder `custom`, verschoben entlang der Normalen) und ihre Position. Kleinere Sprachmodelle arbeiten damit zuverlässiger.
 3. **Kanten für Rundung und Fase über nahe Punkte** (`near`). Findet die Auswahl keine Kante, ist das ein Fehler, nie stilles Nichtstun.
-4. **Review-Pflicht im Schema.** Jedes Maß mit `assumed = true` oder `confidence < 0.8` muss in einem Review-Eintrag stehen, sonst lehnt `submit_spec` die Beschreibung ab.
-5. **Markierung im Modell.** Flächen nahe den Punkten `mark_near` eines Review-Eintrags werden im STEP orange gefärbt und nach dem Eintrag benannt.
-6. **Isolation in Schichten.** Container ohne Netzwerk, Build in einem Unterprozess mit Zeitlimit und Ressourcengrenzen, für `run_script` zusätzlich eine Prüfung des Syntaxbaums. Die Prüfung liefert verständliche Fehlermeldungen; die Grenze bilden Container und Prozess.
+4. **Prüfvermerkpflicht im Schema.** Jedes Maß mit `assumed = true` oder `confidence < 0.8` muss in einem Prüfeintrag stehen, sonst lehnt `submit_spec` die Beschreibung ab.
+5. **Markierung im Modell.** Flächen nahe den Punkten `mark_near` eines Prüfeintrags werden im STEP orange gefärbt und nach dem Eintrag benannt.
+6. **Isolation in Schichten.** Container ohne Netzwerk, Modellaufbau in einem Unterprozess mit Zeitlimit und Ressourcengrenzen, für `run_script` zusätzlich eine Prüfung des Syntaxbaums. Die Prüfung liefert verständliche Fehlermeldungen; die Grenze bilden Container und Prozess.
 7. **Der Server kennt keine Referenzdaten.** Er liest nur PDF-Zeichnungen unterhalb von `D2C_DATA`.
 8. **Server und Sprachmodell sind getrennt.** Der Server braucht kein Netzwerk. Jeder MCP-Client kann ihn nutzen.
 9. **Zwei Phasen, ein Vertrag.** In der Lesephase füllt ein Modell mit Bildverständnis die `PartSpec`. In der Bauphase setzt ein beliebiges Modell sie in Operationen um, auch ohne Bildverständnis.
-10. **Rückverfolgbarkeit.** Jeder Wert einer Operation, der einem gedruckten Maß entspricht, ist über `refs` an dessen id gebunden. Daraus entsteht die Tabelle „Traceability“ der Review-Liste. Ungebundene Größen stehen in „Values without dimension reference“.
+10. **Rückverfolgbarkeit.** Jeder Wert einer Operation, der einem gedruckten Maß entspricht, ist über `refs` an dessen id gebunden. Daraus entsteht der Abschnitt „Rückverfolgbarkeit“ der Prüfliste. Ungebundene Größen stehen im Abschnitt „Werte ohne Maßbezug“.
 11. **Die Web-Oberfläche hat keinen eigenen Zustand.** Sie zeigt den Ergebnisordner.
 
 ### 4.4 Komponenten
 
 | Modul | Aufgabe |
 | --- | --- |
-| `server.py`, `instructions.md` | MCP-Server mit 14 Tools, Arbeitsanleitung für das Modell |
+| `server.py`, `instructions.md` | MCP-Server mit 14 Werkzeugen, Arbeitsanleitung für das Modell |
 | `drawing.py` | Pfadprüfung, Seiteninformation, PDF-Seite oder Ausschnitt als PNG |
 | `text.py` | Textebene lesen, Maßtexte mit Toleranz, Passung und Symbolen zerlegen |
 | `vector.py` | Kreise, Bögen und Ausdehnung aus der Vektorgeometrie, Maßstabsvorschlag, Prüfung von Maßangaben |
-| `spec.py` | `PartSpec` mit Konsistenz- und Review-Regeln |
+| `spec.py` | `PartSpec` mit Konsistenz- und Prüfvermerkregeln |
 | `ops.py` | Operationsmodelle und Aufbau des Körpers mit CadQuery |
 | `session.py` | Teile, Operationslisten und Persistenz unter `results/` |
-| `sandbox.py`, `worker.py` | Build im Unterprozess mit Zeitlimit und Ressourcengrenzen, Prüfung von Skripten |
-| `checks.py` | Volumenkörper, Maße und Bohrungen, STEP-Export mit Farben und Re-Import |
-| `review.py` | Review-Liste als Markdown und JSON |
+| `sandbox.py`, `worker.py` | Modellaufbau im Unterprozess mit Zeitlimit und Ressourcengrenzen, Prüfung von Skripten |
+| `checks.py` | Volumenkörper, Maße und Bohrungen, STEP-Export mit Farben und Rückimport |
+| `review.py` | Prüfliste als Markdown und JSON |
 | `export.py` | Bibliothek: STEP AP242 mit semantischem PMI, GLB, PMI-Leser |
 | `tolerances.py` | Bibliothek: ISO 286, ISO 2768, Toleranzmitte, Einhaltung |
-| `web/` | Ergebnisansicht im Browser, Upload, Läufe per Server-Sent Events |
+| `web/` | Ergebnisansicht im Browser, Hochladen, Läufe per Server-Sent Events |
 
 ### 4.5 Technologie
 
@@ -123,13 +123,13 @@ ReviewItem    id, refs, issue (missing, ambiguous, low_confidence, conflict, con
 Regeln, geprüft beim Einreichen:
 
 - Unbekannte Felder sowie NaN und Unendlich werden abgelehnt.
-- Alle ids sind eindeutig über Ansichten, Maße, Features, Hinweise und Review-Einträge.
+- Alle IDs sind über Ansichten, Maße, Konstruktionsmerkmale, Hinweise und Prüfeinträge hinweg eindeutig.
 - Verweise müssen existieren: `refs` auf Maße, Features oder Hinweise; `dim_ids` auf Maße; `source.view` auf Ansichten.
-- **Review-Pflicht:** Jedes Maß mit `assumed = true` oder `confidence < 0.8` steht in den `refs` mindestens eines Review-Eintrags.
-- Ein angenommenes Maß braucht eine nicht leere `assumption_basis`, jeder Review-Eintrag eine nicht leere `assumption` und `reason`.
+- **Prüfvermerkpflicht:** Jedes Maß mit `assumed = true` oder `confidence < 0.8` steht in den `refs` mindestens eines Prüfeintrags.
+- Ein angenommenes Maß braucht eine nicht leere `assumption_basis`, jeder Prüfeintrag eine nicht leere `assumption` und `reason`.
 - Bei nicht angenommenen Maßen enthält `text` eine Zahl gleich `value`. Das Komma gilt als Dezimaltrenner: „76,2“ ergibt 76,2, nie 762.
 - `tol_upper` und `tol_lower` werden nur gemeinsam angegeben, `tol_lower` liegt nicht über `tol_upper`.
-- Ein Feature vom Typ `hole` verlangt mindestens einen Eintrag in `expected.holes`. Eine Achse darf nicht der Nullvektor sein.
+- Ein Konstruktionsmerkmal vom Typ `hole` verlangt mindestens einen Eintrag in `expected.holes`. Eine Achse darf nicht der Nullvektor sein.
 - Alle Verstöße kommen gesammelt in einer Fehlermeldung zurück.
 
 ### 5.2 Operationen
@@ -149,11 +149,11 @@ Regeln, geprüft beim Einreichen:
 - **Gewinde:** `kind = tapped` mit `thread` wie „M5“ oder „M10x1“ und `d` gleich dem Nenndurchmesser. Modelliert wird die Kernlochbohrung ohne Gewindegeometrie: mit `thread_core = tap_drill` nach Tabelle (M2 1,6 · M2,5 2,05 · M3 2,5 · M4 3,3 · M5 4,2 · M6 5,0 · M8 6,8 · M10 8,5 · M12 10,2, sonst Nenndurchmesser minus Steigung), mit `minor` als d − 1,082532 · P. Regelsteigungen sind für M2, M2,5, M3, M4, M5, M6, M8, M10, M12, M16 und M20 hinterlegt; für andere Größen gehört die Steigung in die Angabe, z. B. „M14x2“.
 - **Kantenauswahl:** Gewählt wird jede Kante außer Nahtkanten, die höchstens `tol` von einem der Punkte `near` entfernt ist. Ohne Treffer meldet die Operation einen Fehler.
 - **Rückverfolgbarkeit:** Jede Operation trägt `refs: {"<Parameterpfad>": "<Maß-id>"}`, z. B. `{"profile.d": "d1"}`. Der Pfad muss auf eine Zahl der Operation zeigen, die id muss in der `PartSpec` stehen.
-- **Prüfungen beim Aufbau:** Eine Entformungsschräge, die das Profil vor der vollen Länge zusammenfallen lässt, ist ein Fehler. Ein Rotationsprofil darf die Achse nicht überschreiten. Eine Rundung im Profil braucht genau eine Ecke im Umkreis von 0,5 mm um `at`. Entfernt ein abtragender Schritt kein Material, meldet der Build eine Warnung.
+- **Prüfungen beim Aufbau:** Eine Entformungsschräge, die das Profil vor der vollen Länge zusammenfallen lässt, ist ein Fehler. Ein Rotationsprofil darf die Achse nicht überschreiten. Eine Rundung im Profil braucht genau eine Ecke im Umkreis von 0,5 mm um `at`. Entfernt ein abtragender Schritt kein Material, meldet der Modellaufbau eine Warnung.
 
 ### 5.3 BuildReport
 
-Jedes Bau-Tool gibt diesen Bericht zurück:
+Jedes Werkzeug für den Modellaufbau gibt diesen Bericht zurück:
 
 ```
 { "ok": bool, "error": str | null,
@@ -165,17 +165,17 @@ Jedes Bau-Tool gibt diesen Bericht zurück:
 ```
 
 - `ok` ist wahr, wenn `solid.ok`, alle `dims` und `roundtrip.ok` wahr sind.
-- Bei `error` (ungültige Operation, Fehler im Aufbau, Zeitüberschreitung) bleibt die bisherige Operationsliste unverändert. Ein Build mit `ok = false` ohne `error` wird übernommen, denn während des Aufbaus fehlen Features noch.
+- Bei `error` (ungültige Operation, Fehler im Aufbau, Zeitüberschreitung) bleibt die bisherige Operationsliste unverändert. Ein Ergebnis mit `ok = false` ohne `error` wird übernommen, denn während des Aufbaus fehlen Konstruktionsmerkmale noch.
 - `op_index` ist der Index der neuen oder geänderten Operation. Der Bericht von `export_step` hat kein `op_index`.
 - `build_notes` enthalten je Operation Zusatzangaben, z. B. `drilled_d`, `edges_selected`, `hull_circles` oder `warning`.
 
 ## 6. MCP-Schnittstelle
 
-Der Server heißt `drawing2cad`, spricht MCP über stdio und liefert `instructions.md` als Arbeitsanleitung an den Client. Er bietet 14 Tools, keine Ressourcen und keine Prompts.
+Der Server heißt `drawing2cad`, spricht MCP über stdio und liefert `instructions.md` als Arbeitsanleitung an den Client. Er bietet 14 Werkzeuge, keine Ressourcen und keine Prompts.
 
-### 6.1 Tools
+### 6.1 Werkzeuge
 
-| Tool | Parameter | Ergebnis |
+| Werkzeug | Parameter | Ergebnis |
 | --- | --- | --- |
 | `render_drawing` | `pdf`, `page` = 1, `dpi` = 100, `crop` | PNG der Seite oder des Ausschnitts und Seiteninformation |
 | `read_drawing_text` | `pdf`, `page` = 1, `region` | Textelemente mit Position, Schrift und zerlegtem Maß, höchstens 300 je Aufruf |
@@ -206,53 +206,53 @@ Der Server heißt `drawing2cad`, spricht MCP über stdio und liefert `instructio
 
 | Prüfung | Schwelle |
 | --- | --- |
-| Volumenkörper | `isValid()`, genau ein Solid, keine freien Kanten, Volumen größer 0 |
+| Volumenkörper | `isValid()`, genau ein Volumenkörper, keine freien Kanten, Volumen größer 0 |
 | Gesamtmaße | Achsparallele Ausdehnung je Achse in Modellkoordinaten höchstens 0,01 mm Abweichung von `expected.bbox` |
 | Bohrungen | Eine konkave Zylinderfläche je erwarteter Bohrung: Durchmesser höchstens 0,01 mm Abweichung, Abstand der Achse zu `at` höchstens 0,01 mm, Achsen parallel (Betrag des Kosinus mindestens 0,9999) |
-| STEP-Roundtrip | Re-Import gültig, genau ein Solid, relative Volumenänderung höchstens 1e-6, jede Markierung trifft mindestens eine Fläche |
+| STEP-Rückimport | Reimport gültig, genau ein Volumenkörper, relative Volumenänderung höchstens 1e-6, jede Markierung trifft mindestens eine Fläche |
 
-Die Prüfungen laufen nach jedem Build, nicht nur beim Export. Tiefe und Durchgang einer Bohrung sowie zusätzliche, nicht erwartete Bohrungen werden nicht geprüft.
+Die Prüfungen laufen nach jedem Modellaufbau, nicht nur beim Export. Tiefe und Durchgang einer Bohrung sowie zusätzliche, nicht erwartete Bohrungen werden nicht geprüft.
 
 ## 8. Export
 
 ### 8.1 STEP aus `export_step`
 
-Der Build-Prozess schreibt `<teil>.step` über eine CadQuery-Baugruppe, Schema AP214 (`AUTOMOTIVE_DESIGN`), Einheit mm:
+Der Modellaufbau schreibt `<teil>.step` über eine CadQuery-Baugruppe, Schema AP214 (`AUTOMOTIVE_DESIGN`), Einheit mm:
 
 | Bedeutung | Farbe (RGB) |
 | --- | --- |
 | Körper | 0,6 / 0,67 / 0,69 |
-| Fläche eines Review-Eintrags, benannt mit dessen id | 1,0 / 0,5 / 0,0 (orange) |
+| Fläche eines Prüfeintrags, benannt mit dessen ID | 1,0 / 0,5 / 0,0 (orange) |
 
-Eine Fläche gehört zu einem Review-Eintrag, wenn sie höchstens 0,5 mm von einem seiner Punkte `mark_near` entfernt ist. Bestehen nicht alle Prüfungen, löscht `export_step` STEP, Bericht und Review-Liste des Teils und meldet `ok = false`.
+Eine Fläche gehört zu einem Prüfeintrag, wenn sie höchstens 0,5 mm von einem seiner Punkte `mark_near` entfernt ist. Bestehen nicht alle Prüfungen, löscht `export_step` STEP, Bericht und Prüfliste des Teils und meldet `ok = false`.
 
 ### 8.2 Bibliothek `export.py`
 
-`export.py` ist getestet, wird aber von den MCP-Tools nicht aufgerufen. Es stellt bereit:
+`export.py` ist geprüft, wird aber von den MCP-Werkzeugen nicht aufgerufen. Es stellt bereit:
 
 - **STEP AP242** (`AP242_MANAGED_MODEL_BASED_3D_ENGINEERING_MIM_LF`) über den XCAF-Writer von OpenCascade, mit Farben, Namen, Layern und semantischem PMI.
-- **Semantisches PMI:** Bohrungsdurchmesser als `DIMENSIONAL_SIZE` mit Passung (`LIMITS_AND_FITS`) oder Plus-Minus-Toleranz. Ein angenommenes, fehlendes Längenmaß zwischen zwei parallelen Ebenen als `DIMENSIONAL_LOCATION` mit der Beschreibung „ASSUMED: <Annahme> - <Grund> - please check“.
-- **Markierung:** Review-Flächen orange, benannt „CHECK <id>“, auf dem Layer `ASSUMED_CHECK`. Gewindebohrungen grün (0,396 / 0,941 / 0,451). Namen und Beschreibungen werden in ASCII umgesetzt („Ø“ wird „dia“).
-- **GLB** für Web-Ansichten, mit denselben Farben, dazu `marks.json` (Farbe zu Review-ids). PMI und Layer gehen im GLB verloren.
+- **Semantisches PMI:** Bohrungsdurchmesser als `DIMENSIONAL_SIZE` mit Passung (`LIMITS_AND_FITS`) oder Plus-Minus-Toleranz. Ein angenommenes, fehlendes Längenmaß zwischen zwei parallelen Ebenen als `DIMENSIONAL_LOCATION` mit der Beschreibung „ANNAHME: <Annahme> - <Begründung> - bitte prüfen“.
+- **Markierung:** Prüfflächen orange, benannt „PRÜFEN <id>“, auf der Ebene `ASSUMED_CHECK`. Gewindebohrungen grün (0,396 / 0,941 / 0,451). Namen und Beschreibungen werden in ASCII umgesetzt („Ø“ wird „dia“).
+- **GLB** für Web-Ansichten, mit denselben Farben, dazu `marks.json` (Farbe zu Prüfeintrags-IDs). PMI und Layer gehen im GLB verloren.
 - **PMI-Leser** `read_pmi`: Schema, Maße mit Toleranz und Passung, Farben und Layer einer STEP-Datei.
 
-## 9. Review-Liste und Rückverfolgbarkeit
+## 9. Prüfliste und Rückverfolgbarkeit
 
-`export_step` schreibt die Review-Liste als `review.md` (Markdown, Englisch) und `review.json`. `review.md` beginnt mit Titel, Teil, Zeichnung, Maßstab und Allgemeintoleranz und endet mit der Zeile `All checks passed: yes` oder `no`. Dazwischen stehen diese Abschnitte:
+`export_step` schreibt die Prüfliste als `review.md` (Markdown, Deutsch) und `review.json`. `review.md` beginnt mit Titel, Teil, Zeichnung, Maßstab und Allgemeintoleranz und endet mit der Zeile `Alle Prüfungen bestanden: ja` oder `Alle Prüfungen bestanden: nein`. Dazwischen stehen diese Abschnitte:
 
 | Abschnitt | Inhalt |
 | --- | --- |
-| Assumptions and open issues | Je Review-Eintrag: Maße, Problem, Annahme, Grund, Quelle auf der Zeichnung, Zahl der markierten Flächen |
-| Drawing notes | Hinweise der Zeichnung |
-| Traceability | Je Eintrag in `refs`: Operation, Parameter, aktueller Wert, Maß-id, gedruckter Text |
-| Values without dimension reference | Größen einer Operation ohne `refs` und ohne gleich großes Maß (Abstand höchstens 0,01 mm): abgeleitete oder geschätzte Werte |
-| Validation | Alle Prüfungen mit Soll, Ist und Ergebnis |
+| Annahmen und offene Punkte | Je Prüfeintrag: Maße, Problem, Annahme, Grund, Quelle auf der Zeichnung, Zahl der markierten Flächen |
+| Zeichnungshinweise | Hinweise der Zeichnung |
+| Rückverfolgbarkeit | Je Eintrag in `refs`: Operation, Parameter, aktueller Wert, Maß-ID, gedruckter Text |
+| Werte ohne Maßbezug | Größen einer Operation ohne `refs` und ohne gleich großes Maß (Abstand höchstens 0,01 mm): abgeleitete oder geschätzte Werte |
+| Prüfungen | Alle Prüfungen mit Soll, Ist und Ergebnis |
 
 `review.json` enthält dieselben Daten unter `assumptions`, `notes`, `traceability`, `unreferenced`, `validation` und `all_ok`.
 
 ## 10. Toleranzen (Bibliothek `tolerances.py`)
 
-`tolerances.py` ist getestet, wird aber von den MCP-Tools nicht aufgerufen.
+`tolerances.py` ist geprüft, wird aber von den MCP-Werkzeugen nicht aufgerufen.
 
 - **Grenzabmaße** eines Maßes, in dieser Reihenfolge: die gedruckten (`tol_upper` und `tol_lower`), die Passung nach ISO 286 (`fit`), die Allgemeintoleranz nach ISO 2768 (`general_tolerance`, nur für Längen, Durchmesser und Radien). Ohne Angabe sind beide Abmaße 0.
 - **Tabellen:** XML-Dateien im Ordner `D2C_TABLES`, `*isolim*.xml` für ISO 286 und `*toltabs*.xml` für ISO 2768. Liegt ein Maß außerhalb der Tabelle oder fehlt eine Klasse, meldet das Modul einen Fehler; es extrapoliert nicht.
@@ -263,10 +263,10 @@ Eine Fläche gehört zu einem Review-Eintrag, wenn sie höchstens 0,5 mm von ein
 
 ```
 results/<teil>/
-  spec.json, ops.json        nach submit_spec und nach jedem übernommenen Build
+  spec.json, ops.json        nach submit_spec und nach jedem übernommenen Modellaufbau
   <teil>.step                nach erfolgreichem export_step: Modell
   report.json                nach erfolgreichem export_step: Prüfbericht
-  review.md, review.json     nach erfolgreichem export_step: Review-Liste
+  review.md, review.json     nach erfolgreichem export_step: Prüfliste
 ```
 
 ## 12. Web-Oberfläche
@@ -278,14 +278,14 @@ Gestaltung und Verhalten der Oberfläche: `docs/web-design.md`.
 | Methode und Pfad | Zweck |
 | --- | --- |
 | `GET /` | Oberfläche (`static/index.html`) |
-| `GET /api/parts` | Alle Teile: Name, Titel, `all_ok`, Zahl der Review-Einträge, Dateien, Zeile des Teils aus `results/EVAL.json`, falls vorhanden |
-| `GET /api/parts/{name}` | Ein Teil wie oben, dazu Spec, Review-Liste und Bericht |
+| `GET /api/parts` | Alle Teile: Name, Titel, `all_ok`, Zahl der Prüfeinträge, Dateien, Zeile des Teils aus `results/EVAL.json`, falls vorhanden |
+| `GET /api/parts/{name}` | Ein Teil wie oben, dazu Spec, Prüfliste und Bericht |
 | `GET /api/parts/{name}/drawing.png` | Erste Seite der Zeichnung des Teils, 100 dpi |
 | `GET /files/{name}/{file}` | Datei aus dem Ergebnisordner des Teils |
 | `POST /api/runs` | Zeichnung hochladen und Lauf starten |
 | `GET /api/runs/{run_id}/events` | Ereignisse eines Laufs als Server-Sent Events |
 
-- **Upload:** Formularfelder `pdf`, `part` und optional `model` (sonst `D2C_LLM_MODEL`). Angenommen werden nur PDF-Dateien (Signatur `%PDF`). Die Datei wird unter `<D2C_DATA>/uploads/<part>.pdf` gespeichert, die Antwort ist `{"run_id": ...}`. Ohne `D2C_LLM_BASE_URL` antwortet der Endpunkt mit 503, bei fehlender Datei, ungültigem Teilnamen, anderem Dateityp oder fehlendem Modell mit 400.
+- **Hochladen:** Formularfelder `pdf`, `part` und optional `model` (sonst `D2C_LLM_MODEL`). Angenommen werden nur PDF-Dateien (Signatur `%PDF`). Die Datei wird unter `<D2C_DATA>/uploads/<part>.pdf` gespeichert, die Antwort ist `{"run_id": ...}`. Ohne `D2C_LLM_BASE_URL` antwortet der Endpunkt mit 503, bei fehlender Datei, ungültigem Teilnamen, anderem Dateityp oder fehlendem Modell mit 400.
 - **Ereignisse:** Je Ereignis eine Zeile `data: <JSON>`. Das letzte Ereignis hat den Typ `done`: vom Agenten selbst, sonst aus seinem Rückgabewert, bei einer Ausnahme mit `ok = false` und `reason`. Danach endet der Strom. Läufe und Ereignisse liegen im Speicher des Prozesses; jede Verbindung erhält alle Ereignisse ab dem ersten.
 - **Agent-Schnittstelle:** Ein Lauf ruft `d2c.agent.run_agent(pdf, part, model, base_url, api_key, build_model, server, on_event)` als Coroutine auf. `on_event` erhält jedes Ereignis als Objekt. Das Modul `d2c.agent` ist nicht Teil dieses Repositorys.
 - **Dateinamen** in Pfaden dürfen weder `/`, `\`, `..` noch NUL enthalten.
@@ -319,7 +319,7 @@ Die Ordner liegen außerhalb des Images und werden beim Start eingehängt.
 ## 14. Sicherheit und Isolation
 
 - **Netzwerk:** Der Server kommuniziert nur über stdio. Mit `docker run --network none` hat er keinen Netzwerkzugang.
-- **Build-Prozess:** Jeder Build läuft in einem eigenen Prozess `python -I -m d2c.worker` in einer eigenen Prozessgruppe, mit temporärem Arbeitsordner und nur der Umgebungsvariablen `PATH`. Grenzen: Zeitlimit `D2C_TIMEOUT`, danach wird die Prozessgruppe beendet; Adressraum 4 GiB; Dateigröße 200 MiB; CPU-Zeit 4 · ⌈Zeitlimit⌉ + 10 s.
+- **Modellaufbau:** Jeder Durchlauf läuft in einem eigenen Prozess `python -I -m d2c.worker` in einer eigenen Prozessgruppe, mit temporärem Arbeitsordner und nur der Umgebungsvariablen `PATH`. Grenzen: Zeitlimit `D2C_TIMEOUT`, danach wird die Prozessgruppe beendet; Adressraum 4 GiB; Dateigröße 200 MiB; CPU-Zeit 4 · ⌈Zeitlimit⌉ + 10 s.
 - **Skripte:** `run_script` lehnt Importe, die Namen `open`, `exec`, `eval`, `compile`, `__import__`, `globals`, `locals`, `vars`, `getattr`, `setattr`, `delattr`, `input` und `breakpoint` sowie Namen und Attribute mit führendem Unterstrich ab. Das Skript sieht nur `cq`, `math`, `result` und 15 einfache Builtins.
 - **Pfade:** Zeichnungen nur als `.pdf` unterhalb von `D2C_DATA`, aufgelöst über ihr tatsächliches Ziel. Teilnamen nur aus Buchstaben, Ziffern, `_` und `-`.
 - **Web-Oberfläche:** Sie hat keine Anmeldung und lauscht standardmäßig auf allen Schnittstellen (0.0.0.0).
@@ -345,7 +345,7 @@ Tests mit dem Marker `bct` brauchen Beispieldaten unter `/app/data` und werden s
 
 - Maße werden nur aus Vektorgeometrie gemessen. Bei gescannten Zeichnungen liest das Modell die Maße aus dem gerenderten Bild.
 - Gewinde werden als Kernlochbohrung modelliert, Form- und Lagetoleranzen nicht als semantisches PMI.
-- `export.py` und `tolerances.py` sind nicht an die MCP-Tools angebunden. Das STEP aus `export_step` ist AP214 mit Farben und benannten Flächen, ohne semantisches PMI und ohne GLB.
+- `export.py` und `tolerances.py` sind nicht an die MCP-Werkzeuge angebunden. Das STEP aus `export_step` ist AP214 mit Farben und benannten Flächen, ohne semantisches PMI und ohne GLB.
 - Das Modul `d2c.agent` ist nicht enthalten. Läufe aus der Web-Oberfläche brauchen es.
 - Die Browser-Oberfläche ist ein Gerüst: Das Skript `static/app.js` fehlt. Nutzbar ist die JSON-API.
 - Der Server verwaltet alle Teile in einer Sitzung ohne Sperren. Gleichzeitige Aufrufe für dasselbe Teil sind nicht vorgesehen.

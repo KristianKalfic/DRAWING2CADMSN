@@ -9,10 +9,11 @@ from typing import Annotated, Any, get_args
 
 from mcp.server.mcpserver import Image, MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
-from pydantic import Field
+from pydantic import Field, ValidationError
 
 from d2c import drawing, vector
 from d2c.ops import EdgeFinishOp, ExtrudeOp, HolesOp, Op, OpBase, RevolveOp, ScriptOp
+from d2c.sandbox import validation_error_message
 from d2c.session import Session
 from d2c.spec import PartSpec
 from d2c.text import read_text
@@ -33,7 +34,9 @@ def _guard(fn: Callable) -> Callable:
     def guarded(*args: Any, **kwargs: Any) -> Any:
         try:
             return fn(*args, **kwargs)
-        except (KeyError, ValueError, IndexError) as e:  # pydantic's ValidationError is a ValueError
+        except ValidationError as e:
+            raise ToolError(validation_error_message(e)) from e
+        except (KeyError, ValueError, IndexError) as e:
             raise ToolError(e.args[0] if e.args else str(e)) from e
 
     return guarded
@@ -74,14 +77,15 @@ def _op_tool(model: type[OpBase]) -> Callable[[Callable], Callable]:
 
 @_tool
 def render_drawing(pdf: str, page: int = 1, dpi: int = 100, crop: list[float] | None = None) -> list:
-    """Render one page of a drawing PDF, or a crop of it, as a PNG image.
+    """Rendere eine Seite einer Zeichnungs-PDF oder einen Ausschnitt davon als PNG-Bild.
 
-    The PDF path is relative to the data folder. The text part of the result is JSON with the page count
-    ("pages"), the page size in pt and the effective "dpi" (at most 600; the longest image side is 2000 px).
-    `crop` is [x0, y0, x1, y1] as fractions of the displayed page, origin top left, e.g. [0, 0, 0.5, 0.5]
-    is the upper left quarter. Pages count from 1.
+    Der PDF-Pfad ist relativ zum Datenordner. Der Textteil des Ergebnisses ist JSON mit der Seitenzahl
+    ("pages"), der Seitengröße in pt und der tatsächlich verwendeten "dpi" (höchstens 600; die längste
+    Bildkante ist maximal 2000 px). `crop` hat das Format [x0, y0, x1, y1] mit Anteilen der angezeigten
+    Seite und Ursprung oben links; [0, 0, 0.5, 0.5] bezeichnet zum Beispiel das linke obere Viertel.
+    Die Seitenzählung beginnt bei 1.
 
-    Example: render_drawing(pdf="Part A/drawing.pdf", page=1, dpi=300, crop=[0.1, 0.1, 0.6, 0.5])
+    Beispiel: render_drawing(pdf="Part A/drawing.pdf", page=1, dpi=300, crop=[0.1, 0.1, 0.6, 0.5])
     """
     info = drawing.pdf_info(pdf, page)
     png = drawing.render(pdf, page, dpi, crop)
@@ -90,23 +94,24 @@ def render_drawing(pdf: str, page: int = 1, dpi: int = 100, crop: list[float] | 
 
 @_tool
 def read_drawing_text(pdf: str, page: int = 1, region: list[float] | None = None) -> str:
-    """Read the text layer of a drawing page: printed dimensions, fits, tolerances and notes as text.
+    """Lies die Textebene einer Zeichnungsseite aus: gedruckte Maße, Passungen, Toleranzen und Hinweise.
 
-    Call this first for every page. Returns JSON items {text, x0, y0, x1, y1, font, size, vertical, parsed};
-    x0..y1 are fractions of the displayed page, origin top left, like `crop` of render_drawing. `parsed`
-    splits a dimension into prefix, count, nominal (mm), tol_upper, tol_lower (mm), fit, envelope, thread;
-    it is null for other text. Returns a message instead if the page has no text layer (text drawn as
-    outlines: read the image) or has more than 300 items (pass a smaller `region`).
+    Rufe dieses Werkzeug zuerst für jede Seite auf. Es liefert JSON-Elemente im Format
+    {text, x0, y0, x1, y1, font, size, vertical, parsed}; x0..y1 sind Anteile der angezeigten Seite,
+    Ursprung oben links, wie bei `crop` von render_drawing. `parsed` zerlegt ein Maß in prefix, count,
+    nominal (mm), tol_upper, tol_lower (mm), fit, envelope und thread; bei anderem Text ist der Wert null.
+    Stattdessen wird eine Meldung zurückgegeben, wenn die Seite keine Textebene hat (Text als Umrisse
+    gezeichnet: lies das Bild) oder mehr als 300 Elemente enthält (übergib ein kleineres `region`).
 
-    Example: read_drawing_text(pdf="Part A/drawing.pdf", page=1, region=[0.5, 0.8, 1, 1])
+    Beispiel: read_drawing_text(pdf="Part A/drawing.pdf", page=1, region=[0.5, 0.8, 1, 1])
     """
     items = read_text(drawing.resolve_drawing(pdf), page, region)
     if not items:
         if region:
-            return "no text in this region: widen it, or read the dimensions from the rendered image"
-        return "no text layer (text is vector outlines): read dimensions from the rendered image"
+            return "Kein Text in diesem Bereich: Vergrößere ihn oder lies die Maße aus dem gerenderten Bild."
+        return "Keine Textebene vorhanden (Text als Vektor-Umrisse): Lies die Maße aus dem gerenderten Bild."
     if len(items) > MAX_TEXT_ITEMS:
-        return f"{len(items)} text items, more than {MAX_TEXT_ITEMS}: pass a smaller region to read them"
+        return f"{len(items)} Textelemente; mehr als {MAX_TEXT_ITEMS}: Übergib einen kleineren Bereich, um sie auszulesen."
     return json.dumps(items, ensure_ascii=False, separators=(",", ":"))
 
 
@@ -114,16 +119,17 @@ def _scale_notes(scale: float | None, suggestion: list[dict], printed: int) -> l
     """Hints on the scale: missing, disagreeing with the geometry, or voted on by too few values."""
     notes = []
     if scale is None:
-        notes.append("scale not given: measured at 1:1, pass the title-block scale for real model sizes")
+        notes.append("Maßstab nicht angegeben: Messung mit 1:1. Übergib den Maßstab aus dem Schriftfeld für reale Modellmaße.")
     if suggestion:
         best = suggestion[0]
         if scale is not None and abs(best["scale"] - scale) > SCALE_TOL * scale:
-            notes.append(f"title-block scale disagrees with geometry: given {scale:g}, geometry says "
-                         f"{best['scale']:g} ({best['votes']} of {printed} printed values)")
+            notes.append(f"Maßstab im Schriftfeld weicht von der Geometrie ab: angegeben {scale:g}, Geometrie ergibt "
+                         f"{best['scale']:g} ({best['votes']} von {printed} abgedruckten Werten)")
         if printed < MIN_PRINTED_DIMS:
-            notes.append(f"only {printed} printed_dims: scale_suggestion is unreliable, give {MIN_PRINTED_DIMS} or more")
+            notes.append(f"Nur {printed} `printed_dims`: `scale_suggestion` ist unzuverlässig; gib mindestens "
+                         f"{MIN_PRINTED_DIMS} Werte an.")
     elif printed:
-        notes.append("no scale fits the printed_dims")
+        notes.append("Kein Maßstab passt zu `printed_dims`.")
     return notes
 
 
@@ -137,18 +143,19 @@ def measure_drawing(
     expect: list[str] = [],
     edge_width: str | float = "auto",
 ) -> dict:
-    """Measure circles, arcs and the extent from the vector geometry of a drawing page, in model mm.
+    """Miss Kreise, Bögen und Außenmaße aus der Vektorgeometrie einer Zeichnungsseite in Modell-mm.
 
-    Use it for dimensions that are not printed, to cross-check read ones, and to find a wrong title-block
-    scale. `region` is [x0, y0, x1, y1] as fractions of the displayed page, origin top left (one view).
-    `scale` is drawing:model, 2 for 2:1 and 0.5 for 1:2. `printed_dims` are printed lengths and diameters of
-    the views (six or more): the result then holds `scale_suggestion` (best first). `expect` are claims
-    like "d=19", "r=10", "L=49" checked against the geometry: status ok, MISMATCH or no_candidates.
-    `edge_width` is "auto", "all" or a stroke width in pt. Coordinates are mm from the lower left corner
-    of the region, y up. Raster-only pages have no geometry.
+    Verwende es für nicht abgedruckte Maße, zur Gegenprüfung gelesener Maße und zum Erkennen eines falschen
+    Maßstabs im Schriftfeld. `region` ist [x0, y0, x1, y1] als Anteile der angezeigten Seite mit Ursprung
+    oben links (eine Ansicht). `scale` ist Zeichnung:Modell, also 2 für 2:1 und 0.5 für 1:2. `printed_dims`
+    enthält abgedruckte Längen und Durchmesser aus den Ansichten (mindestens sechs); dann enthält das
+    Ergebnis `scale_suggestion`, nach bester Übereinstimmung sortiert. `expect` enthält Angaben wie
+    "d=19", "r=10" oder "L=49", die mit der Geometrie abgeglichen werden: Status ok, MISMATCH oder
+    no_candidates. `edge_width` ist "auto", "all" oder eine Linienbreite in pt. Koordinaten sind mm ab
+    der linken unteren Ecke des Bereichs, y zeigt nach oben. Reine Rasterseiten enthalten keine Geometrie.
 
-    Example, measure a missing width in a view at scale 2:1: measure_drawing(pdf="Part A/drawing.pdf",
-    region=[0.1, 0.08, 0.97, 0.45], scale=2) and read extent_mm
+    Beispiel: Miss eine fehlende Breite in einer Ansicht im Maßstab 2:1 mit measure_drawing(pdf="Part A/drawing.pdf",
+    region=[0.1, 0.08, 0.97, 0.45], scale=2) und lies `extent_mm` ab.
     """
     path = drawing.resolve_drawing(pdf)
     if isinstance(edge_width, str) and edge_width not in ("auto", "all"):
@@ -166,13 +173,15 @@ def measure_drawing(
 
 @_tool
 def submit_spec(spec: PartSpec) -> dict:
-    """Register what was read from a drawing page (dimensions, views, features, notes, expected, review).
+    """Übernimm die Auswertung einer Zeichnungsseite (Maße, Ansichten, Merkmale, Hinweise, expected, review).
 
-    Starts a part: it resets the ops of a part with the same name. Lengths are mm, angles degrees; the
-    expected bbox and hole positions are in model coordinates (Z up). Every assumed dimension or one with
-    confidence below 0.8 must be listed in the refs of a review item.
+    Damit beginnt ein Bauteil; vorhandene ops eines gleichnamigen Bauteils werden zurückgesetzt. Längen
+    sind in mm und Winkel in Grad; `expected.bbox` und Lochpositionen sind in Modellkoordinaten (Z nach
+    oben). Jedes angenommene Maß sowie jedes Maß mit `confidence` unter 0.8 muss in `refs` eines
+    Prüfeintrags aufgeführt sein. Verfasse alle selbst formulierten Freitexte in der Spezifikation auf
+    Deutsch; übernimm `text` und direkte Zitate aus der Zeichnung exakt wie abgedruckt.
 
-    Example: submit_spec(spec={"name": "plate", "drawing": "A/p.pdf", "title": "Plate", "scale": "1:1",
+    Beispiel: submit_spec(spec={"name": "plate", "drawing": "A/p.pdf", "title": "Platte", "scale": "1:1",
     "views": [{"id": "v1", "kind": "top", "scale": "1:1"}], "dimensions": [{"id": "d1", "kind": "length",
     "value": 80, "text": "80", "source": null, "confidence": 0.95}], "features": [{"id": "f1", "type":
     "base", "dim_ids": ["d1"]}], "expected": {"bbox": [80, 50, 10]}, "review": []})
@@ -182,81 +191,84 @@ def submit_spec(spec: PartSpec) -> dict:
 
 @_op_tool(ExtrudeOp)
 def extrude() -> dict:
-    """Extrude a profile drawn on a sketch plane and add, cut or intersect it with the part.
+    """Extrudiere ein auf einer Skizzenebene gezeichnetes Profil und füge es hinzu, schneide es aus oder bilde den Schnitt mit dem Bauteil.
 
-    Lengths are mm, angles degrees. Planes: XY has normal +Z (u=X, v=Y), XZ normal -Y (u=X, v=Z),
-    YZ normal +X (u=Y, v=Z); `plane.offset` shifts along the normal. The extrusion runs along the plane
-    normal for a positive `distance`. With both=True, `distance` is the TOTAL thickness, centred on the
-    plane. `refs` maps parameter paths to dimension ids, e.g. {"profile.w": "d1", "distance": "t1"}.
+    Längen sind in mm, Winkel in Grad. Ebenen: XY hat die Normale +Z (u=X, v=Y), XZ die Normale -Y
+    (u=X, v=Z), YZ die Normale +X (u=Y, v=Z); `plane.offset` verschiebt entlang der Normalen. Bei
+    positivem `distance` verläuft die Extrusion in Richtung der Ebenennormalen. Mit `both=True` ist
+    `distance` die Gesamtdicke, zentriert um die Ebene. `refs` ordnet Parameterpfade Maß-IDs zu, zum
+    Beispiel {"profile.w": "d1", "distance": "t1"}.
 
-    Example: extrude(part="plate", profile={"type": "rect", "center": [0, 0], "w": 80, "h": 50},
+    Beispiel: extrude(part="plate", profile={"type": "rect", "center": [0, 0], "w": 80, "h": 50},
     plane={"name": "XY"}, distance=10, refs={"profile.w": "d1"})
     """
 
 
 @_op_tool(RevolveOp)
 def revolve() -> dict:
-    """Revolve a profile around the global Z axis and add, cut or intersect it with the part.
+    """Rotiere ein Profil um die globale Z-Achse und füge es hinzu, schneide es aus oder bilde den Schnitt mit dem Bauteil.
 
-    The profile lies in the XZ plane with u = r (distance from the axis, mm) and v = z (mm), so r must be
-    >= 0. Give `points` (a closed polygon of [r, z]) or `profile` (a path with arcs and fillets).
-    `angle` is degrees, counter-clockwise seen from +Z. `refs` maps parameter paths to dimension ids,
-    e.g. {"points.1.0": "d2"}.
+    Das Profil liegt in der XZ-Ebene mit u = r (Abstand zur Achse in mm) und v = z (in mm), daher muss
+    r >= 0 sein. Übergib `points` (ein automatisch geschlossenes Polygon aus [r, z]) oder `profile`
+    (einen Pfad mit Bögen und Rundungen). `angle` ist der Winkel in Grad, gegen den Uhrzeigersinn von +Z
+    aus gesehen. `refs` ordnet Parameterpfade Maß-IDs zu, z. B. {"points.1.0": "d2"}.
 
-    Example: revolve(part="pin", points=[[0, 0], [5, 0], [5, 30], [0, 30]])
+    Beispiel: revolve(part="pin", points=[[0, 0], [5, 0], [5, 30], [0, 30]])
     """
 
 
 @_op_tool(HolesOp)
 def add_holes() -> dict:
-    """Drill holes (plain, counterbored, countersunk or tapped) from a sketch plane into the part.
+    """Bohre von einer Skizzenebene aus einfache, zylindrisch gesenkte, kegelig gesenkte oder mit Gewinde versehene Löcher in das Bauteil.
 
-    Lengths are mm, angles degrees. Planes: XY has normal +Z (u=X, v=Y), XZ normal -Y (u=X, v=Z),
-    YZ normal +X (u=Y, v=Z). Holes drill along -normal of the plane unless `flip=True`, so put the plane
-    on the face the holes enter (for XY on the top face, with the offset at its height). Positions are
-    [u, v] in the plane, or use `polar`. A `depth` of null drills through. `refs` maps parameter paths to
-    dimension ids, e.g. {"d": "d3", "positions.0.0": "d4"}.
+    Längen sind in mm, Winkel in Grad. Ebenen: XY hat die Normale +Z (u=X, v=Y), XZ die Normale -Y
+    (u=X, v=Z), YZ die Normale +X (u=Y, v=Z). Löcher werden entgegen der Ebenennormalen gebohrt, außer
+    bei `flip=True`; lege die Ebene also auf die Eintrittsfläche (bei XY auf die Oberseite und mit
+    `offset` auf deren Höhe). Positionen sind [u, v] in der Ebene; alternativ kannst du `polar` verwenden.
+    Mit `depth` gleich null wird durchgebohrt. `refs` ordnet Parameterpfade Maß-IDs zu, z. B. {"d": "d3",
+    "positions.0.0": "d4"}.
 
-    Example: add_holes(part="plate", plane={"name": "XY", "offset": 10}, d=6.6,
+    Beispiel: add_holes(part="plate", plane={"name": "XY", "offset": 10}, d=6.6,
     positions=[[30, 15], [-30, 15]], refs={"d": "d3"})
     """
 
 
 @_op_tool(EdgeFinishOp)
 def edge_finish() -> dict:
-    """Fillet or chamfer the edges that lie near given points.
+    """Verrunde oder fase Kanten in der Nähe angegebener Punkte.
 
-    Lengths are mm. `near` are global [x, y, z] points on or near the edges (their midpoints), `tol` is the
-    largest distance from an edge to a point. Seam edges of round faces are skipped. Call it right after
-    the body whose edges it changes. `refs` maps parameter paths to dimension ids, e.g. {"size": "d5"}.
+    Längen sind in mm. `near` enthält globale [x, y, z]-Punkte auf oder nahe den Kanten (zum Beispiel
+    deren Mittelpunkte); `tol` ist der größte zulässige Abstand zwischen einer Kante und einem Punkt.
+    Nahtkanten runder Flächen werden übersprungen. Rufe das Werkzeug direkt nach dem Körper auf, dessen
+    Kanten es ändert. `refs` ordnet Parameterpfade Maß-IDs zu, zum Beispiel {"size": "d5"}.
 
-    Example: edge_finish(part="plate", kind="fillet", size=2, near=[[40, 0, 5]])
+    Beispiel: edge_finish(part="plate", kind="fillet", size=2, near=[[40, 0, 5]])
     """
 
 
 @_tool
 def run_script(part: str, code: str) -> dict:
-    """Run CadQuery code as the next op. Use only if no other tool covers the geometry.
+    """Führe CadQuery-Code als nächsten Vorgang aus. Verwende dies nur, wenn kein anderes Werkzeug die Geometrie abdeckt.
 
-    Lengths are mm. The code gets `result` (the cq.Workplane built so far, an empty XY workplane for the
-    first op), `cq`, `math` and a few builtins (abs, min, max, range, len, float, int, round, sum,
-    enumerate, zip, list, tuple, dict, print). No imports and no names starting with `_` (not even `_` as
-    a loop variable). It must leave a cq.Workplane with the solid in `result`. Planes follow CadQuery:
-    XY normal +Z, XZ normal -Y, YZ normal +X.
+    Längen sind in mm. Im Code stehen `result` (das bisher aufgebaute cq.Workplane, beim ersten Vorgang
+    ein leeres XY-Workplane), `cq`, `math` und einige eingebaute Funktionen zur Verfügung (abs, min, max,
+    range, len, float, int, round, sum, enumerate, zip, list, tuple, dict, print). Imports und Namen mit
+    führendem `_` sind verboten (auch `_` als Schleifenvariable). `result` muss am Ende ein cq.Workplane
+    mit dem Volumenkörper enthalten. Ebenen folgen CadQuery: XY hat die Normale +Z, XZ -Y, YZ +X.
 
-    Example: run_script(part="plate", code="result = result.faces('>Z').workplane().hole(5)")
+    Beispiel: run_script(part="plate", code="result = result.faces('>Z').workplane().hole(5)")
     """
     return session.apply(part, ScriptOp(op="script", code=code).model_dump())
 
 
 @_tool
 def edit_op(part: str, index: int, op: Op) -> dict:
-    """Replace the op at `index` (0-based) with a complete new op and rebuild the part.
+    """Ersetze den Vorgang an `index` (ab 0) durch einen vollständigen neuen Vorgang und baue das Bauteil erneut auf.
 
-    `op` has the same fields as the build tools plus "op" (extrude, revolve, holes, edge_finish or
-    script). Lengths are mm; plane and direction conventions as in those tools.
+    `op` hat dieselben Felder wie die Werkzeuge zum Aufbau, zusätzlich "op" (extrude, revolve, holes,
+    edge_finish oder script). Längen sind in mm; für Ebene und Richtung gelten dieselben Konventionen.
 
-    Example: edit_op(part="plate", index=0, op={"op": "extrude", "profile": {"type": "circle", "center":
+    Beispiel: edit_op(part="plate", index=0, op={"op": "extrude", "profile": {"type": "circle", "center":
     [0, 0], "d": 30}, "plane": {"name": "XY"}, "distance": 12})
     """
     return session.edit_op(part, index, op.model_dump())
@@ -264,41 +276,42 @@ def edit_op(part: str, index: int, op: Op) -> dict:
 
 @_tool
 def delete_op(part: str, index: int) -> dict:
-    """Delete the op at `index` (0-based) and rebuild the part. Deleting the only op is rejected.
+    """Lösche den Vorgang an `index` (ab 0) und baue das Bauteil erneut auf. Das Löschen des einzigen Vorgangs wird abgelehnt.
 
-    Example: delete_op(part="plate", index=2)
+    Beispiel: delete_op(part="plate", index=2)
     """
     return session.delete_op(part, index)
 
 
 @_tool
 def move_op(part: str, index: int, new_index: int) -> dict:
-    """Move the op at `index` to position `new_index` (both 0-based) and rebuild the part.
+    """Verschiebe den Vorgang an `index` auf Position `new_index` (beide ab 0) und baue das Bauteil erneut auf.
 
-    Use it when an `edge_finish` fails because it comes too late or too early. The first op must add.
+    Verwende dies, wenn `edge_finish` fehlschlägt, weil es zu früh oder zu spät kommt. Der erste Vorgang
+    muss `add` verwenden.
 
-    Example: move_op(part="plate", index=3, new_index=1)
+    Beispiel: move_op(part="plate", index=3, new_index=1)
     """
     return session.move_op(part, index, new_index)
 
 
 @_tool
 def get_state(part: str) -> dict:
-    """Show the spec summary, the op list and the last build report of a part.
+    """Zeige die Zusammenfassung der Spezifikation, die Vorgangsliste und den letzten Aufbau-Bericht eines Bauteils.
 
-    Example: get_state(part="plate")
+    Beispiel: get_state(part="plate")
     """
     return session.state(part)
 
 
 @_tool
 def export_step(part: str) -> dict:
-    """Build the part and write the STEP file, the report and the review list (review.md) if all checks pass.
+    """Baue das Bauteil und schreibe bei bestandenen Prüfungen die STEP-Datei, den Bericht und die Prüfliste (review.md).
 
-    Lengths in the STEP are mm. Returns {"ok", "files", "report"}; with ok=false nothing is written and the
-    report names the failed checks.
+    Längen in der STEP-Datei sind mm. Das Ergebnis enthält {"ok", "files", "report"}; bei ok=false wird
+    nichts geschrieben und der Bericht nennt die fehlgeschlagenen Prüfungen.
 
-    Example: export_step(part="plate")
+    Beispiel: export_step(part="plate")
     """
     return session.export(part)
 

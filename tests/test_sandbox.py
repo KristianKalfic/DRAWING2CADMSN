@@ -87,19 +87,25 @@ def test_worker_builds_box(tmp_path):
 
 def test_worker_reports_build_error(monkeypatch):
     assert run_worker(payload(box(mode="cut"))) == failed(
-        "BuildError: op 0 (extrude): the first operation must have mode 'add'")
+        "BuildError: op 0 (extrude): Der erste Vorgang muss den Modus 'add' haben.")
 
     # every other way to fail is a report as well, never a crash
     bad_ops = run_worker(payload({"op": "extrude", "distance": 0}, script(123)))
     assert bad_ops == failed(bad_ops["error"]) and bad_ops["error"].startswith("ValidationError: ")
     assert "1.script.code" in bad_ops["error"]  # a script of the wrong type is the worker's to report, not the check's
+    assert "muss Text sein" in bad_ops["error"]
+    assert "Input should be a valid string" not in bad_ops["error"]
     bad_expected = run_worker(payload(box(), expected={}))
     assert bad_expected == failed(bad_expected["error"]) and bad_expected["error"].startswith("ValidationError: ")
+    assert "bbox: fehlt" in bad_expected["error"]
+    bad_mode = run_worker(payload(box(mode="ungültig")))
+    assert "'add'" in bad_mode["error"] and "literal_error" in bad_mode["error"]
+    assert " or " not in bad_mode["error"]
     syntax = run_worker(payload(box(), script("def (")))
     assert syntax == failed(syntax["error"]) and syntax["error"].startswith("BuildError: op 1 (script): SyntaxError")
     empty = run_worker(payload(box(), box(mode="cut")))  # the cut removes the whole block
-    assert empty == failed("BuildError: the model is empty (did a cut remove everything?)")
-    assert run_worker(payload()) == failed("BuildError: no operations")
+    assert empty == failed("BuildError: Das Modell ist leer (hat ein Schnitt das gesamte Material entfernt?).")
+    assert run_worker(payload()) == failed("BuildError: Keine Vorgänge angegeben.")
 
     # so is an exception from the checks or the export, whatever its type
     def explode(*args):
@@ -111,7 +117,7 @@ def test_worker_reports_build_error(monkeypatch):
 
 def test_timeout_kills(monkeypatch):
     start = time.monotonic()
-    assert run_worker(payload(box(), script("while True: pass")), timeout=2) == failed("timeout after 2s")
+    assert run_worker(payload(box(), script("while True: pass")), timeout=2) == failed("Zeitüberschreitung nach 2s")
     assert time.monotonic() - start < 4
 
     # a print loop floods stderr: it goes to a file, not into the parent's memory, and the whole group dies at the timeout
@@ -124,7 +130,7 @@ def test_timeout_kills(monkeypatch):
     monkeypatch.setattr(subprocess, "Popen", recording_popen)
     chatter = "while True:\n    print('x' * 1000)\n    sum(range(10**5))"  # unthrottled it hits the 200 MiB file limit first
     flood = run_worker(payload(box(), script(chatter)), timeout=2)
-    assert flood == failed("timeout after 2s")
+    assert flood == failed("Zeitüberschreitung nach 2s")
     process, kwargs = started[0]
     assert kwargs["stdout"] == subprocess.PIPE and kwargs["stderr"] not in (subprocess.PIPE, subprocess.STDOUT, None)
     assert kwargs["start_new_session"] is True
@@ -157,10 +163,10 @@ def test_timeout_kills(monkeypatch):
     # exit status of a worker that left no report: SIGKILL or SIGXCPU is the CPU limit, anything else a crash
     for signal_exit in (-9, -24):
         monkeypatch.setattr(subprocess, "Popen", fake_popen(signal_exit))
-        assert run_worker(payload(box()), timeout=2) == failed("timeout after 2s (cpu limit)")
+        assert run_worker(payload(box()), timeout=2) == failed("Zeitüberschreitung nach 2s (CPU-Limit)")
     for code, stdout in ((1, b""), (0, b"not json")):  # the last 500 characters of stderr, undecodable bytes included
         monkeypatch.setattr(subprocess, "Popen", fake_popen(code, stdout, stderr=b"x" * 600 + b"\xff" + b"boom"))
-        assert run_worker(payload(box())) == failed("worker crashed: " + "x" * 495 + "\ufffd" + "boom")
+        assert run_worker(payload(box())) == failed("Worker abgestürzt: " + "x" * 495 + "\ufffd" + "boom")
     finished = json.dumps(failed("BuildError: kept")).encode() + b"\n"
     monkeypatch.setattr(subprocess, "Popen", fake_popen(-11, finished))  # a segfault at exit does not undo the report
     assert run_worker(payload(box())) == failed("BuildError: kept")
@@ -168,14 +174,14 @@ def test_timeout_kills(monkeypatch):
 
 def test_script_import_os_rejected(monkeypatch):
     for code in ("import os", "from os import path", "import math", "def f():\n    import cadquery"):
-        with pytest.raises(ValueError, match="imports are not allowed"):
+        with pytest.raises(ValueError, match="Imports sind in scripts nicht zulässig"):
             check_script(code)
 
     # run_worker reports the rejection and never starts a process
     monkeypatch.setattr(subprocess, "Popen", lambda *args, **kwargs: pytest.fail("the worker was started"))
     report = run_worker(payload(box(), script("x = 1"), script("import os")))
     assert report == failed(
-        "ValueError: op 2 (script): imports are not allowed in scripts (cq and math are already available)")
+        "ValueError: op 2 (script): Imports sind in scripts nicht zulässig (cq und math sind bereits verfügbar).")
 
 
 def test_script_open_rejected():
@@ -198,7 +204,7 @@ def test_script_dunder_rejected():
         # a keyword in a class pattern looks up an attribute as well
         "match result:\n    case cq.Workplane(__class__=c):\n        pass",
     ):
-        with pytest.raises(ValueError, match="underscore"):
+        with pytest.raises(ValueError, match="Unterstrich"):
             check_script(code)
 
     # what a model script needs passes, and so does code that cannot compile (the worker reports that)

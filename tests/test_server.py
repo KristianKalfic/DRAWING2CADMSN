@@ -68,10 +68,10 @@ def test_tool_params_match_op_models():
 
 def test_tool_docstrings_state_conventions():
     docs = {t.name: t.description for t in asyncio.run(srv.server.list_tools())}
-    assert all("Example" in doc for doc in docs.values())
-    assert "TOTAL thickness" in docs["extrude"]
-    assert "-normal" in docs["add_holes"] and "flip" in docs["add_holes"]
-    assert "not even `_`" in docs["run_script"]
+    assert all("Beispiel" in doc for doc in docs.values())
+    assert "Gesamtdicke" in docs["extrude"]
+    assert "entgegen der Ebenennormalen" in docs["add_holes"] and "flip" in docs["add_holes"]
+    assert "auch `_` als Schleifenvariable" in docs["run_script"]
 
 
 def test_render_returns_png_and_info(data):
@@ -92,14 +92,23 @@ def test_bad_args_tool_error():
         call("extrude", part="p", plane={"name": "XY"}, distance=1)
 
 
+def test_spec_validator_errors_keep_their_cause():
+    spec = json.loads((FIXTURES / "demo_spec.json").read_text("utf-8"))
+    spec["review"] = []
+    with pytest.raises(ToolError) as caught:
+        call("submit_spec", spec=spec)
+    message = str(caught.value)
+    assert "t10" in message and "Prüfeintrag" in message
+
+
 def test_invalid_op_message_reaches_client():
-    with pytest.raises(ToolError, match="distance must not be 0"):
+    with pytest.raises(ToolError, match="`distance` darf nicht 0 sein"):
         call("extrude", part="p", profile={"type": "circle", "center": [0, 0], "d": 5}, plane={"name": "XY"},
              distance=0)
 
 
 def test_unknown_part_message():
-    with pytest.raises(ToolError, match="call submit_spec first"):
+    with pytest.raises(ToolError, match="rufe zuerst `submit_spec` auf"):
         call("get_state", part="nope")
 
 
@@ -114,10 +123,10 @@ def test_demo_end_to_end(data):
     assert result["ok"] is True
     assert "COLOUR_RGB" in Path(result["files"]["step"]).read_text("utf-8", errors="replace")
     review = Path(result["files"]["review"]).read_text("utf-8")
-    assert "All checks passed: yes" in review
-    open_issues = review.split("## Assumptions and open issues")[1].split("##")[0]
+    assert "Alle Prüfungen bestanden: ja" in review
+    open_issues = review.split("## Annahmen und offene Punkte")[1].split("##")[0]
     assert any("t10" in line for line in open_issues.splitlines())
-    unreferenced = review.split("## Values without dimension reference")[1].split("##")[0]
+    unreferenced = review.split("## Werte ohne Maßbezug")[1].split("##")[0]
     assert "15" in unreferenced
 
 
@@ -132,7 +141,7 @@ def test_edit_move_delete_and_state(data):
     state = call_json("get_state", part="demo_bracket")
     assert [op["op"] for op in state["ops"]] == ["extrude", "extrude", "holes"]
     assert state["ops"][1]["distance"] == 20
-    with pytest.raises(ToolError, match="out of range"):
+    with pytest.raises(ToolError, match="außerhalb"):
         call("delete_op", part="demo_bracket", index=9)
 
 
@@ -145,7 +154,7 @@ def test_run_script_applies_op(data):
 
 def test_text_tool_demo(data):
     items = json.loads(call("read_drawing_text", pdf=DRAWING, region=TITLE_BLOCK).content[0].text)
-    assert "Scale 1:1" in [i["text"] for i in items]
+    assert "Maßstab 1:1" in [i["text"] for i in items]
 
 
 def test_text_tool_no_text_layer(tmp_path, monkeypatch):
@@ -153,7 +162,7 @@ def test_text_tool_no_text_layer(tmp_path, monkeypatch):
     doc.new_page()
     doc.save(tmp_path / "blank.pdf")
     monkeypatch.setenv("D2C_DATA", str(tmp_path))
-    assert "no text layer" in call("read_drawing_text", pdf="blank.pdf").content[0].text
+    assert "Keine Textebene vorhanden" in call("read_drawing_text", pdf="blank.pdf").content[0].text
 
 
 def test_text_tool_too_many_items(tmp_path, monkeypatch):
@@ -163,11 +172,11 @@ def test_text_tool_too_many_items(tmp_path, monkeypatch):
         page.insert_text((20, 20 + 2.4 * k), f"item {k}", fontsize=2)
     doc.save(tmp_path / "busy.pdf")
     monkeypatch.setenv("D2C_DATA", str(tmp_path))
-    assert "smaller region" in call("read_drawing_text", pdf="busy.pdf").content[0].text
+    assert "kleineren Bereich" in call("read_drawing_text", pdf="busy.pdf").content[0].text
 
 
 def test_text_tool_rejects_outside_data(data):
-    with pytest.raises(ToolError, match="inside the data folder"):
+    with pytest.raises(ToolError, match="im Datenordner"):
         call("read_drawing_text", pdf="../../etc/passwd")
 
 
@@ -186,13 +195,13 @@ def test_measure_tool_scale_note(data):
     assert ok["scale_suggestion"][0]["scale"] == pytest.approx(1.0, abs=0.01)
     assert ok["notes"] == []
     wrong = call_json("measure_drawing", pdf=DRAWING, region=TOP_VIEW, scale=2, printed_dims=printed)
-    assert any("title-block scale disagrees with geometry" in note for note in wrong["notes"])
+    assert any("Maßstab im Schriftfeld weicht von der Geometrie ab" in note for note in wrong["notes"])
 
 
 def test_measure_tool_notes_missing_scale_and_few_values(data):
     res = call_json("measure_drawing", pdf=DRAWING, region=TOP_VIEW, printed_dims=[80, 50])
-    assert any("scale not given" in note for note in res["notes"])
-    assert any("unreliable" in note for note in res["notes"])
+    assert any("Maßstab nicht angegeben" in note for note in res["notes"])
+    assert any("unzuverlässig" in note for note in res["notes"])
 
 
 def test_measure_tool_edge_width_as_text(data):
@@ -202,5 +211,5 @@ def test_measure_tool_edge_width_as_text(data):
 
 
 def test_measure_tool_rejects_outside_data(data):
-    with pytest.raises(ToolError, match="inside the data folder"):
+    with pytest.raises(ToolError, match="im Datenordner"):
         call("measure_drawing", pdf="../../etc/passwd")

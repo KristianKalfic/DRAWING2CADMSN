@@ -96,7 +96,7 @@ def test_unknown_ref_rejected():
 def test_low_confidence_requires_review():
     spec = minimal_spec()
     spec["dimensions"][0]["confidence"] = 0.7
-    reject(spec, r"dimension 'd1': confidence 0\.7 < 0\.8, so a review item")  # names the real cause
+    reject(spec, r"Maß 'd1': `confidence` 0\.7 < 0\.8; ein Prüfeintrag")  # names the real cause
     spec["review"] = [review_item()]
     PartSpec.model_validate(spec)
     # the threshold is strictly below 0.8
@@ -122,7 +122,7 @@ def test_assumed_requires_basis_and_review():
     spec["dimensions"][2]["assumption_basis"] = "width equals the 20 mm bore pitch"
     PartSpec.model_validate(spec)
     spec["review"] = []
-    reject(spec, r"dimension 'd3': assumed=true, so a review item")  # basis but no review, confidence is fine
+    reject(spec, r"Maß 'd3': `assumed=true`; ein Prüfeintrag")  # basis but no review, confidence is fine
     # review entries need a real assumption and reason
     for field in ("assumption", "reason"):
         spec["review"] = [review_item(refs=("d3",), issue="missing", **{field: " "})]
@@ -189,7 +189,7 @@ def test_hole_feature_requires_expected_hole():
         spec["expected"]["holes"] = [{**hole, **changes}]
         reject(spec, match)
     spec["expected"]["holes"] = [hole, {**hole, "axis": [0, 0, 0]}]
-    reject(spec, r"expected\.holes\[1\]: axis")
+    reject(spec, r"`expected\.holes\[1\]`: `axis`")
 
 
 def test_tolerance_fields_validated():

@@ -1,15 +1,15 @@
 """
-json_builder.py - uebersetzt die JSON-Beschreibung (aus der Zeichnung) deterministisch in CadQuery-Code.
+json_builder.py - wandelt die JSON-Beschreibung (aus der Zeichnung) deterministisch in CadQuery-Code.
 
 - generate(spec) -> (cadquery_code: str, info: dict)   erzeugt lesbaren CadQuery-Quelltext
-- execute(code)  -> cq.Workplane                       fuehrt genau diesen Text aus
-- Der Code entsteht nur aus geprueften Zahlen und Selektor-Whitelist (keine Freitext-Einschleusung).
-- Nicht Unterstuetztes wird NICHT still ignoriert, sondern in info["unsupported"] gemeldet.
+- execute(code)  -> cq.Workplane                       führt genau diesen Text aus
+- Der Code entsteht nur aus geprüften Zahlen und einer Kantenselektor-Whitelist (keine Einschleusung von Freitext).
+- Nicht unterstützte Merkmale werden nicht stillschweigend ignoriert, sondern in info["unsupported"] gemeldet.
 
-Konventionen (muessen mit dem Prompt/Schema uebereinstimmen):
+Konventionen (müssen mit der Eingabeaufforderung und dem Schema übereinstimmen):
   Einheiten mm. Nullpunkt = Mitte der Unterseite (X/Y zentriert, Z=0 unten, Z=height oben).
-  Reihenfolge: Basis -> Fillet/Chamfer (auf dem Grundkoerper) -> Taschen -> Bohrungen.
-  face: "top" (>Z) oder "bottom" (<Z). Seitenflaechen sind noch nicht unterstuetzt.
+  Reihenfolge: Basis -> Rundungen/Fasen (am Grundkörper) -> Taschen -> Bohrungen.
+  face: "top" (>Z) oder "bottom" (<Z). Seitenflächen werden noch nicht unterstützt.
 
 Schema (Auszug):
   base: {shape:"box", length, width, height} | {shape:"cylinder", diameter, height}
@@ -17,7 +17,7 @@ Schema (Auszug):
   features:
     {type:"hole", x, y, diameter, through:true | depth, face:"top",
         counterbore_diameter?, counterbore_depth?,
-        pattern?: {type:"rect", nx, ny, dx, dy}   # x,y = Mitte des Musters
+        pattern?: {type:"rect", nx, ny, dx, dy}   # x,y = Musterzentrum
                 | {type:"circle", n, radius, start_angle}}  # x,y = Mittelpunkt
     {type:"pocket", x, y, length, width, depth, face:"top"}
     {type:"fillet"|"chamfer", size, edges:"|Z"}
@@ -50,7 +50,7 @@ def _face(f):
 
 
 def normalize(spec):
-    """Expandiert pattern-Dicts zu einzelnen Bohrungen. Gibt (spec, warnings) zurueck."""
+    """Erweitert Musterobjekte (pattern) zu einzelnen Bohrungen. Gibt (spec, warnings) zurück."""
     feats, warns = [], []
     for f in spec.get("features", []):
         p = f.get("pattern")
@@ -68,12 +68,12 @@ def normalize(spec):
                     a = math.radians(a0 + 360.0 * i / n)
                     feats.append({**b, "x": f["x"] + R * math.cos(a), "y": f["y"] + R * math.sin(a)})
             else:
-                warns.append(f"Unbekannter Mustertyp {p.get('type')!r}: nur eine Bohrung gebaut")
+                warns.append(f"Unbekannter Mustertyp {p.get('type')!r}: nur eine Bohrung erstellt")
                 feats.append(b)
         else:
             if f.get("type") == "hole" and isinstance(p, str):
-                warns.append(f"Muster nur als Text ('{p}') angegeben: NUR EINE Bohrung gebaut. "
-                             f"Alle Bohrungen einzeln oder als pattern-Objekt angeben!")
+                warns.append(f"Muster nur als Text ('{p}') angegeben: nur eine Bohrung erstellt. "
+                             f"Alle Bohrungen einzeln oder als Musterobjekt (pattern) angeben!")
             feats.append(f)
     return {**spec, "features": feats}, warns
 
@@ -89,7 +89,7 @@ def generate(spec):
     # ---- Basis ----
     H = float(base.get("height", 0) or 0)
     if H <= 0:
-        raise ValueError("base.height fehlt oder <= 0")
+        raise ValueError("base.height fehlt oder ist <= 0")
     h = _n(H, "base.height", True)
     if shape == "box":
         L, W = base.get("length"), base.get("width")
@@ -105,7 +105,7 @@ def generate(spec):
     elif shape == "profile":
         pts = base.get("points") or []
         if len(pts) < 3:
-            raise ValueError("base.points braucht mindestens 3 Punkte")
+            raise ValueError("base.points erfordert mindestens 3 Punkte")
         ptxt = ", ".join(f"({_n(p[0],'x')}, {_n(p[1],'y')})" for p in pts)
         lines.append(f'result = cq.Workplane("XY").polyline([{ptxt}]).close().extrude({h})')
         xs, ys = [float(p[0]) for p in pts], [float(p[1]) for p in pts]
@@ -113,9 +113,9 @@ def generate(spec):
         bbox_min = {"x": min(xs), "y": min(ys), "z": 0.0}
         cx, cy = (max(xs) + min(xs)) / 2, (max(ys) + min(ys)) / 2
         if abs(cx) > 1e-6 or abs(cy) > 1e-6:
-            warnings.append(f"Profil ist nicht um den Nullpunkt zentriert (Mitte der Kontur bei ({cx:g}, {cy:g})). "
-                            f"Konvention: Nullpunkt = Mitte Unterseite. Feature-Koordinaten beziehen sich auf "
-                            f"die Profil-Koordinaten -> PRUEFEN")
+            warnings.append(f"Profil ist nicht um den Nullpunkt zentriert (Konturmittelpunkt bei ({cx:g}, {cy:g})). "
+                            f"Konvention: Der Nullpunkt liegt in der Mitte der Unterseite. Merkmalskoordinaten beziehen sich auf "
+                            f"die Profilkoordinaten -> PRÜFEN")
     else:
         raise ValueError(f"Unbekannte base.shape {shape!r}")
 
@@ -125,12 +125,12 @@ def generate(spec):
     holes = [f for f in feats if f.get("type") == "hole"]
     others = [f for f in feats if f.get("type") not in ("fillet", "chamfer", "pocket", "hole")]
     for f in others:
-        unsupported.append(f"Feature-Typ {f.get('type')!r} nicht unterstuetzt: {json.dumps(f)[:100]}")
+        unsupported.append(f"Merkmalstyp {f.get('type')!r} nicht unterstützt: {json.dumps(f)[:100]}")
 
     def cutter(face, extent_depth, through=False):
-        """Gibt (Workplane-Praefix, Extrusionslaenge) zurueck; 1 mm Ueberstand gegen Koplanaritaet.
-        Durchgaenge bekommen auf BEIDEN Seiten 1 mm Ueberstand (sonst endet das Werkzeug koplanar
-        auf der Gegenflaeche)."""
+        """Gibt (Workplane-Präfix, Extrusionslänge) zurück; 1 mm Überstand gegen Koplanarität.
+        Durchgangsbohrungen erhalten auf BEIDEN Seiten 1 mm Überstand (sonst endet das Werkzeug koplanar
+        auf der Gegenfläche)."""
         ext = extent_depth + (2 if through else 1)
         if face == "top":
             return f'cq.Workplane("XY").workplane(offset={_n(H+1,"o")})', f"-{_n(ext,'d')}"
@@ -138,11 +138,11 @@ def generate(spec):
 
     # ---- Kanten (zuerst, solange der Koerper noch einfach ist) ----
     if edge:
-        lines += ["", "# Rundungen/Fasen auf dem Grundkoerper (vor den Bohrungen, sonst werden Bohrungsnaehte mitgewaehlt)"]
+        lines += ["", "# Rundungen/Fasen auf dem Grundkörper (vor den Bohrungen, sonst werden Bohrungsnähte mit ausgewählt)"]
     for f in edge:
         sel = f.get("edges", "|Z")
         if not SEL.match(str(sel)):
-            unsupported.append(f"Kantenselektor {sel!r} nicht erlaubt: {f.get('type')} uebersprungen")
+            unsupported.append(f"Kantenselektor {sel!r} ist nicht zulässig: {f.get('type')} wird übersprungen")
             continue
         op = "fillet" if f["type"] == "fillet" else "chamfer"
         lines.append(f'result = result.edges("{sel}").{op}({_n(f["size"],"size",True)})')
@@ -153,10 +153,10 @@ def generate(spec):
     for f in pockets:
         face = _face(f)
         if face is None:
-            unsupported.append(f"Tasche auf Flaeche {f.get('face')!r} nicht unterstuetzt (nur top/bottom)")
+            unsupported.append(f"Tasche auf Fläche {f.get('face')!r} nicht unterstützt (nur top/bottom)")
             continue
         if float(f.get("angle", 0) or 0) != 0:
-            unsupported.append("Tasche mit Drehwinkel nicht unterstuetzt: ohne Drehung gebaut -> PRUEFEN")
+            unsupported.append("Tasche mit Drehwinkel nicht unterstützt: ohne Drehung erstellt -> PRÜFEN")
         pre, ext = cutter(face, float(f["depth"]))
         lines.append(f'result = result.cut({pre}.center({_n(f["x"],"x")}, {_n(f["y"],"y")})'
                      f'.rect({_n(f["length"],"length",True)}, {_n(f["width"],"width",True)}).extrude({ext}))')
@@ -167,14 +167,14 @@ def generate(spec):
     for f in holes:
         face = _face(f)
         if face is None:
-            unsupported.append(f"Bohrung auf Flaeche {f.get('face')!r} nicht unterstuetzt "
-                               f"(@{f.get('x')},{f.get('y')}): NICHT gebaut")
+            unsupported.append(f"Bohrung auf Fläche {f.get('face')!r} nicht unterstützt "
+                               f"(@{f.get('x')},{f.get('y')}): nicht erstellt")
             continue
         r = float(f["diameter"]) / 2
         depth = f.get("depth")
         through = bool(f.get("through", depth is None))
         if not through and depth is None:
-            raise ValueError(f"Bohrung @({f.get('x')},{f.get('y')}): through=false, aber keine depth angegeben")
+            raise ValueError(f"Bohrung @({f.get('x')},{f.get('y')}): through=false, aber depth fehlt")
         d = H if through else float(_n(depth, "hole.depth", True))
         through = through or d >= H
         pre, ext = cutter(face, min(d, H), through)
@@ -183,7 +183,7 @@ def generate(spec):
         if f.get("counterbore_diameter"):
             if not f.get("counterbore_depth"):
                 unsupported.append(f"Senkung Ø{f['counterbore_diameter']} @({f.get('x')},{f.get('y')}) ohne "
-                                   f"counterbore_depth: Senkung NICHT gebaut (Tiefe wird nicht geraten)")
+                                   f"counterbore_depth: Senkung nicht erstellt (Tiefe wird nicht geschätzt)")
                 continue
             pre, ext = cutter(face, float(_n(f["counterbore_depth"], "counterbore_depth", True)))
             lines.append(f'result = result.cut({pre}.center({_n(f["x"],"x")}, {_n(f["y"],"y")})'
@@ -196,11 +196,11 @@ def generate(spec):
 
 
 def execute(code):
-    """Fuehrt den generierten Code aus. Der Code stammt nur aus generate() (validierte Zahlen)."""
+    """Führt den generierten Code aus. Er stammt ausschließlich aus generate() (geprüfte Zahlen)."""
     ns = {}
     exec(compile(code, "<generated>", "exec"), ns)
     if "result" not in ns:
-        raise RuntimeError("Generierter Code hat kein 'result'")
+        raise RuntimeError("Der generierte Code enthält keine Variable result")
     return ns["result"]
 
 
@@ -215,5 +215,5 @@ if __name__ == "__main__":
     cq.exporters.export(wp, f"out/{name}.step")
     print(code)
     print("Warnungen:", info["warnings"])
-    print("NICHT UNTERSTUETZT:", info["unsupported"])
-    print(f"-> out/{name}.step, out/{name}_cadquery.py")
+    print("NICHT UNTERSTÜTZT:", info["unsupported"])
+    print(f"-> erstellt: out/{name}.step, out/{name}_cadquery.py")

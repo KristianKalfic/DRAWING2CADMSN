@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="de">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -12,16 +12,16 @@
   <header class="top">
     <h1>Drawing2CAD</h1>
     <form id="upload" class="upload">
-      <label>Drawing (PDF)<input type="file" name="pdf" accept="application/pdf" required></label>
-      <label>Part name<input type="text" name="part" pattern="[\w\-]+" placeholder="bracket_1" required></label>
-      <label>Model (optional)<input type="text" name="model" placeholder="server default"></label>
-      <button type="submit">Run agent</button>
+      <label>Zeichnung (PDF)<input type="file" name="pdf" accept="application/pdf" required></label>
+      <label>Teilname<input type="text" name="part" pattern="[\w\-]+" placeholder="halterung_1" required></label>
+      <label>Modell (optional)<input type="text" name="model" placeholder="Servervorgabe"></label>
+      <button type="submit">Agenten starten</button>
     </form>
-    <pre id="log" class="log" aria-live="polite">No run yet. Upload a drawing to watch the tool calls here.</pre>
+    <pre id="log" class="log" aria-live="polite">Noch kein Lauf. Lade eine Zeichnung hoch, um hier die Werkzeugaufrufe zu verfolgen.</pre>
   </header>
   <main class="layout">
-    <nav class="parts" aria-label="Parts">
-      <h2>Parts</h2>
+    <nav class="parts" aria-label="Teile">
+      <h2>Teile</h2>
       <ul id="parts"></ul>
     </nav>
     <section id="detail" class="detail" aria-live="polite"></section>

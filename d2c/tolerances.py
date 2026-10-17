@@ -38,7 +38,7 @@ def _table(pattern: str) -> ET.Element:
     folder = Path(os.environ.get("D2C_TABLES", "/tables"))
     files = sorted(folder.glob(pattern))
     if not files:
-        raise ToleranceError(f"no {pattern} in {folder}: set D2C_TABLES to the folder with the BCT tables")
+        raise ToleranceError(f"Keine Datei für {pattern} in {folder} gefunden: Setze D2C_TABLES auf den Ordner mit den BCT-Tabellen.")
     return ET.parse(files[0]).getroot()  # the parser reads the encoding (ISO-8859-1) from the XML header
 
 
@@ -57,12 +57,12 @@ def _covers(row: ET.Element, nominal: float) -> bool:
 def _deviations(rows: ET.Element | None, nominal: float, what: str) -> tuple[float, float]:
     """(lower, upper) of the first row of rows that covers the nominal size."""
     if rows is None:
-        raise ToleranceError(f"{what} is not in the tolerance tables")
+        raise ToleranceError(f"{what} ist nicht in den Toleranztabellen enthalten.")
     for row in rows:
         if _covers(row, nominal):
             # + 0.0: the tables write the zero deviation of the H and h classes as "-0.0"
             return float(row.get("lower")) + 0.0, float(row.get("upper")) + 0.0
-    raise ToleranceError(f"{what} has no row for {nominal} mm in the tolerance tables")
+    raise ToleranceError(f"{what}: Für {nominal} mm gibt es keine Zeile in den Toleranztabellen.")
 
 
 def _fit_deviations(fit: str, nominal: float) -> tuple[float, float]:

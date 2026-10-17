@@ -2,7 +2,7 @@
   "name": "demo_bracket",
   "drawing": "Demo Teil (A)/demo drawing.pdf",
   "page": 1,
-  "title": "D2C Demo Bracket",
+  "title": "D2C Demo-Halterung",
   "scale": "1:1",
   "units": "mm",
   "general_tolerance": "ISO 2768-m",
@@ -21,7 +21,7 @@
     {"id": "p30", "kind": "length", "value": 30, "text": "30", "source": {"view": "v_top", "cell": null}, "confidence": 0.95},
     {"id": "h25", "kind": "length", "value": 25, "text": "25", "source": {"view": "v_front", "cell": null}, "confidence": 0.95},
     {"id": "t10", "kind": "length", "value": 10, "text": "", "source": null, "confidence": 0.6, "assumed": true,
-     "assumption_basis": "plate thickness not dimensioned; measured in front view at scale 1:1"}
+     "assumption_basis": "Plattendicke nicht bemaßt; in der Vorderansicht bei Maßstab 1:1 gemessen"}
   ],
   "features": [
     {"id": "f_plate", "type": "base", "dim_ids": ["d80", "d50", "r5", "t10"]},
@@ -31,7 +31,7 @@
   ],
   "notes": [
     {"id": "n1", "text": "Material S235JR", "source": null},
-    {"id": "n2", "text": "Deburr all edges", "source": null}
+    {"id": "n2", "text": "Alle Kanten entgraten", "source": null}
   ],
   "expected": {
     "bbox": [80, 50, 25],
@@ -44,8 +44,8 @@
     ]
   },
   "review": [
-    {"id": "rv1", "refs": ["t10"], "issue": "missing", "assumption": "plate thickness 10 mm",
-     "reason": "the plate thickness is not dimensioned; measured in the front view at scale 1:1",
+    {"id": "rv1", "refs": ["t10"], "issue": "missing", "assumption": "Plattendicke 10 mm",
+     "reason": "Die Plattendicke ist nicht bemaßt; in der Vorderansicht bei Maßstab 1:1 gemessen",
      "mark_near": [[35, 0, 0], [35, 0, 10]]}
   ]
 }

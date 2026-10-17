@@ -220,14 +220,15 @@ def read_text(pdf_path: str | Path, page: int = 1, region: Sequence[float] | Non
     """
     if region is not None and (
             len(region) != 4 or not (0 <= region[0] < region[2] <= 1 and 0 <= region[1] < region[3] <= 1)):
-        raise ValueError(f"region must be (x0, y0, x1, y1) with 0 <= x0 < x1 <= 1 and 0 <= y0 < y1 <= 1, "
-                         f"got {region!r}")
+        raise ValueError(f"`region` muss (x0, y0, x1, y1) mit 0 <= x0 < x1 <= 1 und 0 <= y0 < y1 <= 1 sein; "
+                         f"erhalten: {region!r}.")
     if page < 1:
-        raise ValueError(f"page must be 1 or higher, got {page}")
+        raise ValueError(f"`page` muss mindestens 1 sein; erhalten: {page}.")
     run = subprocess.run(["pdftohtml", "-xml", "-i", "-stdout", "-f", str(page), "-l", str(page), str(pdf_path)],
                          capture_output=True, timeout=_TIMEOUT)
     if run.returncode:
-        raise ValueError(f"cannot read page {page} of {pdf_path}: {run.stderr.decode(errors='replace').strip()}")
+        raise ValueError(f"Seite {page} von {pdf_path} konnte nicht gelesen werden: "
+                         f"{run.stderr.decode(errors='replace').strip()}")
     items = items_from_xml(run.stdout)
     if region is None:
         return items

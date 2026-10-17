@@ -15,6 +15,8 @@ import sys
 import tempfile
 from pathlib import Path
 
+from pydantic import ValidationError
+
 DEFAULT_TIMEOUT = 60.0  # seconds of wall clock, D2C_TIMEOUT overrides it
 MEMORY_LIMIT = 4 * 2**30  # bytes of address space
 FILE_LIMIT = 200 * 2**20  # bytes of any file the worker writes
@@ -28,6 +30,40 @@ FORBIDDEN_NAMES = frozenset(
 def error_report(error: str) -> dict:
     """The worker report of a run that made no model: `error` is set, everything else is empty."""
     return {"ok": False, "error": error, "solid": None, "dims": [], "build_notes": [], "roundtrip": None}
+
+
+def validation_error_message(error: ValidationError) -> str:
+    """Pydantic field errors in German, retaining each field path and error type."""
+    messages = {
+        "missing": "fehlt",
+        "extra_forbidden": "ist nicht zulässig",
+        "greater_than": "muss größer als {gt} sein",
+        "greater_than_equal": "muss mindestens {ge} sein",
+        "less_than": "muss kleiner als {lt} sein",
+        "less_than_equal": "darf höchstens {le} sein",
+        "string_pattern_mismatch": "entspricht nicht dem erwarteten Muster",
+        "literal_error": "muss einen der zulässigen Werte annehmen: {expected}",
+        "int_parsing": "muss eine Ganzzahl sein",
+        "int_type": "muss eine Ganzzahl sein",
+        "float_parsing": "muss eine Zahl sein",
+        "float_type": "muss eine Zahl sein",
+        "string_type": "muss Text sein",
+        "list_type": "muss eine Liste sein",
+        "tuple_type": "muss ein Tupel sein",
+        "dict_type": "muss ein Objekt sein",
+        "bool_type": "muss ein boolescher Wert sein",
+        "finite_number": "muss endlich sein",
+    }
+    rows = []
+    for item in error.errors(include_url=False):
+        kind, context = item["type"], item.get("ctx") or {}
+        if kind == "literal_error":
+            context["expected"] = context["expected"].replace(" or ", ", ")
+        message = (str(context["error"]) if kind == "value_error" and "error" in context
+                   else messages.get(kind, "ist ungültig").format(**context))
+        location = ".".join(map(str, item["loc"])) or "Eingabe"
+        rows.append(f"{location}: {message} ({kind})")
+    return "; ".join(rows)
 
 
 def _lookups(node: ast.AST) -> list[str]:
@@ -49,12 +85,12 @@ def check_script(code: str) -> None:
         return  # nothing can run; the worker reports the syntax error together with its op index
     for node in ast.walk(tree):
         if isinstance(node, (ast.Import, ast.ImportFrom)):
-            raise ValueError("imports are not allowed in scripts (cq and math are already available)")
+            raise ValueError("Imports sind in scripts nicht zulässig (cq und math sind bereits verfügbar).")
         if isinstance(node, ast.Name) and node.id in FORBIDDEN_NAMES:
-            raise ValueError(f"{node.id!r} is not allowed in scripts")
+            raise ValueError(f"Der Name {node.id!r} ist in scripts nicht zulässig.")
         for name in _lookups(node):
             if name.startswith("_"):
-                raise ValueError(f"names and attributes starting with an underscore are not allowed: {name!r}")
+                raise ValueError(f"Namen und Attribute mit führendem Unterstrich sind nicht zulässig: {name!r}.")
 
 
 def _limits(cpu_seconds: int) -> None:
@@ -93,7 +129,7 @@ def run_worker(payload: dict, timeout: float | None = None) -> dict:
         except subprocess.TimeoutExpired:
             os.killpg(worker.pid, signal.SIGKILL)
             worker.communicate()
-            return error_report(f"timeout after {limit:g}s")
+            return error_report(f"Zeitüberschreitung nach {limit:g}s")
         stderr.seek(max(0, stderr.seek(0, os.SEEK_END) - STDERR_TAIL))
         crash = stderr.read().decode(errors="replace")
     try:
@@ -101,5 +137,5 @@ def run_worker(payload: dict, timeout: float | None = None) -> dict:
     except ValueError:
         pass
     if worker.returncode in (-signal.SIGKILL, -signal.SIGXCPU):
-        return error_report(f"timeout after {limit:g}s (cpu limit)")
-    return error_report("worker crashed: " + crash)
+        return error_report(f"Zeitüberschreitung nach {limit:g}s (CPU-Limit)")
+    return error_report("Worker abgestürzt: " + crash)

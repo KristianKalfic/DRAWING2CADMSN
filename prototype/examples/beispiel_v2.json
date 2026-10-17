@@ -15,7 +15,7 @@
      "evidence": "Draufsicht gestrichelt + Schnitt A-A", "confidence": 0.7}
   ],
   "review": [
-    {"feature": "fillet", "value": 5, "reason": "R5 nur an einer Ecke bemaßt, für alle 4 angenommen", "confidence": 0.6},
-    {"feature": "pocket depth", "value": 5, "reason": "Tiefe aus Schnitt A-A abgegriffen (Maßstab 1:1), nicht bemaßt", "confidence": 0.6}
+    {"feature": "Verrundung", "value": 5, "reason": "R5 nur an einer Ecke bemaßt, für alle 4 angenommen", "confidence": 0.6},
+    {"feature": "Taschentiefe", "value": 5, "reason": "Tiefe aus Schnitt A-A abgegriffen (Maßstab 1:1), nicht bemaßt", "confidence": 0.6}
   ]
 }

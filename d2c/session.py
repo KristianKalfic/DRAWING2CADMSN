@@ -38,11 +38,11 @@ class Session:
         """The normalized name of a known part; a part only on disk is loaded first."""
         part = unicodedata.normalize("NFC", part)
         if not PART_NAME.fullmatch(part):
-            raise KeyError(f"unknown part '{part}'; call submit_spec first")
+            raise KeyError(f"Unbekanntes Bauteil '{part}'; rufe zuerst `submit_spec` auf.")
         if part not in self.specs:
             folder = self._folder(part)
             if not (folder / "spec.json").is_file():
-                raise KeyError(f"unknown part '{part}'; call submit_spec first")
+                raise KeyError(f"Unbekanntes Bauteil '{part}'; rufe zuerst `submit_spec` auf.")
             self.specs[part], self.ops[part] = self._read(folder)
         return part
 
@@ -56,7 +56,7 @@ class Session:
             ops_file = folder / name
             return spec, json.loads(ops_file.read_text(encoding="utf-8")) if ops_file.is_file() else []
         except ValueError as e:
-            raise ValueError(f"{folder.name}/{name} is unreadable ({e}); call submit_spec again") from e
+            raise ValueError(f"{folder.name}/{name} ist nicht lesbar ({e}); rufe `submit_spec` erneut auf.") from e
 
     def _write_state(self, part: str) -> None:
         folder = self._folder(part)
@@ -70,10 +70,10 @@ class Session:
         for op in ops:
             if not isinstance(op, dict) or not isinstance(op.get("refs", {}), dict):
                 raise ValueError(
-                    'refs must be an object mapping an op parameter path to a dimension id, e.g. {"d": "d1"}')
+                    '`refs` muss ein Objekt sein, das Vorgangsparameterpfade Maß-IDs zuordnet, z. B. {"d": "d1"}.')
             for dim_id in op.get("refs", {}).values():
                 if dim_id not in known:
-                    raise ValueError(f"unknown dimension id '{dim_id}' in refs")
+                    raise ValueError(f"Unbekannte Maß-ID '{dim_id}' in `refs`.")
         return run_worker({
             "ops": ops,
             "expected": spec.expected.model_dump(mode="json"),
@@ -92,7 +92,7 @@ class Session:
 
     def _index(self, part: str, index: int) -> None:
         if not 0 <= index < len(self.ops[part]):
-            raise IndexError(f"op index {index} out of range for {len(self.ops[part])} ops")
+            raise IndexError(f"`index` {index} liegt außerhalb der {len(self.ops[part])} Vorgänge.")
 
     def submit_spec(self, spec: PartSpec) -> dict:
         """Register a spec, reset the ops of the part and write results/<name>/spec.json."""
@@ -144,7 +144,7 @@ class Session:
         if not report["ok"]:
             for name in (step.name, "report.json", "review.md", "review.json"):
                 (folder / name).unlink(missing_ok=True)
-            return {"ok": False, "error": "validation failed", "report": report}
+            return {"ok": False, "error": "Prüfung fehlgeschlagen", "report": report}
         self.last[part] = report
         self._write_state(part)
         spec, ops = self.specs[part], self.ops[part]

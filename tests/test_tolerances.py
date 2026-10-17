@@ -90,7 +90,7 @@ def test_range_boundary_inclusive(nominal):
 
 @pytest.mark.parametrize("nominal", [3.0, 6.001])
 def test_range_boundary_exclusive(nominal):
-    with pytest.raises(ToleranceError, match="no row"):
+    with pytest.raises(ToleranceError, match="keine Zeile"):
         limits(dim(nominal, "diameter", fit="h10"), None)
 
 

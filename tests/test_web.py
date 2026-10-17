@@ -73,7 +73,8 @@ def test_parts_list_and_detail(client):
         assert detail["spec"]["name"] == "plate"
         assert detail["review"]["assumptions"][0]["id"] == "rv1"
         assert detail["report"]["ok"] is True
-        assert client.get("/api/parts/nope").status_code == 404
+        missing = client.get("/api/parts/nope")
+        assert missing.status_code == 404 and missing.json()["error"] == "Teil nicht gefunden"
 
 
 def test_eval_row_joins_by_part(client, exported):
@@ -173,9 +174,14 @@ def test_run_without_llm_endpoint_is_503(monkeypatch, tmp_path):
     with TestClient(create_app(fake_agent([]))) as client:
         response = upload(client)
     assert response.status_code == 503 and "D2C_LLM_BASE_URL" in response.json()["error"]
+    assert response.json()["error"].startswith("Kein Sprachmodell-Zugang konfiguriert")
 
 
 def test_index_and_vendored_viewer_served(client):
     with client:
-        assert "model-viewer" in client.get("/").text
+        html = client.get("/").text
+        assert '<html lang="de">' in html
+        assert "Zeichnung (PDF)" in html and "Teilname" in html
+        assert "Agenten starten" in html and 'aria-label="Teile"' in html
+        assert "model-viewer" in html
         assert client.get("/static/vendor/model-viewer.min.js").status_code == 200

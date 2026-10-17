@@ -728,7 +728,7 @@ def _visible_widths(scores: dict[float, float], edge_width: str | float) -> list
         target = float(edge_width)
     except ValueError:
         raise ValueError(
-            f'edge_width must be "auto", "all" or a stroke width in pt, got {edge_width!r}'
+            f'`edge_width` muss "auto", "all" oder eine Linienbreite in pt sein; erhalten: {edge_width!r}.'
         ) from None
     return [min(scores, key=lambda w: abs(w - target))] if scores else []
 
@@ -758,8 +758,8 @@ def _check_region(region: Sequence[float] | None) -> Box:
     box = (0.0, 0.0, 1.0, 1.0) if region is None else tuple(region)
     if len(box) != 4 or not (0 <= box[0] < box[2] <= 1 and 0 <= box[1] < box[3] <= 1):
         raise ValueError(
-            "region must be (x0, y0, x1, y1) as fractions of the page with x0 < x1 and "
-            f"y0 < y1, got {region!r}"
+            "`region` muss (x0, y0, x1, y1) als Seitenanteile mit x0 < x1 und "
+            f"y0 < y1 sein; erhalten: {region!r}."
         )
     return box
 
@@ -768,7 +768,7 @@ def _read_page(pdf_path: str | PathLike[str], page: int) -> tuple[float, float, 
     """Size (pt) of the displayed page and its stroked elements."""
     with pymupdf.open(pdf_path) as doc:
         if not 1 <= page <= len(doc):
-            raise ValueError(f"page must be in 1..{len(doc)}, got {page}")
+            raise ValueError(f"`page` muss zwischen 1 und {len(doc)} liegen; erhalten: {page}.")
         pg = doc[page - 1]
         return pg.rect.width, pg.rect.height, _collect(pg)
 
@@ -808,9 +808,9 @@ def _extent(
 ) -> tuple[list[float] | None, str | None]:
     """Width and height of the largest contour, else of all primitives; None if there are none."""
     if contours:
-        box, basis = contours[0].bbox, "largest contour"
+        box, basis = contours[0].bbox, "größte Kontur"
     elif prims:
-        box, basis = _union([p.bbox() for p in prims]), "all visible primitives"
+        box, basis = _union([p.bbox() for p in prims]), "alle sichtbaren Grundelemente"
     else:
         return None, None
     return [f.mm(box[2] - box[0]), f.mm(box[3] - box[1])], basis
@@ -863,7 +863,7 @@ def extract(
 
     Returns:
         scale_used; styles (stroke classes: width in pt, drawn length score, visible), widest
-        first; extent_mm [width, height] with extent_basis ("largest contour" or "all visible
+        first; extent_mm [width, height] with extent_basis ("größte Kontur" or "all visible
         primitives", None if the region holds no geometry); circles (cx, cy, d_mm) and arcs (cx,
         cy, r_mm, sweep in degrees), largest first; lines (x0, y0, x1, y1, length_mm, angle_deg,
         in_contour), longest first; contours (bbox_mm [x0, y0, x1, y1], w_mm, h_mm, closed_loop,
@@ -871,7 +871,7 @@ def extract(
         lower-left corner of the region.
     """
     if not scale > 0:
-        raise ValueError(f"scale must be positive, got {scale}")
+        raise ValueError(f"`scale` muss positiv sein; erhalten: {scale}.")
     rx0, ry0, rx1, ry1 = _check_region(region)
     width, height, flat = _read_page(pdf_path, page)
     classes = {
@@ -907,25 +907,25 @@ Candidates = dict[str, list[tuple[float, str]]]  # kind (d, r, L) -> (value in m
 
 def _round_candidates(res: dict, pool: Candidates) -> None:
     for c in res["circles"]:
-        where = f"circle at ({c['cx']},{c['cy']})"
+        where = f"Kreis bei ({c['cx']},{c['cy']})"
         pool["d"].append((c["d_mm"], where))
         pool["r"].append((round(c["d_mm"] / 2, 4), where))
     for a in res["arcs"]:
-        where = f"arc {a['sweep']} deg at ({a['cx']},{a['cy']})"
+        where = f"Bogen {a['sweep']} Grad bei ({a['cx']},{a['cy']})"
         pool["r"].append((a["r_mm"], where))
         pool["d"].append((round(2 * a["r_mm"], 4), f"{where} (2r)"))
 
 
 def _edge_candidates(res: dict, pool: Candidates) -> None:
     for ln in res["lines"]:
-        pool["L"].append((ln["length_mm"], f"line ({ln['x0']},{ln['y0']})-({ln['x1']},{ln['y1']})"))
+        pool["L"].append((ln["length_mm"], f"Linie ({ln['x0']},{ln['y0']})-({ln['x1']},{ln['y1']})"))
     for c in res["contours"]:
         x, y = c["bbox_mm"][:2]
-        pool["L"].append((c["w_mm"], f"contour width @({x},{y})"))
-        pool["L"].append((c["h_mm"], f"contour height @({x},{y})"))
+        pool["L"].append((c["w_mm"], f"Konturbreite @({x},{y})"))
+        pool["L"].append((c["h_mm"], f"Konturhöhe @({x},{y})"))
     if res["extent_mm"]:
-        pool["L"].append((res["extent_mm"][0], "extent width"))
-        pool["L"].append((res["extent_mm"][1], "extent height"))
+        pool["L"].append((res["extent_mm"][0], "Außenbreite"))
+        pool["L"].append((res["extent_mm"][1], "Außenhöhe"))
 
 
 def _centre_candidates(res: dict, pool: Candidates) -> None:
@@ -936,7 +936,7 @@ def _centre_candidates(res: dict, pool: Candidates) -> None:
             dx, dy = abs(a[0] - b[0]), abs(a[1] - b[1])
             for v, name in ((dx, "dx"), (dy, "dy"), (math.hypot(dx, dy), "dist")):
                 if v > 1e-3:
-                    pool["L"].append((round(v, 4), f"centre {name} {a}-{b}"))
+                    pool["L"].append((round(v, 4), f"Mittelpunktabstand {name} {a}-{b}"))
     for cx, cy in centres:
         for ln in res["lines"]:
             if ln["length_mm"] < 3:
@@ -945,7 +945,7 @@ def _centre_candidates(res: dict, pool: Candidates) -> None:
             off = abs(dx * (cy - ln["y0"]) - dy * (cx - ln["x0"])) / math.hypot(dx, dy)
             if off > 1e-3:
                 line = f"({ln['x0']},{ln['y0']})-({ln['x1']},{ln['y1']})"
-                pool["L"].append((round(off, 4), f"centre ({cx},{cy}) to line {line}"))
+                pool["L"].append((round(off, 4), f"Abstand Mittelpunkt ({cx},{cy}) zur Linie {line}"))
 
 
 def _parallel_candidates(res: dict, pool: Candidates) -> None:
@@ -959,7 +959,7 @@ def _parallel_candidates(res: dict, pool: Candidates) -> None:
                 off = abs(-dx * math.sin(ang) + dy * math.cos(ang))
                 if off > 1e-3:
                     lengths = f"{a['length_mm']}/{b['length_mm']}"
-                    pool["L"].append((round(off, 4), f"parallel lines spacing (len {lengths})"))
+                    pool["L"].append((round(off, 4), f"Abstand paralleler Linien (Längen {lengths})"))
 
 
 def _candidates(res: dict) -> Candidates:
@@ -979,7 +979,7 @@ _CLAIM = re.compile(r"\s*([drL])\s*=\s*(\d+(?:[.,]\d+)?)\s*")
 def _parse_claim(claim: str) -> tuple[str, float]:
     m = _CLAIM.fullmatch(claim)
     if not m:
-        raise ValueError(f"claim must look like 'd=19', 'r=10' or 'L=49', got {claim!r}")
+        raise ValueError(f"`claim` muss das Format 'd=19', 'r=10' oder 'L=49' haben; erhalten: {claim!r}.")
     return m[1], float(m[2].replace(",", "."))
 
 
@@ -1044,7 +1044,7 @@ def suggest_scale(
     stay visible.
     """
     if any(v <= 0 for v in printed_values):
-        raise ValueError(f"printed values must be positive, got {list(printed_values)}")
+        raise ValueError(f"`printed_values` müssen positiv sein; erhalten: {list(printed_values)}.")
     pool = _candidates(extract(pdf_path, page, region))
     drawn = [v for kind in ("d", "r", "L") for v, _ in pool[kind]]
     votes: collections.Counter[float] = collections.Counter()

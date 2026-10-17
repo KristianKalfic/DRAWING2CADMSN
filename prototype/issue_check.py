@@ -1,14 +1,14 @@
 """
-Issue-Kontrolle fuer Drawing2CAD (ungetestet, bitte lokal ausprobieren).
+Prüfung von Zeichnungs- und STEP-Daten für Drawing2CAD.
 
-Drei unabhaengige Pruefungen -> eine gemeinsame issues.json
-  1. compare   : zwei unabhaengige Extraktionen (A, B) werden verglichen
-  2. plausible : deterministische Regeln auf dem JSON (kein LLM)
-  3. freecad   : STEP wird in FreeCAD (headless) geoeffnet und nachgemessen
+Drei unabhängige Prüfungen werden zu einem gemeinsamen Bericht in issues.json zusammengeführt:
+  1. compare   : vergleicht zwei unabhängige Extraktionen (A, B)
+  2. plausible : wendet deterministische Regeln auf das JSON an (ohne Sprachmodell)
+  3. freecad   : öffnet die STEP-Datei in FreeCAD ohne Benutzeroberfläche und misst sie nach
 
 Aufruf:
   python issue_check.py extraktion_A.json extraktion_B.json out/teil.step [--freecad "C:/Program Files/FreeCAD 1.0/bin/FreeCADCmd.exe"]
-Exit-Code 0 = freigegeben, 1 = offene Blocker.
+Rückgabecode 0 = freigegeben, 1 = offene Blocker.
 """
 import json, os, shutil, subprocess, sys, tempfile
 
@@ -26,11 +26,11 @@ def compare(a, b):
         va, vb = a.get("base", {}).get(k), b.get("base", {}).get(k)
         if va != vb and not (va and vb and abs(va - vb) <= TOL):
             out.append(issue("blocker", "EXTRACTION_MISMATCH",
-                             f"Grundkoerper {k}: A={va} vs B={vb}", f"base.{k}"))
+                             f"Grundkörper {k}: A={va} im Vergleich zu B={vb}", f"base.{k}"))
     fa, fb = a.get("features", []), b.get("features", [])
     if len(fa) != len(fb):
         out.append(issue("blocker", "FEATURE_COUNT",
-                         f"Anzahl Features: A={len(fa)} vs B={len(fb)}", "features"))
+                         f"Anzahl der Merkmale: A={len(fa)} im Vergleich zu B={len(fb)}", "features"))
     # Sortierschluessel gerundet: Kreismuster liefern x = +-1e-15 statt 0 und wuerden sonst
     # gleiche Bohrungen in unterschiedlicher Reihenfolge paaren (Falschalarm).
     key = lambda f: (round(float(f["x"]), 2), round(float(f["y"]), 2))
@@ -38,16 +38,16 @@ def compare(a, b):
     holes_b = sorted([f for f in fb if f.get("type") == "hole"], key=key)
     if len(holes_a) != len(holes_b):
         out.append(issue("blocker", "HOLE_COUNT",
-                         f"Anzahl Bohrungen: A={len(holes_a)} vs B={len(holes_b)}", "features.hole"))
+                         f"Anzahl der Bohrungen: A={len(holes_a)} im Vergleich zu B={len(holes_b)}", "features.hole"))
     for i, (h1, h2) in enumerate(zip(holes_a, holes_b)):
         for k in ("x", "y", "diameter"):
             if abs(h1[k] - h2[k]) > TOL:
                 out.append(issue("blocker", "EXTRACTION_MISMATCH",
-                                 f"Bohrung #{i} {k}: A={h1[k]} vs B={h2[k]}", f"features.hole[{i}].{k}"))
+                                 f"Bohrung Nr. {i}, {k}: A={h1[k]} im Vergleich zu B={h2[k]}", f"features.hole[{i}].{k}"))
     return out
 
 
-# ---------- 2. Plausibilitaet (deterministisch) ----------
+# ---------- 2. Plausibilitätsprüfung (deterministisch) ----------
 def plausible(spec):
     out, base = [], spec.get("base", {})
     L, W, H = base.get("length"), base.get("width"), base.get("height")
@@ -55,28 +55,28 @@ def plausible(spec):
     for f in spec.get("features", []):
         if f.get("confidence", 1) < 0.7:
             out.append(issue("warning", "LOW_CONFIDENCE",
-                             f"{f.get('type')} nur Konfidenz {f['confidence']}", str(f)[:80]))
+                             f"{f.get('type')} mit einer Konfidenz von nur {f['confidence']}", str(f)[:80]))
         if f.get("type") == "hole" and L and W:
             r = f["diameter"] / 2
             if abs(f["x"]) + r > L / 2 or abs(f["y"]) + r > W / 2:
                 out.append(issue("blocker", "HOLE_OUTSIDE_BODY",
-                                 f"Bohrung d={f['diameter']} @({f['x']},{f['y']}) ragt aus dem Koerper "
-                                 f"(Nullpunkt-Annahme: Mitte!)", "features.hole"))
+                                 f"Bohrung d={f['diameter']} @({f['x']},{f['y']}) ragt aus dem Grundkörper "
+                                 f"(Annahme zum Nullpunkt: Mitte!)", "features.hole"))
             if f["diameter"] >= min(L, W):
-                out.append(issue("blocker", "HOLE_TOO_BIG", "Bohrung groesser als Koerper", "features.hole"))
+                out.append(issue("blocker", "HOLE_TOO_BIG", "Bohrung ist größer als der Grundkörper", "features.hole"))
         if f.get("type") == "hole" and D:
             if (f["x"] ** 2 + f["y"] ** 2) ** 0.5 + f["diameter"] / 2 > D / 2:
                 out.append(issue("blocker", "HOLE_OUTSIDE_BODY",
                                  f"Bohrung d={f['diameter']} @({f['x']},{f['y']}) ragt aus dem Zylinder "
-                                 f"D={D} (Nullpunkt-Annahme: Mitte!)", "features.hole"))
+                                 f"D={D} (Annahme zum Nullpunkt: Mitte!)", "features.hole"))
         if f.get("type") == "fillet" and L and W and f["size"] > min(L, W) / 2:
-            out.append(issue("blocker", "FILLET_TOO_BIG", "Radius > halbe Kante", "features.fillet"))
+            out.append(issue("blocker", "FILLET_TOO_BIG", "Der Radius ist größer als die halbe Kantenlänge", "features.fillet"))
     holes = [f for f in spec.get("features", []) if f.get("type") == "hole"]
     for i in range(len(holes)):
         for j in range(i + 1, len(holes)):
             d = ((holes[i]["x"] - holes[j]["x"]) ** 2 + (holes[i]["y"] - holes[j]["y"]) ** 2) ** 0.5
             if d < (holes[i]["diameter"] + holes[j]["diameter"]) / 2:
-                out.append(issue("blocker", "HOLES_OVERLAP", f"Bohrungen {i} und {j} ueberlappen", "features.hole"))
+                out.append(issue("blocker", "HOLES_OVERLAP", f"Bohrungen {i} und {j} überschneiden sich", "features.hole"))
     for r in spec.get("review", []):
         out.append(issue("review", "ASSUMPTION", f"{r.get('feature')}={r.get('value')}: {r.get('reason')}", "review"))
     return out
@@ -112,9 +112,9 @@ def freecad(step, spec, fc_exe):
     exe = fc_exe if os.path.isfile(fc_exe) else shutil.which(fc_exe)
     if not exe:
         return [issue("blocker", "FREECAD_NOT_FOUND",
-                      f"FreeCAD nicht gefunden ({fc_exe!r}). FreeCAD installieren oder Pfad angeben: "
+                      f"FreeCAD wurde unter {fc_exe!r} nicht gefunden. Installieren Sie FreeCAD oder geben Sie den Pfad an: "
                       f"--freecad \"C:/Program Files/FreeCAD 1.0/bin/FreeCADCmd.exe\". "
-                      f"Ohne diese unabhaengige Pruefung wird nicht freigegeben.", step)]
+                      f"Ohne diese unabhängige Prüfung wird keine Freigabe erteilt.", step)]
     with tempfile.TemporaryDirectory() as d:
         sp, op = os.path.join(d, "s.py"), os.path.join(d, "r.json")
         open(sp, "w", encoding="utf-8").write(FC_SCRIPT)
@@ -122,23 +122,23 @@ def freecad(step, spec, fc_exe):
         try:
             p = subprocess.run([exe, sp], env=env, timeout=120, capture_output=True, text=True)
         except subprocess.TimeoutExpired:
-            return [issue("blocker", "FREECAD_FAILED", "FreeCAD-Pruefung nach 120 s abgebrochen", step)]
+            return [issue("blocker", "FREECAD_FAILED", "FreeCAD-Prüfung nach 120 s abgebrochen", step)]
         except OSError as e:
             return [issue("blocker", "FREECAD_FAILED", f"FreeCAD konnte nicht gestartet werden: {e}", step)]
         if not os.path.isfile(op):
             tail = ((p.stderr or "") + (p.stdout or ""))[-500:]
             return [issue("blocker", "FREECAD_FAILED",
-                          f"FreeCAD lieferte kein Ergebnis (Exit {p.returncode}): {tail}", step)]
+                          f"FreeCAD lieferte kein Ergebnis (Rückgabecode {p.returncode}): {tail}", step)]
         r = json.load(open(op, encoding="utf-8"))
     if not r["valid"] or r["solids"] != 1:
-        out.append(issue("blocker", "STEP_INVALID", f"valid={r['valid']} solids={r['solids']}", step))
+        out.append(issue("blocker", "STEP_INVALID", f"STEP-Prüfung fehlgeschlagen (valid={r['valid']}, solids={r['solids']})", step))
     b = spec.get("base", {})
     soll = sorted([b.get("length", 0), b.get("width", 0), b.get("height", 0)])
     ist = sorted(r["bbox"])
     if b.get("shape", "box") == "box":
         for s_, i_ in zip(soll, ist):
             if abs(s_ - i_) > TOL:
-                out.append(issue("blocker", "BBOX_MISMATCH", f"Soll {soll} vs FreeCAD {ist}", step))
+                out.append(issue("blocker", "BBOX_MISMATCH", f"Sollmaße {soll} stimmen nicht mit den FreeCAD-Messwerten {ist} überein", step))
                 break
     for h in [f for f in spec.get("features", []) if f.get("type") == "hole"]:
         ok = any(abs(c["d"] - h["diameter"]) <= TOL and abs(c["x"] - h["x"]) <= TOL and abs(c["y"] - h["y"]) <= TOL

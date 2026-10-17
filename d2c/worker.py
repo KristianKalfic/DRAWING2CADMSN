@@ -7,11 +7,11 @@ import json
 import os
 import sys
 
-from pydantic import TypeAdapter
+from pydantic import TypeAdapter, ValidationError
 
 from d2c.checks import dimension_check, solid_check, step_roundtrip
 from d2c.ops import BuildError, Op, build
-from d2c.sandbox import error_report
+from d2c.sandbox import error_report, validation_error_message
 from d2c.spec import Expected
 
 OPS = TypeAdapter(list[Op])
@@ -26,10 +26,12 @@ def make_report(payload: dict) -> dict:
         expected = Expected.model_validate(want) if want is not None else None
         wp, notes = build(ops)
         if not wp.objects:  # CadQuery keeps no object for an empty compound, and the checks cannot read that
-            raise BuildError("the model is empty (did a cut remove everything?)")
+            raise BuildError("Das Modell ist leer (hat ein Schnitt das gesamte Material entfernt?).")
         solid = solid_check(wp)
         dims = dimension_check(wp, expected) if expected is not None else []
         roundtrip = step_roundtrip(wp, payload.get("export_path") or SCRATCH_STEP, payload.get("marks", []))
+    except ValidationError as e:
+        return error_report(f"ValidationError: {validation_error_message(e)}")
     except Exception as e:  # invalid input, build, check and export errors alike: the caller always gets a report
         return error_report(f"{type(e).__name__}: {e}")
     return {

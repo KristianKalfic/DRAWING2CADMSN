@@ -77,7 +77,7 @@ async def parts(request: Request) -> Response:
 async def part(request: Request) -> Response:
     folder = _part_folder(request.path_params["name"])
     if folder is None:
-        return _error(404, "no such part")
+        return _error(404, "Teil nicht gefunden")
     return JSONResponse(_summary(folder) | {key: _read_json(folder / f"{key}.json") for key in ("spec", "review", "report")})
 
 
@@ -85,7 +85,7 @@ async def file(request: Request) -> Response:
     folder = _part_folder(request.path_params["name"])
     name = request.path_params["file"]
     if folder is None or not _safe_name(name) or not (folder / name).is_file():
-        return _error(404, "no such file")
+        return _error(404, "Datei nicht gefunden")
     return FileResponse(folder / name, media_type=MEDIA_TYPES.get(Path(name).suffix))
 
 
@@ -93,7 +93,7 @@ async def drawing_png(request: Request) -> Response:
     folder = _part_folder(request.path_params["name"])
     spec = _read_json(folder / "spec.json") if folder else None
     if not isinstance(spec, dict) or "drawing" not in spec:
-        return _error(404, "no spec for this part")
+        return _error(404, "Keine Spezifikation für dieses Teil vorhanden")
     try:
         png = await run_in_threadpool(render, spec["drawing"], 1, 100)
     except ValueError as e:
@@ -138,19 +138,19 @@ def _agent_settings(model: str | None) -> dict[str, object]:
 
 async def start_run(request: Request) -> Response:
     if not os.environ.get("D2C_LLM_BASE_URL"):
-        return _error(503, "no LLM endpoint configured: set D2C_LLM_BASE_URL (see .env.example)")
+        return _error(503, "Kein Sprachmodell-Zugang konfiguriert: D2C_LLM_BASE_URL setzen (siehe .env.example)")
     form = await request.form()
     pdf, name, model = form.get("pdf"), unicodedata.normalize("NFC", str(form.get("part", ""))), form.get("model") or None
     if not hasattr(pdf, "read"):
-        return _error(400, "a PDF file is required (form field 'pdf')")
+        return _error(400, "Eine PDF-Datei ist erforderlich (Formularfeld 'pdf')")
     if not PART_NAME.fullmatch(name):
-        return _error(400, "part name may only contain letters, digits, '_' and '-'")
+        return _error(400, "Der Teilname darf nur Buchstaben, Ziffern, '_' und '-' enthalten")
     content = await pdf.read()
     if not content.startswith(b"%PDF"):
-        return _error(400, "the uploaded file is not a PDF")
+        return _error(400, "Die hochgeladene Datei ist keine PDF-Datei")
     settings = _agent_settings(str(model) if model else None)
     if not settings["model"]:
-        return _error(400, "no model given: fill the model field or set D2C_LLM_MODEL")
+        return _error(400, "Kein Modell angegeben: Modellfeld ausfüllen oder D2C_LLM_MODEL setzen")
     target = data_root() / "uploads" / f"{name}.pdf"
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_bytes(content)
@@ -175,7 +175,7 @@ async def _stream(run: Run) -> AsyncIterator[str]:
 async def run_events(request: Request) -> Response:
     run = request.app.state.runs.get(request.path_params["run_id"])
     if run is None:
-        return _error(404, "no such run")
+        return _error(404, "Lauf nicht gefunden")
     return StreamingResponse(_stream(run), media_type="text/event-stream", headers={"Cache-Control": "no-cache"})
 
 

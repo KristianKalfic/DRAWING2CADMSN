@@ -248,5 +248,5 @@ def test_demo_text_items():
 
 def test_region_filter():
     texts = [i["text"] for i in read_text(DEMO, region=TITLE_BLOCK)]
-    assert "Scale 1:1" in texts
+    assert "Maßstab 1:1" in texts
     assert "Ø30" not in texts

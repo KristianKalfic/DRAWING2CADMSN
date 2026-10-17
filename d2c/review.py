@@ -26,7 +26,7 @@ def _cell(text: object) -> str:
 
 def _table(headers: list[str], rows: list[list[object]]) -> str:
     if not rows:
-        return "None."
+        return "Keine Einträge."
     lines = ["| " + " | ".join(headers) + " |", "|" + "---|" * len(headers)]
     lines += ["| " + " | ".join(_cell(c) for c in row) + " |" for row in rows]
     return "\n".join(lines)
@@ -94,8 +94,8 @@ def unreferenced(spec: PartSpec, ops: list[dict]) -> list[dict]:
 def _check_row(entry: dict) -> dict:
     expected, actual = entry["expected"], entry["actual"]
     if entry["check"] == "hole":
-        want = f"Ø{_g(expected['d'])} at {expected['at']} axis {expected['axis']}"
-        got = "no cylinder" if actual is None else f"Ø{_g(actual['d'])}, {_g(actual['dist'])} off axis"
+        want = f"Ø{_g(expected['d'])} bei {expected['at']}, Achse {expected['axis']}"
+        got = "kein Zylinder" if actual is None else f"Ø{_g(actual['d'])}, {_g(actual['dist'])} Abstand zur Achse"
     else:
         want, got = _g(expected), _g(actual)
     ids = f" ({', '.join(entry['dim_ids'])})" if entry["dim_ids"] else ""
@@ -105,21 +105,23 @@ def _check_row(entry: dict) -> dict:
 def validation(report: dict) -> list[dict]:
     """The checks of the worker report as rows of check, expected, actual and ok."""
     if report["error"]:
-        return [{"check": "build", "expected": "no error", "actual": report["error"], "ok": False}]
+        return [{"check": "Aufbau", "expected": "kein Fehler", "actual": report["error"], "ok": False}]
     solid, trip = report["solid"], report["roundtrip"]
     rows = [
-        ("valid solid", "True", solid["valid"], solid["valid"]),
-        ("solid count", "1", solid["solids"], solid["solids"] == 1),
-        ("free edges", "0", solid["free_edges"], solid["free_edges"] == 0),
-        ("volume mm3", "> 0", _g(solid["volume"]), solid["volume"] > 0),
+        ("Gültiger Volumenkörper", True, solid["valid"], solid["valid"]),
+        ("Anzahl Volumenkörper", "1", solid["solids"], solid["solids"] == 1),
+        ("Freie Kanten", "0", solid["free_edges"], solid["free_edges"] == 0),
+        ("Volumen mm³", "> 0", _g(solid["volume"]), solid["volume"] > 0),
         *((r["check"], r["expected"], r["actual"], r["ok"]) for r in map(_check_row, report["dims"])),
-        ("STEP re-import valid", "True", trip["reimport_valid"], trip["reimport_valid"]),
-        ("STEP re-import solids", "1", trip["solids"], trip["solids"] == 1),
-        ("STEP volume change", f"<= {VOLUME_REL_TOL:g}", f"{trip['volume_rel_diff']:.2e}",
+        ("STEP-Rückimport gültig", True, trip["reimport_valid"], trip["reimport_valid"]),
+        ("Volumenkörper im STEP-Rückimport", "1", trip["solids"], trip["solids"] == 1),
+        ("Volumenänderung beim STEP-Rückimport", f"<= {VOLUME_REL_TOL:g}", f"{trip['volume_rel_diff']:.2e}",
          trip["volume_rel_diff"] <= VOLUME_REL_TOL),
-        *((f"marked faces {m['id']}", "> 0", m["faces"], m["faces"] > 0) for m in trip["marks"]),
+        *((f"Markierte Flächen {m['id']}", "> 0", m["faces"], m["faces"] > 0) for m in trip["marks"]),
     ]
-    return [{"check": c, "expected": str(e), "actual": str(a), "ok": bool(ok)} for c, e, a, ok in rows]
+    return [{"check": c, "expected": "ja" if e is True else "nein" if e is False else str(e),
+             "actual": "ja" if a is True else "nein" if a is False else str(a), "ok": bool(ok)}
+            for c, e, a, ok in rows]
 
 
 def to_json(spec: PartSpec, ops: list[dict], report: dict) -> dict:
@@ -137,47 +139,53 @@ def to_json(spec: PartSpec, ops: list[dict], report: dict) -> dict:
 
 def _header(spec: PartSpec) -> str:
     return "\n".join([
-        f"# Review: {spec.title}",
+        f"# Prüfliste: {spec.title}",
         "",
-        f"- Part: {spec.name}",
-        f"- Drawing: {spec.drawing} (page {spec.page})",
-        f"- Scale: {spec.scale}",
-        f"- General tolerance: {spec.general_tolerance or 'not stated'}",
+        f"- Bauteil: {spec.name}",
+        f"- Zeichnung: {spec.drawing} (Seite {spec.page})",
+        f"- Maßstab: {spec.scale}",
+        f"- Allgemeintoleranz: {spec.general_tolerance or 'nicht angegeben'}",
     ])
 
 
 def _assumptions_section(data: dict) -> str:
+    issues = {"missing": "fehlt", "ambiguous": "mehrdeutig", "low_confidence": "geringe Konfidenz",
+              "conflict": "Konflikt", "convention": "Konvention"}
     rows = [
         [a["id"], ", ".join(f"{r['id']} ({r['text']})" if r["text"] else r["id"] for r in a["refs"]) or "-",
-         a["issue"], a["assumption"], a["reason"], ", ".join(a["sources"]) or "-",
-         "-" if a["marked_faces"] is None else f"{a['marked_faces']} face(s)"]
+         issues.get(a["issue"], a["issue"]), a["assumption"], a["reason"], ", ".join(a["sources"]) or "-",
+         "-" if a["marked_faces"] is None else f"Flächen: {a['marked_faces']}"]
         for a in data["assumptions"]
     ]
-    headers = ["id", "Dimension / feature", "Issue", "Assumption", "Reason", "Source", "Marked faces in STEP"]
-    return "## Assumptions and open issues\n" + _table(headers, rows)
+    headers = ["ID", "Maß / Merkmal", "Anliegen", "Annahme", "Begründung", "Quelle", "Markierte Flächen in STEP"]
+    return "## Annahmen und offene Punkte\n" + _table(headers, rows)
 
 
 def _notes_section(data: dict) -> str:
-    return "## Drawing notes\n" + ("\n".join(f"- {n['id']}: {n['text']}" for n in data["notes"]) or "None.")
+    return "## Zeichnungshinweise\n" + ("\n".join(f"- {n['id']}: {n['text']}" for n in data["notes"]) or "Keine.")
 
 
 def _traceability_section(data: dict) -> str:
     rows = [[t["op_index"], t["path"], _g(t["value"]), t["dimension"], t["text"]] for t in data["traceability"]]
-    return "## Traceability\n" + _table(["Op", "Parameter", "Value", "Dimension", "Printed text"], rows)
+    return "## Rückverfolgbarkeit\n" + _table(["Vorgang", "Parameter", "Wert", "Maß", "Gedruckter Text"], rows)
 
 
 def _unreferenced_section(data: dict) -> str:
     rows = [[u["op_index"], u["path"], _g(u["value"])] for u in data["unreferenced"]]
-    return "## Values without dimension reference\n" + _table(["Op", "Parameter", "Value"], rows)
+    return "## Werte ohne Maßbezug\n" + _table(["Vorgang", "Parameter", "Wert"], rows)
 
 
 def _validation_section(data: dict) -> str:
-    rows = [[v["check"], v["expected"], v["actual"], "yes" if v["ok"] else "no"] for v in data["validation"]]
-    return "## Validation\n" + _table(["Check", "Expected", "Actual", "ok"], rows)
+    labels = {"hole": "Bohrung", "bbox_x": "Außenmaß X", "bbox_y": "Außenmaß Y", "bbox_z": "Außenmaß Z"}
+    rows = []
+    for v in data["validation"]:
+        name, separator, refs = v["check"].partition(" ")
+        rows.append([labels.get(name, name) + separator + refs, v["expected"], v["actual"], "ja" if v["ok"] else "nein"])
+    return "## Prüfungen\n" + _table(["Prüfung", "Erwartet", "Tatsächlich", "in Ordnung"], rows)
 
 
 def render(spec: PartSpec, ops: list[dict], report: dict) -> str:
-    """The review list as English Markdown."""
+    """Die Prüfliste als deutsches Markdown."""
     data = to_json(spec, ops, report)
     sections = [
         _header(spec),
@@ -186,6 +194,6 @@ def render(spec: PartSpec, ops: list[dict], report: dict) -> str:
         _traceability_section(data),
         _unreferenced_section(data),
         _validation_section(data),
-        f"All checks passed: {'yes' if data['all_ok'] else 'no'}",
+        f"Alle Prüfungen bestanden: {'ja' if data['all_ok'] else 'nein'}",
     ]
     return "\n\n".join(sections) + "\n"

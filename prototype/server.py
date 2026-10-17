@@ -1,8 +1,8 @@
 """
 Drawing2CAD MCP-Server (Prototyp)
 - Baut 3D-Modelle ausschließlich über strukturierte Tools (CadQuery/OpenCascade)
-- Validiert nach jedem Build (Solid gültig, Maße vs. Zeichnung, STEP-Reimport)
-- Freier Code nur als Fallback in isolierter Sandbox (Subprozess, Timeout, kein Netz im Container)
+- Prüft nach jedem Aufbau den Volumenkörper, die Maße im Vergleich zur Zeichnung und den STEP-Rückimport
+- Freier Code dient nur als Ausweichweg in einem isolierten Unterprozess mit Zeitlimit und ohne Netzwerk
 Start:  python server.py   (stdio-Transport, z. B. für MCP-Clients wie LM Studio)
 """
 import json, os, re, subprocess, sys, tempfile, uuid
@@ -49,8 +49,8 @@ def _bbox(wp):
 @mcp.tool()
 def create_base_body(shape: str, length: float = 0, width: float = 0, height: float = 0,
                      diameter: float = 0, part_name: str = "part") -> dict:
-    """Erzeugt den Grundkörper. shape: 'box' (length x width x height, mm)
-    oder 'cylinder' (diameter, height, Achse = Z). Ursprung: Mitte der Unterseite."""
+    """Erzeugt den Grundkörper. shape: 'box' (length × width × height in mm)
+    oder 'cylinder' (diameter, height, Achse = Z). Der Ursprung liegt in der Mitte der Unterseite."""
     if shape == "box":
         wp = cq.Workplane("XY").box(length, width, height, centered=(True, True, False))
     elif shape == "cylinder":
@@ -58,26 +58,26 @@ def create_base_body(shape: str, length: float = 0, width: float = 0, height: fl
     else:
         return {"ok": False, "error": "shape muss 'box' oder 'cylinder' sein"}
     pid = _new_pid(part_name)
-    PARTS[pid] = {"wp": wp, "spec": {}, "log": [f"base {shape}"]}
+    PARTS[pid] = {"wp": wp, "spec": {}, "log": [f"Grundkörper: {shape}"]}
     return {"ok": True, "part_id": pid, "bbox": _bbox(wp)}
 
 
 @mcp.tool()
 def extrude_profile(points: list[list[float]], height: float, part_name: str = "part") -> dict:
-    """Grundkörper aus geschlossener 2D-Kontur (Liste [x,y] in mm, XY-Ebene) extrudiert um height."""
+    """Erzeugt den Grundkörper durch Extrusion einer geschlossenen 2D-Kontur (Punkte [x, y] in mm, XY-Ebene) um height."""
     wp = cq.Workplane("XY").polyline([tuple(p) for p in points]).close().extrude(height)
     pid = _new_pid(part_name)
-    PARTS[pid] = {"wp": wp, "spec": {}, "log": ["extruded profile"]}
+    PARTS[pid] = {"wp": wp, "spec": {}, "log": ["Profil extrudiert"]}
     return {"ok": True, "part_id": pid, "bbox": _bbox(wp)}
 
 
 @mcp.tool()
 def revolve_profile(points: list[list[float]], part_name: str = "part") -> dict:
-    """Drehteil: Halbkontur [r, z] (r>=0) wird 360° um die Z-Achse rotiert."""
+    """Erzeugt ein Drehteil, indem die Halbkontur [r, z] (r >= 0) um 360° um die Z-Achse rotiert wird."""
     wp = (cq.Workplane("XZ").polyline([tuple(p) for p in points]).close()
           .revolve(360, (0, 0, 0), (0, 1, 0)))
     pid = _new_pid(part_name)
-    PARTS[pid] = {"wp": wp, "spec": {}, "log": ["revolved profile"]}
+    PARTS[pid] = {"wp": wp, "spec": {}, "log": ["Drehprofil erstellt"]}
     return {"ok": True, "part_id": pid, "bbox": _bbox(wp)}
 
 
@@ -85,8 +85,8 @@ def revolve_profile(points: list[list[float]], part_name: str = "part") -> dict:
 @mcp.tool()
 def add_hole(part_id: str, x: float, y: float, diameter: float, depth: float = 0,
              face: str = ">Z", counterbore_diameter: float = 0, counterbore_depth: float = 0) -> dict:
-    """Bohrung an Position (x,y) auf der Fläche face ('>Z' oben, '<Z' unten, '>X' ...).
-    depth=0 -> Durchgangsbohrung. Optional Senkung (counterbore)."""
+    """Erzeugt eine Bohrung an Position (x, y) auf der Fläche face ('>Z' oben, '<Z' unten, '>X' usw.).
+    depth=0 erzeugt eine Durchgangsbohrung. Optional ist eine Zylindersenkung (counterbore)."""
     p = _part(part_id)
     wp = p["wp"].faces(face).workplane(centerOption="ProjectedOrigin", origin=(0, 0, 0))
     wp = wp.pushPoints([_xy_on_face(wp, x, y)])
@@ -95,35 +95,35 @@ def add_hole(part_id: str, x: float, y: float, diameter: float, depth: float = 0
     else:
         wp = wp.hole(diameter, depth or None)
     p["wp"] = wp
-    p["log"].append(f"hole d={diameter} @({x},{y}) {face}")
+    p["log"].append(f"Bohrung d={diameter} bei ({x}, {y}) auf {face}")
     return {"ok": True, "bbox": _bbox(wp)}
 
 
 @mcp.tool()
 def add_pocket(part_id: str, x: float, y: float, length: float, width: float, depth: float,
                face: str = ">Z") -> dict:
-    """Rechteckige Tasche (Mitte x,y) mit Tiefe depth in Fläche face."""
+    """Erzeugt eine rechteckige Tasche mit Mittelpunkt (x, y) und Tiefe depth auf der Fläche face."""
     p = _part(part_id)
     wp = p["wp"].faces(face).workplane(centerOption="ProjectedOrigin", origin=(0, 0, 0))
     p["wp"] = wp.center(*_xy_on_face(wp, x, y)).rect(length, width).cutBlind(-depth)
-    p["log"].append(f"pocket {length}x{width}x{depth}")
+    p["log"].append(f"Tasche {length} × {width} × {depth}")
     return {"ok": True, "bbox": _bbox(p["wp"])}
 
 
 @mcp.tool()
 def add_fillet_or_chamfer(part_id: str, kind: str, size: float, edges: str = "|Z") -> dict:
-    """Rundung/Fase. kind: 'fillet'|'chamfer'. edges: CadQuery-Selektor, z. B. '|Z' (senkrechte Kanten), '>Z' (obere Kanten)."""
+    """Erzeugt eine Rundung (fillet) oder Fase (chamfer). edges ist ein CadQuery-Kantenselektor, z. B. |Z (senkrechte Kanten) oder >Z (obere Kanten)."""
     p = _part(part_id)
     sel = p["wp"].edges(edges)
     p["wp"] = sel.fillet(size) if kind == "fillet" else sel.chamfer(size)
-    p["log"].append(f"{kind} {size} on {edges}")
+    p["log"].append(f"{kind}: {size} an {edges}")
     return {"ok": True, "bbox": _bbox(p["wp"])}
 
 
 # ---------------- Validierung & Export ----------------
 @mcp.tool()
 def set_expected_dimensions(part_id: str, spec: dict) -> dict:
-    """Soll-Maße aus der Zeichnung hinterlegen, z. B.
+    """Hinterlegt Sollmaße aus der Zeichnung, zum Beispiel:
     {"bbox": {"x":100,"y":60,"z":20}, "holes":[{"x":30,"y":0,"d":8.5}], "tol": 0.05}"""
     _part(part_id)["spec"] = spec
     return {"ok": True}
@@ -174,13 +174,13 @@ def _validate(p) -> dict:
 
 @mcp.tool()
 def validate(part_id: str) -> dict:
-    """Prüft: Solid geschlossen/gültig, genau 1 Körper, Maße & Bohrungen gegen Soll-Spec. Maschinenlesbar."""
+    """Prüft, ob der Volumenkörper geschlossen und gültig ist, genau ein Körper vorliegt und Maße sowie Bohrungen den Sollwerten in spec entsprechen. Ergebnis maschinenlesbar."""
     return _validate(_part(part_id))
 
 
 @mcp.tool()
 def export_step(part_id: str, filename: str = "") -> dict:
-    """Exportiert STEP, re-importiert die Datei und validiert erneut. Gibt Pfad + Prüfergebnis zurück."""
+    """Exportiert die STEP-Datei, importiert sie erneut und prüft sie wieder. Gibt Pfad und Prüfergebnis zurück."""
     p = _part(part_id)
     path = os.path.join(OUT, _safe(filename or part_id) + ".step")
     if os.path.exists(path):
@@ -207,8 +207,8 @@ def export_step(part_id: str, filename: str = "") -> dict:
 # ---------------- Fallback: Sandbox ----------------
 @mcp.tool()
 def run_cadquery_script(part_id: str, script: str, timeout_s: int = 20) -> dict:
-    """NUR Fallback für Geometrie ohne passendes Tool. Script muss eine Variable `result` (cq.Workplane)
-    setzen. Läuft in separatem Prozess mit Timeout (Netzwerk ist im Container gesperrt)."""
+    """Nur Ausweichweg für Geometrien ohne passendes Werkzeug. Das Skript muss eine Variable `result` (cq.Workplane)
+    setzen. Es läuft in einem separaten Prozess mit Zeitlimit; der Container hat keinen Netzwerkzugriff."""
     with tempfile.TemporaryDirectory() as d:
         out = os.path.join(d, "r.brep")
         code = "import cadquery as cq\n" + script + f"\ncq.exporters.export(result, {out!r}, 'BREP')\n"
@@ -216,19 +216,19 @@ def run_cadquery_script(part_id: str, script: str, timeout_s: int = 20) -> dict:
             r = subprocess.run([sys.executable, "-I", "-c", code], cwd=d, timeout=timeout_s,
                                capture_output=True, text=True, env={"PATH": "/usr/bin:/bin"})
         except subprocess.TimeoutExpired:
-            return {"ok": False, "error": "timeout"}
+            return {"ok": False, "error": "Zeitüberschreitung"}
         if r.returncode != 0:
             return {"ok": False, "error": r.stderr[-2000:]}
         shape = cq.importers.importBrep(out)
     PARTS.setdefault(part_id, {"spec": {}, "log": []})
     PARTS[part_id]["wp"] = cq.Workplane("XY").add(shape)
-    PARTS[part_id]["log"].append("sandbox script")
+    PARTS[part_id]["log"].append("Skript im isolierten Prozess")
     return {"ok": True, "part_id": part_id, "bbox": _bbox(PARTS[part_id]["wp"])}
 
 
 @mcp.tool()
 def write_review_list(part_id: str, items: list[dict]) -> dict:
-    """Review-Liste speichern: [{"feature":..,"value":..,"reason":"angenommen aus Zeichnungsgeometrie ...","confidence":0.6}]"""
+    """Prüfliste speichern: [{"feature":..,"value":..,"reason":"angenommen aus Zeichnungsgeometrie ...","confidence":0.6}]"""
     path = os.path.join(OUT, _safe(part_id) + "_review.json")
     json.dump(items, open(path, "w", encoding="utf-8"), indent=2, ensure_ascii=False)
     return {"ok": True, "path": path, "count": len(items)}
@@ -240,8 +240,8 @@ from json_builder import generate, execute
 
 @mcp.tool()
 def get_cadquery_code(spec: dict) -> dict:
-    """Wandelt die JSON-Beschreibung des Teils in lesbaren CadQuery-Code um, OHNE zu bauen.
-    Gibt cadquery_code, warnings und unsupported (nicht Umgesetztes) zurueck."""
+    """Wandelt die JSON-Beschreibung des Bauteils in lesbaren CadQuery-Code um, ohne das Modell zu erstellen.
+    Gibt cadquery_code, warnings und unsupported (nicht unterstützte Merkmale) zurück."""
     try:
         code, info = generate(spec)
     except ValueError as e:
@@ -251,9 +251,9 @@ def get_cadquery_code(spec: dict) -> dict:
 
 @mcp.tool()
 def build_from_json(spec: dict, part_name: str = "") -> dict:
-    """HAUPTTOOL: baut das komplette Teil aus der JSON-Beschreibung (base + features).
-    Erzeugt CadQuery-Code, fuehrt ihn aus, hinterlegt Soll-Maße automatisch und validiert.
-    Danach export_step(part_id) aufrufen. Pruefe 'unsupported' und 'warnings' - dort steht, was NICHT gebaut wurde."""
+    """Hauptfunktion: Erstellt das vollständige Bauteil aus der JSON-Beschreibung (base + features).
+    Erzeugt CadQuery-Code, führt ihn aus, hinterlegt automatisch Sollmaße und prüft das Ergebnis.
+    Danach export_step(part_id) aufrufen. unsupported und warnings nennen die Merkmale, die nicht erstellt wurden."""
     try:
         code, info = generate(spec)
         wp = execute(code)

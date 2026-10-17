@@ -1,6 +1,6 @@
 # Drawing2CAD
 
-Drawing2CAD erzeugt aus einer technischen 2D-Zeichnung ein geprüftes 3D-Volumenmodell. Ein Sprachmodell liest die Zeichnung und baut das Teil ausschließlich über die Tools eines lokalen MCP-Servers. Der Server prüft jeden Bauschritt, exportiert das Modell als STEP und markiert jede Annahme farbig im Modell.
+Drawing2CAD erzeugt aus einer technischen 2D-Zeichnung ein geprüftes 3D-Volumenmodell. Ein Sprachmodell liest die Zeichnung und baut das Teil ausschließlich über die Werkzeuge eines lokalen MCP-Servers. Der Server prüft jeden Bauschritt, exportiert das Modell als STEP und markiert jede Annahme farbig im Modell.
 
 ## Schnellstart
 

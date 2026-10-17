@@ -69,7 +69,7 @@ def test_render_path_with_spaces(demo_root):
 
 
 def test_page_out_of_range(demo_root):
-    with pytest.raises(ValueError, match="2 pages"):
+    with pytest.raises(ValueError, match="2 Seiten"):
         render(NAME, page=3)
 
 
@@ -86,7 +86,7 @@ def test_render_caps_long_side_2000(demo_root):
 def test_render_rejects_outside_data(demo_root):
     (demo_root / "link.pdf").symlink_to(DEMO)  # a PDF that lives outside the data folder
     for name in ("../../etc/passwd", "link.pdf", str(DEMO)):
-        with pytest.raises(ValueError, match="inside the data folder"):
+        with pytest.raises(ValueError, match="im Datenordner"):
             render(name)
 
 

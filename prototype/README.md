@@ -1,7 +1,7 @@
 # Drawing2CAD (Hackathon-Prototyp)
 
 Aus einer 2D-Zeichnung (PDF/Scan/Bild) entsteht ein einfaches 3D-Modell als STEP-Datei.
-Alles läuft lokal; der CAD-Kern ist CadQuery (OpenCascade, Open Source).
+Alles läuft lokal; der CAD-Kern ist CadQuery (OpenCascade, quelloffene Software).
 
 ## Architektur
 
@@ -10,15 +10,15 @@ Zeichnung ──► das Sprachmodell liest sie, schreibt JSON (Schema unten, Bei
           ──► MCP-Server server.py ── build_from_json
                  └─ json_builder.py: JSON ──► CadQuery-Code (deterministisch, nur validierte Zahlen
                                               + Selektor-Whitelist, keine Freitext-Einschleusung)
-          ──► Validierung (Solid gültig, genau 1 Körper, Maße + Lage, Bohrungen)
+          ──► Validierung (Volumenkörper gültig, genau 1 Körper, Maße + Lage, Bohrungen)
           ──► export_step: STEP schreiben, re-importieren, Volumen vergleichen
           ──► issue_check.py: 2 Extraktionen vergleichen, Plausibilität, Nachmessen in FreeCAD
 ```
 
 Nicht Umsetzbares wird **nicht geraten**, sondern in `unsupported` / `warnings` (Server) bzw.
-als Issue (issue_check) gemeldet. Unsichere Maße gehören mit Begründung in `review`.
+als Prüfhinweis (`issue_check`) gemeldet. Unsichere Maße gehören mit Begründung in `review`.
 
-Dateien: `server.py` (MCP-Tools), `json_builder.py` (JSON → CadQuery), `issue_check.py`
+Dateien: `server.py` (MCP-Werkzeuge), `json_builder.py` (JSON → CadQuery), `issue_check.py`
 (unabhängige Prüfung), `tests/` (pytest), `Dockerfile`, `environment.yml`.
 
 ## Installation
@@ -38,20 +38,20 @@ docker run -i --rm --network none -v "$PWD/out:/data/out" drawing2cad
 # Linux-Host zusätzlich: --user $(id -u):$(id -g)   (sonst keine Schreibrechte in out/)
 ```
 
-## Test
+## Prüfungen
 
 ```bash
 python json_builder.py examples/beispiel_v2.json   # ohne KI: -> out/Flanschplatte_4711.step
-python -m pytest tests -q                          # Builder, Validierung, STEP-Re-Import, issue_check
+python -m pytest tests -q                          # Modellaufbau, Validierung, STEP-Rückimport, issue_check
 python issue_check.py A.json B.json out/teil.step --freecad "C:/Program Files/FreeCAD 1.0/bin/FreeCADCmd.exe"
 ```
 
 `issue_check.py` gibt ohne FreeCAD den Blocker `FREECAD_NOT_FOUND` aus und gibt nicht frei (Exit 1).
-Der FreeCAD-Test in `tests/` wird übersprungen, wenn `FreeCADCmd` nicht im PATH ist.
+Die FreeCAD-Prüfung in `tests/` wird übersprungen, wenn `FreeCADCmd` nicht im PATH ist.
 
-## MCP clients
+## MCP-Clients
 
-Setup for MCP clients: see the main README.
+Einrichtung für MCP-Clients: siehe das Haupt-README.
 
 ## JSON-Schema (Kurzreferenz)
 
@@ -73,7 +73,7 @@ Reihenfolge beim Bauen: Grundkörper → Kanten (fillet/chamfer) → Taschen →
     // Senkung: "counterbore_diameter": 11, "counterbore_depth": 6 (Tiefe Pflicht)
     // Kreismuster: "pattern": {"type": "circle", "n": 6, "radius": 30, "start_angle": 0}
   ],
-  "review": [{"feature": "pocket depth", "value": 5, "reason": "nicht bemaßt", "confidence": 0.6}]
+  "review": [{"feature": "Taschentiefenmaß", "value": 5, "reason": "nicht bemaßt", "confidence": 0.6}]
 }
 ```
 
@@ -84,14 +84,14 @@ Muster nur als Text (`"pattern": "4x"`) wird **nicht** vervielfacht, sondern als
 
 - Bohrungen und Taschen auf **Seitenflächen** (nur `top`/`bottom`); Taschen mit Drehwinkel
   oder nicht-rechteckiger Kontur.
-- Kegelsenkungen (countersink), Gewinde, Nuten, Fasen/Rundungen an Bohrungs- oder Taschenkanten.
+- Kegelsenkungen, Gewinde, Nuten, Fasen und Rundungen an Bohrungs- oder Taschenkanten.
 - `validate()` prüft Bohrungen nur über Ø und X/Y (nicht Tiefe, nicht Senkungsmaße); Taschen
   werden gar nicht nachgemessen.
 - Profil: Nullpunkt wird nicht automatisch zentriert (nur Warnung); `plausible()` prüft
   Bohrungslage nur bei Box und Zylinder.
 - `compare()` vergleicht nur Grundkörper und Bohrungen, nicht Taschen/Kanten.
 - FreeCAD-Teil von `issue_check.py` ist ungetestet (FreeCAD war in der Testumgebung nicht installiert).
-- Legacy-Tools (`create_base_body`, `add_hole`, …, `revolve_profile`): nur Basisfälle getestet;
+- Frühere Werkzeuge (`create_base_body`, `add_hole`, …, `revolve_profile`): nur Basisfälle geprüft;
   Bedeutung von x/y auf Seitenflächen (`>X` usw.) ist undefiniert.
 - Einlesen der Zeichnung (PDF/Bild) ist nicht Teil des Servers; `pymupdf`/`pillow` sind
   installiert, werden aber noch nicht verwendet.

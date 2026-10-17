@@ -54,7 +54,7 @@ def test_synthetic_circles_and_extent(tmp_path, scale):
     res = extract(_plate_pdf(tmp_path / "plate.pdf", scale), scale=scale)
     assert res["scale_used"] == scale
     assert res["extent_mm"] == pytest.approx([80, 50], abs=0.01)
-    assert res["extent_basis"] == "largest contour"
+    assert res["extent_basis"] == "größte Kontur"
     hole30, hole16 = res["circles"]  # largest first
     assert hole30["d_mm"] == pytest.approx(30, abs=0.01)
     assert hole16["d_mm"] == pytest.approx(16, abs=0.01)

@@ -1,14 +1,14 @@
-"""Write tests/fixtures/demo_drawing.pdf: the two-page drawing of the demo part "D2C Demo Bracket".
+"""Erstellt tests/fixtures/demo_drawing.pdf: die zweiseitige Zeichnung des Demo-Bauteils "D2C Demo-Halterung".
 
-Standard library only; the PDF objects are written by hand. Page 1 shows the part exactly 1:1
-(mm to pt with 72/25.4) in first-angle projection: the front view above the top view, with
-dimensions, centre lines, hidden edges (dashed) and a title block. Every circle is four cubic
-Bezier curves and every R5 corner one, so a vector measurement recovers centres and diameters.
-Text is real Helvetica text (WinAnsiEncoding, the diameter sign is byte 0xD8). The plate
-thickness (10) is deliberately not dimensioned: it has to be measured from the front view.
-Page 2 holds the notes.
+Nur die Standardbibliothek wird benötigt; die PDF-Objekte werden direkt geschrieben. Seite 1 zeigt
+das Bauteil im Maßstab 1:1 (mm zu pt mit 72/25,4) in Erstwinkelprojektion: Vorderansicht über der
+Draufsicht, mit Maßen, Mittellinien, verdeckten Kanten (gestrichelt) und Schriftfeld. Jeder Kreis
+besteht aus vier kubischen Bézierkurven, jede R5-Ecke aus einer; so lassen sich Mittelpunkte und
+Durchmesser aus den Vektordaten bestimmen. Der Text ist echter Helvetica-Text (WinAnsiEncoding,
+Durchmesserzeichen als Byte 0xD8). Die Plattendicke (10) ist absichtlich nicht bemaßt und muss
+aus der Vorderansicht bestimmt werden. Seite 2 enthält die Hinweise.
 
-Usage: python scripts/make_demo_drawing.py
+Aufruf: python scripts/make_demo_drawing.py
 """
 
 import math
@@ -139,10 +139,10 @@ def title_block(s: Sheet) -> None:
     s.path([("m", (200, 46)), ("l", (100, 46)), ("l", (100, 10))], EDGE)
     for p, q in [((100, 34), (200, 34)), ((100, 22), (200, 22)), ((160, 22), (160, 34))]:
         s.line(p, q)
-    s.text(103, 38, "D2C Demo Bracket", 14)
-    s.text(103, 26.5, "Drawing no. D2C-001", 9)
-    s.text(163, 26.5, "Scale 1:1", 9)
-    s.text(103, 14.5, "General tolerances ISO 2768-m", 9)
+    s.text(103, 38, "D2C Demo-Halterung", 14)
+    s.text(103, 26.5, "Zeichnungsnr. D2C-001", 9)
+    s.text(163, 26.5, "Maßstab 1:1", 9)
+    s.text(103, 14.5, "Allgemeintoleranzen ISO 2768-m", 9)
 
 
 def top_view(s: Sheet) -> None:
@@ -208,7 +208,7 @@ def front_view(s: Sheet) -> None:
 def notes_page() -> Sheet:
     s = Sheet()
     frame(s)
-    s.text(20, 270, "Notes: 1. Material S235JR. 2. Deburr all edges.")
+    s.text(20, 270, "Hinweise: 1. Werkstoff S235JR. 2. Alle Kanten entgraten.")
     return s
 
 
@@ -256,7 +256,7 @@ def region(x0: float, y0: float, x1: float, y1: float) -> tuple[float, float, fl
 
 if __name__ == "__main__":
     OUT.write_bytes(pdf([drawing_page().stream(), notes_page().stream()]))
-    print(f"wrote {OUT}")
-    print("top view   ", region(44, 92, 164, 177))
-    print("front view ", region(44, 198, 164, 237))
-    print("title block", region(98, 8, 202, 48))
+    print(f"Geschrieben: {OUT}")
+    print("Draufsicht      ", region(44, 92, 164, 177))
+    print("Vorderansicht   ", region(44, 198, 164, 237))
+    print("Schriftfeld     ", region(98, 8, 202, 48))

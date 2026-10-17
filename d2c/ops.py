@@ -30,7 +30,7 @@ CORNER_TOL = 0.5  # mm: a fillet finds its corner within this distance of `at`
 MIN_TAPER = 0.001  # degrees, smaller drafts crash OCC
 TAPER_LENGTH_TOL = 0.01  # mm, allowed difference between requested and built length of a tapered extrusion
 HULL_SAMPLES = 7200  # directions at which the support function of a circle hull is sampled
-NO_EFFECT = "removed no material: check plane, offset and direction"
+NO_EFFECT = "Kein Material entfernt: Prüfe Ebene, offset und Richtung."
 # What a ScriptOp may use. check_script (d2c/sandbox.py) rejects imports and names starting with "_" before it runs.
 SCRIPT_BUILTINS = {
     name: getattr(builtins, name)
@@ -83,26 +83,26 @@ class _Model(BaseModel, extra="forbid", use_attribute_docstrings=True):
 
 
 class SketchPlane(_Model):
-    """Sketch plane. XY: normal +Z, u=X, v=Y. XZ: normal -Y, u=X, v=Z. YZ: normal +X, u=Y, v=Z."""
+    """Skizzenebene. XY: Normale +Z, u=X, v=Y. XZ: Normale -Y, u=X, v=Z. YZ: Normale +X, u=Y, v=Z."""
 
     name: Literal["XY", "XZ", "YZ", "custom"]
     offset: float = 0.0
-    """Shift along the plane normal in mm."""
+    """Verschiebung entlang der Ebenennormalen in mm."""
     origin: Point3 | None = None
-    """custom only: a point on the plane."""
+    """Nur für custom: ein Punkt auf der Ebene."""
     normal: Point3 | None = None
-    """custom only: plane normal, any length."""
+    """Nur für custom: Ebenennormale, beliebige Länge."""
     xdir: Point3 | None = None
-    """custom only, optional: direction of u. Default: global X (global Y if the normal runs along X)."""
+    """Nur für custom, optional: Richtung von u. Standard: global X (global Y, falls die Normale entlang X verläuft)."""
 
     @model_validator(mode="after")
     def _check(self) -> Self:
         given = [k for k in ("origin", "normal", "xdir") if getattr(self, k) is not None]
         if self.name != "custom":
             if given:
-                raise ValueError(f"plane {self.name} takes no {', '.join(given)}")
+                raise ValueError(f"Ebene {self.name} akzeptiert diese Felder nicht: {', '.join(given)}")
         elif self.origin is None or self.normal is None:
-            raise ValueError("plane custom requires origin and normal")
+            raise ValueError("Die Ebene `custom` benötigt `origin` und `normal`.")
         else:
             self._frame()  # rejects a zero normal and an xdir along the normal
         return self
@@ -115,7 +115,7 @@ class SketchPlane(_Model):
         else:
             n = cq.Vector(*self.normal)
             if n.Length < 1e-9:
-                raise ValueError("normal must not be zero")
+                raise ValueError("`normal` darf nicht der Nullvektor sein.")
             n = n.normalized()
             origin = cq.Vector(*self.origin)
             if self.xdir is None:
@@ -123,7 +123,7 @@ class SketchPlane(_Model):
             else:
                 u = _across(cq.Vector(*self.xdir), n)
                 if u is None:
-                    raise ValueError("xdir must not be zero or parallel to the normal")
+                    raise ValueError("`xdir` darf weder der Nullvektor sein noch parallel zu `normal` verlaufen.")
         return origin + n * self.offset, u, n
 
     def workplane(self) -> cq.Workplane:
@@ -141,20 +141,20 @@ def _round_corners(face: cq.Face, vertices: list[cq.Vertex], r: float) -> cq.Fac
     try:
         return face.fillet2D(r, vertices)
     except StdFail_NotDone:
-        raise BuildError(f"2D fillet R{r} does not fit: radius too large, or the two edges are tangent there") from None
+        raise BuildError(f"Die 2D-Rundung R{r} passt nicht: Radius zu groß oder die beiden Kanten sind dort tangential.") from None
 
 
 class RectProfile(_Model):
-    """Rectangle in plane coordinates (u, v)."""
+    """Rechteck in den Koordinaten (u, v) der Ebene."""
 
     type: Literal["rect"]
     center: Point2
     w: float = Field(gt=0)
-    """Size along u in mm."""
+    """Abmessung entlang u in mm."""
     h: float = Field(gt=0)
-    """Size along v in mm."""
+    """Abmessung entlang v in mm."""
     corner_radius: float = Field(default=0.0, ge=0)
-    """Radius in mm rounding all four corners, 0 for sharp corners."""
+    """Radius in mm zum Abrunden aller vier Ecken; 0 lässt sie scharf."""
 
     def face(self, wp: cq.Workplane) -> cq.Face:
         face = cq.Face.makeFromWires(wp.center(*self.center).rect(self.w, self.h).val())
@@ -162,28 +162,28 @@ class RectProfile(_Model):
 
 
 class CircleProfile(_Model):
-    """Circle in plane coordinates (u, v)."""
+    """Kreis in den Koordinaten (u, v) der Ebene."""
 
     type: Literal["circle"]
     center: Point2
     d: float = Field(gt=0)
-    """Diameter in mm."""
+    """Durchmesser in mm."""
 
     def face(self, wp: cq.Workplane) -> cq.Face:
         return cq.Face.makeFromWires(wp.center(*self.center).circle(self.d / 2).val())
 
 
 class SlotProfile(_Model):
-    """Slot with two round ends in plane coordinates (u, v)."""
+    """Langloch mit zwei runden Enden in den Koordinaten (u, v) der Ebene."""
 
     type: Literal["slot"]
     center: Point2
     center_distance: float = Field(gt=0)
-    """Distance between the two arc centres in mm."""
+    """Abstand zwischen den Mittelpunkten der beiden Bögen in mm."""
     width: float = Field(gt=0)
-    """Slot width = arc diameter in mm."""
+    """Langlochbreite = Bogendurchmesser in mm."""
     angle: float = 0.0
-    """Rotation of the slot axis away from +u in degrees."""
+    """Drehwinkel der Langlochachse ausgehend von +u in Grad."""
 
     def face(self, wp: cq.Workplane) -> cq.Face:
         # slot2D takes the overall length: arc centre distance plus one width
@@ -192,7 +192,7 @@ class SlotProfile(_Model):
 
 
 class LineSegment(_Model):
-    """Straight line from the current point."""
+    """Gerade vom aktuellen Punkt aus."""
 
     kind: Literal["line"]
     to: Point2
@@ -202,11 +202,11 @@ class LineSegment(_Model):
 
 
 class Arc3Segment(_Model):
-    """Circular arc from the current point through `via` to `to`."""
+    """Kreisbogen vom aktuellen Punkt über `via` bis `to`."""
 
     kind: Literal["arc3"]
     via: Point2
-    """Any point on the arc between start and end."""
+    """Ein beliebiger Punkt des Bogens zwischen Anfang und Ende."""
     to: Point2
 
     def draw(self, wp: cq.Workplane) -> cq.Workplane:
@@ -214,18 +214,18 @@ class Arc3Segment(_Model):
 
 
 class RadiusArcSegment(_Model):
-    """r > 0: clockwise arc, r < 0: counter-clockwise, at most 180 degrees. Prefer arc3."""
+    """r > 0: Bogen im Uhrzeigersinn; r < 0: gegen den Uhrzeigersinn; höchstens 180 Grad. Bevorzuge arc3."""
 
     kind: Literal["radius_arc"]
     to: Point2
     r: float
-    """Arc radius in mm, must be at least half the distance to `to`."""
+    """Bogenradius in mm; muss mindestens halb so groß wie der Abstand zu `to` sein."""
 
     @field_validator("r")
     @classmethod
     def _nonzero(cls, r: float) -> float:
         if r == 0:
-            raise ValueError("r must not be 0")
+            raise ValueError("`r` darf nicht 0 sein.")
         return r
 
     def draw(self, wp: cq.Workplane) -> cq.Workplane:
@@ -236,18 +236,18 @@ Segment = Annotated[Union[LineSegment, Arc3Segment, RadiusArcSegment], Field(dis
 
 
 class CornerFillet(_Model):
-    """Rounds one corner of a path profile."""
+    """Rundet eine Ecke eines Pfadprofils ab."""
 
     at: Point2
-    """Position (u, v) of the sharp corner, found within CORNER_TOL (0.5 mm)."""
+    """Position (u, v) der scharfen Ecke; gesucht innerhalb von CORNER_TOL (0,5 mm)."""
     r: float = Field(gt=0)
-    """Fillet radius in mm."""
+    """Rundungsradius in mm."""
 
 
 class PathProfile(_Model):
-    """Outline from `start` along the segments, closed automatically back to `start`.
+    """Kontur, die bei `start` beginnt, den `segments` folgt und automatisch zu `start` geschlossen wird.
 
-    Tangent transitions: draw the sharp corner, then round it with `fillets`.
+    Tangentiale Übergänge: Zeichne zuerst die scharfe Ecke und runde sie danach mit `fillets` ab.
     """
 
     type: Literal["path"]
@@ -261,29 +261,29 @@ class PathProfile(_Model):
             wp = segment.draw(wp)
         face = cq.Face.makeFromWires(wp.close().val())
         if face.Area() < 1e-9:
-            raise BuildError("path profile encloses no area")
+            raise BuildError("Das Pfadprofil umschließt keine Fläche.")
         for fillet in self.fillets:
             corner = wp.plane.toWorldCoords(fillet.at)
             hits = [v for v in face.Vertices() if (v.Center() - corner).Length <= CORNER_TOL]
             if len(hits) != 1:
                 raise BuildError(
-                    f"fillet at {fillet.at}: {len(hits)} corners within {CORNER_TOL} mm, need exactly 1")
+                    f"Rundung bei {fillet.at}: {len(hits)} Ecken innerhalb von {CORNER_TOL} mm gefunden, benötigt wird genau 1.")
             face = _round_corners(face, hits, fillet.r)
         return face
 
 
 class HullProfile(_Model):
-    """Convex hull of circles: hubs and lugs joined by straight outer tangents, no fillets."""
+    """Konvexe Hülle von Kreisen: Naben und Laschen werden durch gerade äußere Tangenten verbunden, ohne Rundungen."""
 
     type: Literal["hull"]
     circles: list[Point3] = Field(min_length=2)
-    """Circles as (u, v, r) in mm, every r > 0. A circle inside the hull of the others adds nothing."""
+    """Kreise als (u, v, r) in mm, jeweils mit r > 0. Ein Kreis innerhalb der Hülle der anderen trägt nichts bei."""
 
     @field_validator("circles")
     @classmethod
     def _positive_radius(cls, circles: list[Point3]) -> list[Point3]:
         if any(r <= 0 for _, _, r in circles):
-            raise ValueError("every circle radius must be > 0")
+            raise ValueError("Jeder Kreisradius muss > 0 sein.")
         return circles
 
     @functools.cached_property
@@ -336,11 +336,11 @@ Profile = Annotated[Union[RectProfile, CircleProfile, SlotProfile, PathProfile, 
 
 
 class OpBase(_Model):
-    """Fields shared by all operations. Each one implements apply(shape) -> (new shape, build-note fields)."""
+    """Gemeinsame Felder aller Vorgänge. Jeder implementiert apply(shape) -> (neue Form, Felder für den Aufbau-Bericht)."""
 
     refs: dict[str, str] = {}
-    """Maps numeric parameters to Dimension ids, e.g. {"d": "d3", "profile.w": "d7", "positions.1.0": "d9"}.
-    Keys are dotted paths into the op, list indices are numbers."""
+    """Ordnet numerischen Parametern Maß-IDs zu, z. B. {"d": "d3", "profile.w": "d7", "positions.1.0": "d9"}.
+    Die Schlüssel sind punktgetrennte Pfade im Vorgang; Listenindizes sind Zahlen."""
 
     @model_validator(mode="after")
     def _check_refs(self) -> Self:
@@ -349,16 +349,16 @@ class OpBase(_Model):
             try:
                 value = get_path(dumped, path)
             except KeyError:
-                raise ValueError(f"refs path {path!r} does not exist") from None
+                raise ValueError(f"Der `refs`-Pfad {path!r} ist nicht vorhanden.") from None
             if isinstance(value, bool) or not isinstance(value, (int, float)):
-                raise ValueError(f"refs path {path!r} is not a number")
+                raise ValueError(f"Der `refs`-Pfad {path!r} verweist nicht auf eine Zahl.")
         return self
 
 
 def _combine(shape: cq.Shape | None, tool: cq.Shape, mode: Mode) -> cq.Shape:
     if shape is None:
         if mode != "add":
-            raise BuildError("the first operation must have mode 'add'")
+            raise BuildError("Der erste Vorgang muss den Modus 'add' haben.")
         return tool
     if mode == "add":
         return shape.fuse(tool).clean()
@@ -366,7 +366,7 @@ def _combine(shape: cq.Shape | None, tool: cq.Shape, mode: Mode) -> cq.Shape:
         return shape.cut(tool).clean()
     if mode == "intersect":
         return shape.intersect(tool).clean()
-    raise BuildError(f"unknown mode {mode!r}")
+    raise BuildError(f"Unbekannter Modus {mode!r}.")
 
 
 def _no_effect(before: cq.Shape | None, after: cq.Shape, mode: Mode) -> dict:
@@ -378,7 +378,7 @@ def _no_effect(before: cq.Shape | None, after: cq.Shape, mode: Mode) -> dict:
 
 def _require(shape: cq.Shape | None) -> cq.Shape:
     if shape is None:
-        raise BuildError("needs an existing solid: the first operation must add one")
+        raise BuildError("Ein Volumenkörper muss bereits vorhanden sein: Der erste Vorgang muss Material hinzufügen.")
     return shape
 
 
@@ -387,39 +387,40 @@ def _require_full_length(tool: cq.Solid, normal: cq.Vector, distance: float) -> 
     heights = [v.Center().dot(normal) for v in tool.Vertices()]
     length = max(heights) - min(heights)
     if abs(length - abs(distance)) > TAPER_LENGTH_TOL:
-        raise BuildError(f"taper too large: the profile collapses after {length:.2f} mm, "
-                         f"reduce taper or distance ({abs(distance):g} mm requested)")
+        raise BuildError(f"Verjüngung zu groß: Das Profil fällt nach {length:.2f} mm zusammen. "
+                         f"Verringere `taper` oder `distance` (angefordert: {abs(distance):g} mm).")
 
 
 class ExtrudeOp(OpBase):
-    """Extrude a profile drawn on a sketch plane along the plane normal."""
+    """Extrudiert ein auf einer Skizzenebene gezeichnetes Profil entlang der Ebenennormalen."""
 
     op: Literal["extrude"]
     profile: Profile
     plane: SketchPlane
     distance: float
-    """Length in mm along the plane normal, negative runs against it."""
+    """Länge in mm entlang der Ebenennormalen; negative Werte verlaufen entgegen ihr."""
     mode: Mode = "add"
-    """add: unite with the part, cut: remove from the part, intersect: keep only what lies in both."""
+    """add: mit dem Bauteil vereinigen; cut: aus dem Bauteil entfernen; intersect: nur die gemeinsame Geometrie behalten."""
     both: bool = False
-    """Extrude symmetrically about the plane. distance is then the total thickness."""
+    """Symmetrisch zur Ebene extrudieren. `distance` ist dann die Gesamtdicke."""
     taper: float = Field(default=0.0, gt=-90, lt=90)
-    """Draft angle in degrees over the whole length, positive narrows the profile in extrusion direction.
-    0 or at least 0.001 in size. With both=True the draft runs from the face at -distance/2 to the face at
-    +distance/2 and is not mirrored about the plane. A draft that collapses the profile before the end is an error."""
+    """Verjüngungswinkel über die gesamte Länge in Grad; positive Werte verengen das Profil in Extrusionsrichtung.
+    Entweder 0 oder mindestens 0,001 Grad. Bei `both=True` verläuft die Verjüngung von der Fläche bei
+    -distance/2 zur Fläche bei +distance/2 und wird nicht an der Ebene gespiegelt. Eine Verjüngung, bei der
+    das Profil vor dem Ende zusammenfällt, ist unzulässig."""
 
     @field_validator("distance")
     @classmethod
     def _nonzero(cls, distance: float) -> float:
         if distance == 0:
-            raise ValueError("distance must not be 0")
+            raise ValueError("`distance` darf nicht 0 sein.")
         return distance
 
     @field_validator("taper")
     @classmethod
     def _usable_taper(cls, taper: float) -> float:
         if 0 < abs(taper) < MIN_TAPER:  # OCC crashes the interpreter on a draft this small
-            raise ValueError(f"taper must be 0 or at least {MIN_TAPER} degrees")
+            raise ValueError(f"`taper` muss 0 oder mindestens {MIN_TAPER} Grad sein.")
         return taper
 
     def apply(self, shape: cq.Shape | None) -> tuple[cq.Shape, dict]:
@@ -439,22 +440,22 @@ class ExtrudeOp(OpBase):
 
 
 class RevolveOp(OpBase):
-    """Revolve a profile drawn on XZ (u = r, v = z) around the global Z axis. Give points or profile."""
+    """Rotiert ein auf XZ gezeichnetes Profil (u = r, v = z) um die globale Z-Achse. Übergib points oder profile."""
 
     op: Literal["revolve"]
     points: list[Point2] | None = Field(default=None, min_length=3)
-    """Polygon of (r, z) points, closed automatically."""
+    """Polygon aus (r, z)-Punkten; wird automatisch geschlossen."""
     profile: PathProfile | None = None
-    """Outline with arcs and fillets in (r, z), instead of points."""
+    """Kontur aus Bögen und Rundungen in (r, z) statt aus Punkten."""
     angle: float = Field(default=360.0, gt=0, le=360)
-    """Sweep angle in degrees, counter-clockwise seen from +Z."""
+    """Drehwinkel in Grad, gegen den Uhrzeigersinn von +Z aus gesehen."""
     mode: Mode = "add"
-    """add: unite with the part, cut: remove from the part, intersect: keep only what lies in both."""
+    """add: mit dem Bauteil vereinigen; cut: aus dem Bauteil entfernen; intersect: nur die gemeinsame Geometrie behalten."""
 
     @model_validator(mode="after")
     def _check(self) -> Self:
         if (self.points is None) == (self.profile is None):
-            raise ValueError("give exactly one of points or profile")
+            raise ValueError("Gib genau eines der Felder `points` oder `profile` an.")
         if self.points is not None:
             radii = [r for r, _ in self.points]
         else:
@@ -463,7 +464,7 @@ class RevolveOp(OpBase):
                 corners += [s.via, s.to] if isinstance(s, Arc3Segment) else [s.to]
             radii = [r for r, _ in corners]
         if min(radii) < 0:
-            raise ValueError("all r (first coordinate) must be >= 0")
+            raise ValueError("Alle r-Werte (erste Koordinate) müssen >= 0 sein.")
         return self
 
     def apply(self, shape: cq.Shape | None) -> tuple[cq.Shape, dict]:
@@ -471,94 +472,94 @@ class RevolveOp(OpBase):
             type="path", start=self.points[0], segments=[LineSegment(kind="line", to=p) for p in self.points[1:]])
         face = profile.face(cq.Workplane("XZ"))
         if face.BoundingBox().xmin < -1e-6:
-            raise BuildError("profile crosses the revolve axis (r < 0): check arc via points / radius_arc sign")
+            raise BuildError("Das Profil kreuzt die Drehachse (r < 0): Prüfe Bogenpunkte und Vorzeichen von `radius_arc`.")
         tool = cq.Solid.revolve(face, self.angle, (0, 0, 0), (0, 0, 1))
         result = _combine(shape, tool, self.mode)
         return result, _no_effect(shape, result, self.mode)
 
 
 class PolarPattern(_Model):
-    """Holes evenly spaced on a circle."""
+    """Bohrungen gleichmäßig auf einem Kreis verteilt."""
 
     center: Point2
-    """Circle centre (u, v)."""
+    """Mittelpunkt des Kreises (u, v)."""
     pitch_d: float = Field(gt=0)
-    """Pitch circle diameter in mm."""
+    """Teilkreisdurchmesser in mm."""
     count: int = Field(ge=1)
     start_angle: float = 0.0
-    """Angle of the first hole from +u in degrees, the others follow every 360/count."""
+    """Winkel der ersten Bohrung ausgehend von +u in Grad; die übrigen folgen in Abständen von 360/count."""
 
 
 def _thread(spec: str) -> tuple[float, float]:
     """Nominal diameter and pitch of "M5" (coarse) or "M10x1"."""
     match = re.fullmatch(r"M(\d+(?:\.\d+)?)(?:x(\d+(?:\.\d+)?))?", spec)
     if match is None:
-        raise ValueError(f"thread {spec!r} must look like M5 or M10x1")
+        raise ValueError(f"`thread` {spec!r} muss wie M5 oder M10x1 aussehen.")
     nominal = float(match[1])
     pitch = float(match[2]) if match[2] else COARSE_PITCH.get(nominal)
     if pitch is None:
-        raise ValueError(f"thread {spec!r} has no known coarse pitch, write M{match[1]}x<pitch>")
+        raise ValueError(f"Für `thread` {spec!r} ist keine Regelsteigung bekannt; gib M{match[1]}x<pitch> an.")
     return nominal, pitch
 
 
 class HolesOp(OpBase):
-    """Holes drilled from a sketch plane against its normal (flip: along it). Give positions or polar."""
+    """Bohrungen, die von einer Skizzenebene entgegen ihrer Normalen ausgehen (mit flip: entlang der Normalen). Übergib positions oder polar."""
 
     op: Literal["holes"]
     plane: SketchPlane
-    """Plane the holes start on, usually the face they enter."""
+    """Ebene, auf der die Bohrungen beginnen, üblicherweise die Eintrittsfläche."""
     positions: list[Point2] = []
-    """Hole centres (u, v) in the plane."""
+    """Mittelpunkte der Bohrungen (u, v) in der Ebene."""
     polar: PolarPattern | None = None
-    """Holes on a circle, instead of positions."""
+    """Bohrungen auf einem Kreis statt mit `positions` angegeben."""
     d: float = Field(gt=0)
-    """Hole diameter in mm. For kind tapped: the nominal thread diameter."""
+    """Bohrungsdurchmesser in mm. Bei `kind=tapped`: Gewinde-Nenndurchmesser."""
     depth: float | None = Field(default=None, gt=0)
-    """Drill depth in mm, null drills through the part."""
+    """Bohrtiefe in mm; null bohrt durch das Bauteil."""
     kind: Literal["plain", "cbore", "csk", "tapped"] = "plain"
-    """cbore: counterbore, csk: countersink, tapped: threaded hole."""
+    """cbore: zylindrische Senkung, csk: kegelige Senkung, tapped: Gewindebohrung."""
     cbore_d: float | None = Field(default=None, gt=0)
-    """Counterbore diameter in mm."""
+    """Durchmesser der zylindrischen Senkung in mm."""
     cbore_depth: float | None = Field(default=None, gt=0)
-    """Counterbore depth in mm."""
+    """Tiefe der zylindrischen Senkung in mm."""
     csk_d: float | None = Field(default=None, gt=0)
-    """Countersink diameter at the surface in mm."""
+    """Durchmesser der kegeligen Senkung an der Oberfläche in mm."""
     csk_angle: float = Field(default=90.0, gt=0, lt=180)
-    """Included countersink angle in degrees."""
+    """Eingeschlossener Winkel der kegeligen Senkung in Grad."""
     thread: str | None = None
-    """kind tapped only: M5 or M10x1. Modelled as a plain hole, no thread geometry."""
+    """Nur bei `kind=tapped`: M5 oder M10x1. Wird als einfache Bohrung ohne Gewindegeometrie modelliert."""
     thread_core: Literal["tap_drill", "minor"] = "tap_drill"
-    """Drilled diameter of a tapped hole: tap_drill (M5: 4.2) or minor, the thread's core diameter (M5: 4.134)."""
+    """Bohrungsdurchmesser für ein Gewinde: tap_drill (M5: 4.2) oder minor, der Kerndurchmesser des Gewindes (M5: 4.134)."""
     flip: bool = False
-    """Drill along the plane normal instead of against it."""
+    """Entlang der Ebenennormalen statt entgegen ihr bohren."""
 
     @model_validator(mode="after")
     def _check(self) -> Self:
         if bool(self.positions) == (self.polar is not None):
-            raise ValueError("give exactly one of positions (not empty) or polar")
+            raise ValueError("Gib genau eines von `positions` (nicht leer) oder `polar` an.")
         if (self.kind == "tapped") != (self.thread is not None):
-            raise ValueError("thread is required for kind 'tapped' and allowed only there")
+            raise ValueError("`thread` ist für `kind='tapped'` erforderlich und nur dort zulässig.")
         if self.thread is not None and abs(_thread(self.thread)[0] - self.d) > 1e-9:
-            raise ValueError(f"d ({self.d}) must equal the nominal diameter of thread {self.thread}")
+            raise ValueError(f"`d` ({self.d}) muss dem Nenndurchmesser des Gewindes {self.thread} entsprechen.")
         if (self.kind != "cbore" and (self.cbore_d is not None or self.cbore_depth is not None)) or (
                 self.kind != "csk" and self.csk_d is not None):
-            raise ValueError("cbore_d, cbore_depth and csk_d only go with kind 'cbore' or 'csk'")
+            raise ValueError("`cbore_d`, `cbore_depth` und `csk_d` sind nur bei `kind='cbore'` oder `kind='csk'` zulässig.")
         if self.kind == "cbore":
             if self.cbore_d is None or self.cbore_depth is None:
-                raise ValueError("kind 'cbore' needs cbore_d and cbore_depth")
+                raise ValueError("`kind='cbore'` benötigt `cbore_d` und `cbore_depth`.")
             if self.cbore_d <= self.d:
-                raise ValueError("cbore_d must be larger than d")
+                raise ValueError("`cbore_d` muss größer als `d` sein.")
             deepest = self.cbore_depth
         elif self.kind == "csk":
             if self.csk_d is None:
-                raise ValueError("kind 'csk' needs csk_d")
+                raise ValueError("`kind='csk'` benötigt `csk_d`.")
             if self.csk_d <= self.d:
-                raise ValueError("csk_d must be larger than d")
+                raise ValueError("`csk_d` muss größer als `d` sein.")
             deepest = self._csk_depth()
         else:
             return self
         if self.depth is not None and deepest >= self.depth:
-            raise ValueError("the counterbore or countersink must be shallower than depth")
+            raise ValueError("Die Senkung muss flacher als `depth` sein.")
         return self
 
     def _csk_depth(self) -> float:
@@ -617,39 +618,39 @@ def _is_seam(edge: cq.Edge, shape: cq.Shape) -> bool:
 
 
 class EdgeFinishOp(OpBase):
-    """Fillet or chamfer every edge within tol of a near point. Seam edges of round faces are skipped."""
+    """Versieht jede Kante innerhalb von tol zu einem near-Punkt mit einer Rundung oder Fase. Nahtkanten runder Flächen werden übersprungen."""
 
     op: Literal["edge_finish"]
     kind: Literal["fillet", "chamfer"]
     size: float = Field(gt=0)
-    """Fillet radius or chamfer length in mm."""
+    """Rundungsradius oder Fasenlänge in mm."""
     near: list[Point3] = Field(min_length=1)
-    """Global points (x, y, z) on or near the edges, for example their midpoints."""
+    """Globale Punkte (x, y, z) auf oder nahe den Kanten, zum Beispiel deren Mittelpunkte."""
     tol: float = Field(default=0.5, gt=0)
-    """Largest distance in mm between an edge and a near point."""
+    """Größter Abstand in mm zwischen einer Kante und einem nahen Punkt."""
 
     def apply(self, shape: cq.Shape | None) -> tuple[cq.Shape, dict]:
         shape = _require(shape)
         points = [cq.Vertex.makeVertex(*p) for p in self.near]
         edges = [e for e in shape.Edges() if min(e.distance(p) for p in points) <= self.tol and not _is_seam(e, shape)]
         if not edges:
-            raise BuildError("no edge within tol of near points")
+            raise BuildError("Keine Kante liegt innerhalb von `tol` zu den `near`-Punkten.")
         # the edges come from this very solid: edges of another instance make the fillet fail
         selected = cq.Workplane(obj=shape).newObject(edges)
         try:
             result = selected.fillet(self.size) if self.kind == "fillet" else selected.chamfer(self.size)
         except StdFail_NotDone:
-            raise BuildError(f"{self.kind} {self.size} mm failed on {len(edges)} edge(s): "
-                             "size too large for the adjacent faces?") from None
+            raise BuildError(f"{self.kind} mit {self.size} mm ist an {len(edges)} Kante(n) fehlgeschlagen: "
+                             "Ist die Größe für die angrenzenden Flächen zu groß?") from None
         return result.val(), {"edges_selected": len(edges)}
 
 
 class ScriptOp(OpBase):
-    """Fallback: Python code run with `result` (the cq.Workplane so far), `cq`, `math` and a few builtins.
+    """Ausweichlösung: Python-Code mit `result` (dem bisherigen cq.Workplane), `cq`, `math` und einigen eingebauten Funktionen.
 
-    Builtins: abs, min, max, range, len, float, int, round, sum, enumerate, zip, list, tuple, dict, print.
-    No imports and no names starting with "_" (not even `_` as a loop variable).
-    It must leave a cq.Workplane holding the solid in `result`.
+    Eingebaute Funktionen: abs, min, max, range, len, float, int, round, sum, enumerate, zip, list, tuple, dict, print.
+    Keine Imports und keine Namen mit führendem "_" (auch nicht `_` als Schleifenvariable).
+    `result` muss am Ende ein cq.Workplane mit dem Volumenkörper enthalten.
     """
 
     op: Literal["script"]
@@ -660,7 +661,7 @@ class ScriptOp(OpBase):
         scope = {"__builtins__": dict(SCRIPT_BUILTINS), "cq": cq, "math": math, "result": wp}
         exec(compile(self.code, "<script>", "exec"), scope)
         if not isinstance(scope["result"], cq.Workplane):
-            raise BuildError("the script must leave a cq.Workplane in `result`")
+            raise BuildError("Das `script` muss ein cq.Workplane in `result` hinterlassen.")
         return scope["result"].findSolid(), {}
 
 
@@ -681,5 +682,5 @@ def build(ops: list[Op]) -> tuple[cq.Workplane, list[dict]]:
         if extra:
             notes.append({"op_index": index, **extra})
     if shape is None:
-        raise BuildError("no operations")
+        raise BuildError("Keine Vorgänge angegeben.")
     return cq.Workplane(obj=shape), notes

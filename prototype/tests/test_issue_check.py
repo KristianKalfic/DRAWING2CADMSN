@@ -34,7 +34,7 @@ def test_compare_gleich_innerhalb_toleranz():
 def test_compare_abweichungen():
     issues = IC.compare(load("extraktion_A.json"), load("extraktion_B_abweichend.json"))
     msgs = " | ".join(i["message"] for i in issues)
-    assert "width" in msgs and "A=60 vs B=65" in msgs
+    assert "width" in msgs and "A=60 im Vergleich zu B=65" in msgs
     assert sum("diameter" in i["message"] for i in issues) == 4
     assert all(i["severity"] == "blocker" for i in issues)
 

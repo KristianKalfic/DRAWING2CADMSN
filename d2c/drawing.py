@@ -34,7 +34,7 @@ def resolve_drawing(pdf: str) -> Path:
     root = data_root().resolve()
     path = (root / pdf).resolve()
     if path.suffix.lower() != ".pdf" or not path.is_relative_to(root):
-        raise ValueError(f"{pdf!r} is not a .pdf file inside the data folder")
+        raise ValueError(f"{pdf!r} ist keine .pdf-Datei im Datenordner.")
     if not path.is_file():
         # macOS mounts list umlauts decomposed (NFD); show them composed, as a caller types them.
         found = sorted(
@@ -42,7 +42,7 @@ def resolve_drawing(pdf: str) -> Path:
             for p in root.rglob("*")
             if p.suffix.lower() == ".pdf" and p.is_file()
         )
-        raise ValueError(f"no such drawing {pdf!r}; available: {', '.join(found) or 'none'}")
+        raise ValueError(f"Zeichnung {pdf!r} nicht gefunden; verfügbar: {', '.join(found) or 'keine'}.")
     return path
 
 
@@ -50,7 +50,7 @@ def _poppler(*cmd: str) -> str:
     """stdout of a poppler tool; a failure becomes a ValueError carrying its message."""
     done = subprocess.run(cmd, capture_output=True, encoding="utf-8", errors="replace")
     if done.returncode:
-        raise ValueError(f"{cmd[0]} failed: {done.stderr.strip()}")
+        raise ValueError(f"{cmd[0]} fehlgeschlagen: {done.stderr.strip()}")
     return done.stdout
 
 
@@ -62,7 +62,7 @@ def pdf_info(pdf: str, page: int = 1) -> dict:
     path = str(resolve_drawing(pdf))
     pages = int(re.search(r"^Pages:\s+(\d+)", _poppler("pdfinfo", path), re.M)[1])
     if not 1 <= page <= pages:
-        raise ValueError(f"page {page} is out of range: {pdf} has {pages} page{'s' if pages != 1 else ''}")
+        raise ValueError(f"`page` {page} liegt außerhalb des gültigen Bereichs: {pdf} hat {pages} Seite{'n' if pages != 1 else ''}.")
     out = _poppler("pdfinfo", "-f", str(page), "-l", str(page), path)
     width, height = map(float, re.search(r"^Page\s+\d+\s+size:\s+([\d.]+) x ([\d.]+) pts", out, re.M).groups())
     if int(re.search(r"^Page\s+\d+\s+rot:\s+(\d+)", out, re.M)[1]) % 180:  # turned by 90 or 270
@@ -75,8 +75,8 @@ def _crop_box(crop: Sequence[float] | None) -> Crop:
     box = (0.0, 0.0, 1.0, 1.0) if crop is None else tuple(crop)
     if len(box) != 4 or not (0 <= box[0] < box[2] <= 1 and 0 <= box[1] < box[3] <= 1):
         raise ValueError(
-            f"crop must be (x0, y0, x1, y1) as page fractions with 0 <= x0 < x1 <= 1 and "
-            f"0 <= y0 < y1 <= 1, got {crop!r}"
+            f"`crop` muss (x0, y0, x1, y1) als Seitenanteile mit 0 <= x0 < x1 <= 1 und "
+            f"0 <= y0 < y1 <= 1 sein; erhalten: {crop!r}."
         )
     return box
 
@@ -88,7 +88,7 @@ def effective_dpi(info: dict, dpi: int, crop: Sequence[float] | None = None) -> 
     drawings are vectors, so a higher resolution still shows real detail.
     """
     if dpi < 1:
-        raise ValueError(f"dpi must be at least 1, got {dpi}")
+        raise ValueError(f"`dpi` muss mindestens 1 sein; erhalten: {dpi}.")
     x0, y0, x1, y1 = _crop_box(crop)
     longest = max((x1 - x0) * info["width_pt"], (y1 - y0) * info["height_pt"])
     return min(dpi, MAX_DPI, math.floor(MAX_PX * 72 / longest))

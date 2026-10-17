@@ -1,9 +1,10 @@
-"""Export for NX and the web viewer: STEP AP242 with semantic PMI and review colors, GLB, and a PMI reader.
+"""Export für NX und die Webansicht: STEP AP242 mit semantischer PMI und Prüfmarkierungen, GLB und einem PMI-Leser.
 
-A review mark colors the faces near its points orange, names them "CHECK <id>" and puts them on the
-layer ASSUMED_CHECK. Tapped holes turn green, as in the BCT references. Dimensions travel as semantic
-PMI: DIMENSIONAL_SIZE for a diameter, DIMENSIONAL_LOCATION for the distance between two faces. Every
-string in the file is ASCII, because OCCT writes anything else as raw UTF-8.
+Eine Prüfmarkierung färbt die Flächen nahe ihren Punkten orange, benennt sie "PRÜFEN <id>" und legt sie
+auf den Layer ASSUMED_CHECK. Gewindebohrungen werden wie in den BCT-Referenzen grün. Maße werden als
+semantische PMI abgelegt: DIMENSIONAL_SIZE für einen Durchmesser, DIMENSIONAL_LOCATION für den Abstand
+zwischen zwei Flächen. Zeichen in der Datei werden in ASCII umgesetzt, da OCCT andere Zeichen roh als
+UTF-8 schreibt.
 """
 
 import json
@@ -180,7 +181,7 @@ class _Writer:
     def label(self, face: cq.Face) -> TDF_Label:
         label = self.shapes.AddSubShape(self.root, face.wrapped)  # the existing label for a face added before
         if label.IsNull():
-            raise ValueError("a face is not part of the shape")
+            raise ValueError("Eine Fläche gehört nicht zum Körper.")
         return label
 
     def color(self, face: cq.Face, rgb: RGB) -> TDF_Label:
@@ -190,7 +191,7 @@ class _Writer:
 
     def mark(self, face: cq.Face, ids: list[str]) -> None:
         label = self.color(face, ORANGE)
-        TDataStd_Name.Set_s(label, ES(_ascii("CHECK " + " ".join(ids))))
+        TDataStd_Name.Set_s(label, ES(_ascii("PRÜFEN " + " ".join(ids))))
         self.layers.SetLayer(label, ES(MARK_LAYER))
 
     def dimension(self, entry: dict) -> None:
@@ -219,13 +220,13 @@ class _Writer:
         previous = Interface_Static.CVal_s("write.step.schema")
         try:
             if not Interface_Static.SetCVal_s("write.step.schema", SCHEMA):
-                raise RuntimeError(f"OCCT does not know the STEP schema {SCHEMA}")
+                raise RuntimeError(f"OCCT kennt das STEP-Schema {SCHEMA} nicht.")
             Interface_Static.SetIVal_s("write.stepcaf.subshapes.name", 1)
             writer = STEPCAFControl_Writer()
             for mode in (writer.SetColorMode, writer.SetNameMode, writer.SetDimTolMode, writer.SetLayerMode):
                 mode(True)
             if not writer.Transfer(self.doc, STEPControl_AsIs) or writer.Write(path) != IFSelect_RetDone:
-                raise OSError(f"cannot write {path}")
+                raise OSError(f"Die Datei {path} konnte nicht geschrieben werden.")
         finally:
             Interface_Static.SetCVal_s("write.step.schema", previous)  # the setting is global to the process
 
@@ -233,15 +234,15 @@ class _Writer:
 def write_step(
     shape: cq.Shape, path: str, *, name: str, marks: Sequence[dict], pmi: Sequence[dict], threads: Sequence[dict]
 ) -> dict:
-    """Write the shape as STEP AP242 with colors, names, the layer ASSUMED_CHECK and semantic PMI.
+    """Schreibe die Form als STEP AP242 mit Farben, Namen, dem Layer ASSUMED_CHECK und semantischer PMI.
 
-    marks are {"id", "near": [(x, y, z), ...]}: the faces near the points turn orange and are named
-    "CHECK <id>", a face hit by several marks gets all their ids. threads are {"at", "axis", "d"}, d being
-    the drilled diameter: the matching cylinders turn green. pmi entries come from pmi_from (their faces
-    must belong to `shape`):
-    {"type": "diameter", "face", "value", "tol_upper", "tol_lower", "fit"} and
-    {"type": "distance", "faces": [a, b], "value", "tol_upper", "tol_lower", "description"}.
-    A fit wins over deviations. A fit that XCAF cannot hold is left out, the dimension is still written.
+    `marks` enthält {"id", "near": [(x, y, z), ...]}: Die Flächen nahe den Punkten werden orange und
+    "PRÜFEN <id>" genannt; trifft eine Fläche mehrere Markierungen, enthält ihr Name alle IDs. `threads`
+    enthält {"at", "axis", "d"}, wobei d der gebohrte Durchmesser ist: passende Zylinder werden grün.
+    PMI-Einträge kommen aus pmi_from (ihre Flächen müssen zu `shape` gehören): {"type": "diameter",
+    "face", "value", "tol_upper", "tol_lower", "fit"} oder {"type": "distance", "faces": [a, b],
+    "value", "tol_upper", "tol_lower", "description"}. Eine Passung hat Vorrang vor Abweichungen.
+    Eine von XCAF nicht unterstützte Passung wird weggelassen, das Maß aber trotzdem geschrieben.
     """
     # a Compound root: below a Solid that carries a location, AddSubShape finds no faces
     body = cq.Compound.makeCompound(shape.Solids())
@@ -294,7 +295,7 @@ def _assumed_pmi(spec: PartSpec, dims: dict[str, Dimension], shape: cq.Shape) ->
             continue
         planes = _parallel_planes(select_faces(shape, item.mark_near), lengths[0].value)
         if planes:
-            note = f"ASSUMED: {item.assumption} - {item.reason} - please check"
+            note = f"ANNAHME: {item.assumption} - {item.reason} - bitte prüfen"
             entries.append({"type": "distance", "faces": planes, **_size(lengths[0]), "description": note})
     return entries
 
@@ -307,8 +308,8 @@ def pmi_from(spec: PartSpec, ops: Sequence[Op], shape: cq.Shape, report: dict) -
     printed callout, goes along but is not written.
 
     A review item of issue "missing" with exactly one assumed length gets a distance between the two
-    parallel planes its mark_near hits, if they are that length apart, with the note "ASSUMED:
-    <assumption> - <reason> - please check". That is how BCT carries the missing width of the Sensoraufnahme.
+    parallel planes its mark_near hits, if they are that length apart, with the note
+    "ANNAHME: <assumption> - <reason> - bitte prüfen". That is how BCT carries the missing width of the Sensoraufnahme.
 
     `ops` is part of the planned call and not used: the spec and the report hold everything needed.
     """
@@ -343,7 +344,7 @@ def write_glb(shape: cq.Shape, path: str, marks: Sequence[dict], threads: Sequen
     for face in threaded:
         assembly.addSubshape(face, name="thread", color=cq.Color(*GREEN))
     for face, ids in marked.items():
-        assembly.addSubshape(face, name="CHECK " + " ".join(ids), color=cq.Color(*ORANGE))
+        assembly.addSubshape(face, name="PRÜFEN " + " ".join(ids), color=cq.Color(*ORANGE))
     assembly.export(path, tolerance=0.01, angularTolerance=0.1)
     _patch_materials(path)
     hit = {i for ids in marked.values() for i in ids}
@@ -447,7 +448,7 @@ def read_pmi(path: str) -> dict:
     for mode in (reader.SetColorMode, reader.SetGDTMode, reader.SetLayerMode):
         mode(True)
     if reader.ReadFile(path) != IFSelect_RetDone or not reader.Transfer(doc):
-        raise ValueError(f"cannot read {path} as STEP")
+        raise ValueError(f"Die STEP-Datei {path} konnte nicht gelesen werden.")
     main = doc.Main()
     dimensions = TDF_LabelSequence()
     XCAFDoc_DocumentTool.DimTolTool_s(main).GetDimensionLabels(dimensions)

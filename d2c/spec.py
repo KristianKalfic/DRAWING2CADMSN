@@ -25,7 +25,7 @@ class _Strict(BaseModel):
 
 
 class Source(_Strict):
-    """Where a value was read: a view and a cell of the drawing frame grid."""
+    """Herkunft eines Werts: Ansicht und Rasterfeld der Zeichnung."""
 
     view: str
     # A3: A-F/1-8, A4: A-F/1-4; null for drawings without a grid
@@ -33,10 +33,10 @@ class Source(_Strict):
 
 
 class Dimension(_Strict):
-    """One dimension.
+    """Ein Maß.
 
-    tol_upper/tol_lower are deviations in mm ("31 -0,1" -> 0 and -0.1),
-    fit is an ISO 286 class such as h10 or H7.
+    tol_upper/tol_lower sind Abweichungen in mm ("31 -0,1" -> 0 und -0.1),
+    fit ist eine ISO-286-Passungsklasse wie h10 oder H7.
     """
 
     id: str
@@ -67,9 +67,9 @@ class Feature(_Strict):
 
 
 class ExpectedHole(_Strict):
-    """A hole the finished model must have.
+    """Eine Bohrung, die das fertige Modell enthalten muss.
 
-    d is the diameter, at a point on the hole axis, axis its direction (not the zero vector).
+    d ist der Durchmesser, at ein Punkt auf der Bohrungsachse und axis deren Richtung (nicht der Nullvektor).
     """
 
     d: PositiveFloat
@@ -79,16 +79,16 @@ class ExpectedHole(_Strict):
 
 
 class Expected(_Strict):
-    """What the finished model must satisfy. bbox is (xlen, ylen, zlen) in model coordinates."""
+    """Anforderungen an das fertige Modell. bbox enthält (xlen, ylen, zlen) in Modellkoordinaten."""
 
     bbox: tuple[PositiveFloat, PositiveFloat, PositiveFloat]
     holes: list[ExpectedHole] = []
 
 
 class ReviewItem(_Strict):
-    """An assumption or open point for the human reviewer.
+    """Eine Annahme oder offene Frage für die prüfende Person.
 
-    mark_near: model points close to the affected faces, used for the color marks.
+    mark_near: Modellpunkte nahe den betroffenen Flächen, an denen Farbmarkierungen gesetzt werden.
     """
 
     id: str
@@ -100,7 +100,7 @@ class ReviewItem(_Strict):
 
 
 class Note(_Strict):
-    """A note of the drawing, copied verbatim."""
+    """Ein Hinweis aus der Zeichnung, unverändert übernommen."""
 
     id: str
     text: str
@@ -108,9 +108,9 @@ class Note(_Strict):
 
 
 class PartSpec(_Strict):
-    """Everything read from one drawing page.
+    """Alle erfassten Angaben einer Zeichnungsseite.
 
-    drawing is relative to /data; its first path component names the reference folder.
+    drawing ist relativ zu /data; die erste Pfadkomponente bezeichnet den Referenzordner.
     """
 
     name: str = Field(pattern=r"^[\w-]+$")  # becomes a folder name
@@ -135,57 +135,57 @@ class PartSpec(_Strict):
         # (a) ids are unique across views, dimensions, features, notes and review items
         groups = (self.views, self.dimensions, self.features, self.notes, self.review)
         counts = Counter(item.id for group in groups for item in group)
-        errors += [f"duplicate id {i!r}" for i, n in counts.items() if n > 1]
+        errors += [f"Doppelte ID {i!r}." for i, n in counts.items() if n > 1]
 
         # (b) every ref, dim_id and source view exists
         view_ids = {v.id for v in self.views}
         dim_ids = {d.id for d in self.dimensions}
         ref_ids = dim_ids | {item.id for item in (*self.features, *self.notes)}
         for r in self.review:
-            errors += [f"review {r.id!r}: unknown ref {ref!r}" for ref in r.refs if ref not in ref_ids]
+            errors += [f"`review` {r.id!r}: Unbekannte Referenz {ref!r}." for ref in r.refs if ref not in ref_ids]
         for f in self.features:
-            errors += [f"feature {f.id!r}: unknown dim_id {i!r}" for i in f.dim_ids if i not in dim_ids]
+            errors += [f"`feature` {f.id!r}: Unbekannte `dim_id` {i!r}." for i in f.dim_ids if i not in dim_ids]
         for k, hole in enumerate(self.expected.holes):
-            errors += [f"expected.holes[{k}]: unknown dim_id {i!r}" for i in hole.dim_ids if i not in dim_ids]
+            errors += [f"`expected.holes[{k}]`: Unbekannte `dim_id` {i!r}." for i in hole.dim_ids if i not in dim_ids]
         for item in (*self.dimensions, *self.notes):
             if item.source is not None and item.source.view not in view_ids:
                 kind = type(item).__name__.lower()
-                errors.append(f"{kind} {item.id!r}: unknown source view {item.source.view!r}")
+                errors.append(f"{kind} {item.id!r}: Unbekannte Quellansicht {item.source.view!r}.")
 
         # (e) a review item states what was assumed and why
         for r in self.review:
             if not r.assumption.strip():
-                errors.append(f"review {r.id!r}: assumption is empty")
+                errors.append(f"`review` {r.id!r}: `assumption` ist leer.")
             if not r.reason.strip():
-                errors.append(f"review {r.id!r}: reason is empty")
+                errors.append(f"`review` {r.id!r}: `reason` ist leer.")
 
         reviewed = {ref for r in self.review for ref in r.refs}
         for d in self.dimensions:
             # (c) assumed or low-confidence dimensions are under review
             if (d.assumed or d.confidence < 0.8) and d.id not in reviewed:
-                cause = "assumed=true" if d.assumed else f"confidence {d.confidence} < 0.8"
-                errors.append(f"dimension {d.id!r}: {cause}, so a review item must list it in refs")
+                cause = "`assumed=true`" if d.assumed else f"`confidence` {d.confidence} < 0.8"
+                errors.append(f"Maß {d.id!r}: {cause}; ein Prüfeintrag muss es in `refs` aufführen.")
             # (d) an assumption needs its basis
             if d.assumed and not (d.assumption_basis or "").strip():
-                errors.append(f"dimension {d.id!r}: assumed=true needs a non-empty assumption_basis")
+                errors.append(f"Maß {d.id!r}: `assumed=true` benötigt eine nicht leere `assumption_basis`.")
             # (f) the printed text contains the value
             if not d.assumed and not _prints_value(d.text, d.value):
-                errors.append(f"dimension {d.id!r}: text {d.text!r} has no number equal to value {d.value}")
+                errors.append(f"Maß {d.id!r}: `text` {d.text!r} enthält keine Zahl, die `value` {d.value} entspricht.")
             # (h) deviations come as a pair, lower <= upper
             if (d.tol_upper is None) != (d.tol_lower is None):
-                errors.append(f"dimension {d.id!r}: tol_upper and tol_lower must be set together")
+                errors.append(f"Maß {d.id!r}: `tol_upper` und `tol_lower` müssen gemeinsam gesetzt werden.")
             elif d.tol_upper is not None and d.tol_lower is not None and d.tol_lower > d.tol_upper:
-                errors.append(f"dimension {d.id!r}: tol_lower {d.tol_lower} is above tol_upper {d.tol_upper}")
+                errors.append(f"Maß {d.id!r}: `tol_lower` {d.tol_lower} ist größer als `tol_upper` {d.tol_upper}.")
 
         # (g) a hole feature needs a hole to check against
         hole_features = [f.id for f in self.features if f.type == "hole"]
         if hole_features and not self.expected.holes:
-            errors.append(f"hole features {hole_features} need at least one entry in expected.holes")
+            errors.append(f"Bohrungsmerkmale {hole_features} benötigen mindestens einen Eintrag in `expected.holes`.")
 
         # an expected hole needs an axis direction
         for k, hole in enumerate(self.expected.holes):
             if not any(hole.axis):
-                errors.append(f"expected.holes[{k}]: axis must not be the zero vector")
+                errors.append(f"`expected.holes[{k}]`: `axis` darf nicht der Nullvektor sein.")
 
         if errors:
             raise ValueError("; ".join(errors))

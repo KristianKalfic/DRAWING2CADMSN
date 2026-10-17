@@ -13,7 +13,7 @@ endobj
 << /Type /Page /Parent 2 0 R /MediaBox [0 0 595.28 841.89] /Resources << /Font << /F1 3 0 R >> >> /Contents 5 0 R >>
 endobj
 5 0 obj
-<< /Length 6385 >>
+<< /Length 6392 >>
 stream
 0.5 w [] 0 d
 28.3465 28.3465 m
@@ -38,10 +38,10 @@ S
 453.5433 62.3622 m
 453.5433 96.378 l
 S
-BT /F1 14 Tf 1 0 0 1 291.9685 107.7165 Tm (D2C Demo Bracket) Tj ET
-BT /F1 9 Tf 1 0 0 1 291.9685 75.1181 Tm (Drawing no. D2C-001) Tj ET
-BT /F1 9 Tf 1 0 0 1 462.0472 75.1181 Tm (Scale 1:1) Tj ET
-BT /F1 9 Tf 1 0 0 1 291.9685 41.1024 Tm (General tolerances ISO 2768-m) Tj ET
+BT /F1 14 Tf 1 0 0 1 291.9685 107.7165 Tm (D2C Demo-Halterung) Tj ET
+BT /F1 9 Tf 1 0 0 1 291.9685 75.1181 Tm (Zeichnungsnr. D2C-001) Tj ET
+BT /F1 9 Tf 1 0 0 1 462.0472 75.1181 Tm (Maﬂstab 1:1) Tj ET
+BT /F1 9 Tf 1 0 0 1 291.9685 41.1024 Tm (Allgemeintoleranzen ISO 2768-m) Tj ET
 0.5 w [] 0 d
 198.4252 325.9843 m
 396.8504 325.9843 l
@@ -332,7 +332,7 @@ endobj
 << /Type /Page /Parent 2 0 R /MediaBox [0 0 595.28 841.89] /Resources << /Font << /F1 3 0 R >> >> /Contents 7 0 R >>
 endobj
 7 0 obj
-<< /Length 189 >>
+<< /Length 198 >>
 stream
 0.5 w [] 0 d
 28.3465 28.3465 m
@@ -340,7 +340,7 @@ stream
 566.9291 813.5433 l
 28.3465 813.5433 l
 h S
-BT /F1 10 Tf 1 0 0 1 56.6929 765.3543 Tm (Notes: 1. Material S235JR. 2. Deburr all edges.) Tj ET
+BT /F1 10 Tf 1 0 0 1 56.6929 765.3543 Tm (Hinweise: 1. Werkstoff S235JR. 2. Alle Kanten entgraten.) Tj ET
 endstream
 endobj
 xref
@@ -351,10 +351,10 @@ xref
 0000000127 00000 n 
 0000000224 00000 n 
 0000000356 00000 n 
-0000006793 00000 n 
-0000006925 00000 n 
+0000006800 00000 n 
+0000006932 00000 n 
 trailer
 << /Size 8 /Root 1 0 R >>
 startxref
-7165
+7181
 %%EOF

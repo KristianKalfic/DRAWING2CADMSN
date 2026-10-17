@@ -105,7 +105,7 @@ def test_revolve_negative_r_rejected():
     path = {"type": "path", "start": (0, 0), "segments": lines}
     with pytest.raises(ValueError, match=">= 0"):
         OPS.validate_python([{"op": "revolve", "profile": path}])
-    with pytest.raises(ValueError, match="exactly one"):
+    with pytest.raises(ValueError, match="genau eines"):
         OPS.validate_python([{"op": "revolve"}])
 
 
@@ -132,7 +132,7 @@ def test_holes_tapped_m5_uses_4_2():
 
 
 def test_holes_tapped_wrong_nominal_rejected():
-    with pytest.raises(ValueError, match="nominal"):
+    with pytest.raises(ValueError, match="Nenndurchmesser"):
         OPS.validate_python([holes(10, [(0, 0)], 6, kind="tapped", thread="M5")])
     with pytest.raises(ValueError, match="thread"):
         OPS.validate_python([holes(10, [(0, 0)], 5, kind="tapped")])
@@ -176,9 +176,9 @@ def test_holes_cbore_and_csk_volume_less_than_plain():
         OPS.validate_python([holes(10, [(0, 0)], 5, kind="cbore")])
     with pytest.raises(ValueError, match="csk_d"):
         OPS.validate_python([holes(10, [(0, 0)], 5, kind="csk", csk_d=4)])
-    with pytest.raises(ValueError, match="only go with"):  # a forgotten kind must not give a plain hole silently
+    with pytest.raises(ValueError, match="sind nur bei"):  # a forgotten kind must not give a plain hole silently
         OPS.validate_python([holes(10, [(0, 0)], 5, cbore_d=10, cbore_depth=4)])
-    with pytest.raises(ValueError, match="shallower"):
+    with pytest.raises(ValueError, match="flacher"):
         OPS.validate_python([holes(10, [(0, 0)], 5, depth=3, kind="cbore", cbore_d=10, cbore_depth=4)])
 
 
@@ -218,9 +218,9 @@ def test_path_profile_with_arc():
 
 
 def test_fillet_no_edge_errors():
-    with pytest.raises(BuildError, match="no edge within tol of near points"):
+    with pytest.raises(BuildError, match="Keine Kante liegt innerhalb"):
         run(block(), edge_finish("fillet", 1, [(100, 100, 100)]))
-    with pytest.raises(BuildError, match="no edge within tol of near points"):
+    with pytest.raises(BuildError, match="Keine Kante liegt innerhalb"):
         run(block(), edge_finish("fillet", 1, [(0, 0, 5)], tol=0.5))  # inside the box, 10 mm from every edge
 
 
@@ -235,7 +235,7 @@ def test_fillet_reports_edge_count():
     # a corner touches three edges, two near points on one edge still count it once
     assert note(run(block(), edge_finish("fillet", 1, [(10, -10, 10)]))[1], 1)["edges_selected"] == 3
     assert note(run(block(), edge_finish("fillet", 1, [(0, -10, 10), (1, -10, 10)]))[1], 1)["edges_selected"] == 1
-    with pytest.raises(BuildError, match="op 1 .*too large"):
+    with pytest.raises(BuildError, match="op 1 .*zu groß"):
         run(block(), edge_finish("fillet", 15, [(0, -10, 10)]))  # larger than the box
 
 
@@ -252,7 +252,7 @@ def test_holes_requires_positions():
     with pytest.raises(ValueError, match="positions"):
         HolesOp(op="holes", plane=plane, d=5)
     polar = {"center": (0, 0), "pitch_d": 20, "count": 3}
-    with pytest.raises(ValueError, match="exactly one"):
+    with pytest.raises(ValueError, match="genau eines"):
         HolesOp(op="holes", plane=plane, d=5, positions=[(0, 0)], polar=polar)
     assert HolesOp(op="holes", plane=plane, d=5, polar=polar).polar.count == 3
 
@@ -269,16 +269,16 @@ def test_path_fillets_corner():
     shape, _ = run(extrude(rect(20, 20, center=(10, 10), corner_radius=5), t))
     assert shape.Volume() / t == pytest.approx(400 - 4 * (25 - math.pi * 25 / 4), rel=REL)
     # no corner near `at`, or a radius that does not fit, is a build error
-    with pytest.raises(BuildError, match="exactly 1"):
+    with pytest.raises(BuildError, match="genau 1"):
         run(extrude({**square, "fillets": [{"at": (10, 10), "r": 5}]}, t))
-    with pytest.raises(BuildError, match="fillet"):
+    with pytest.raises(BuildError, match="Rundung"):
         run(extrude({**square, "fillets": [{"at": (20, 20), "r": 50}]}, t))
 
 
 def test_cut_first_rejected():
     with pytest.raises(BuildError, match="add"):
         run(extrude(rect(10, 10), 5, mode="cut"))
-    with pytest.raises(BuildError, match="needs an existing solid"):
+    with pytest.raises(BuildError, match="Volumenkörper muss bereits"):
         run(holes(0, [(0, 0)], 3))
     with pytest.raises(BuildError):
         build([])
@@ -394,9 +394,9 @@ def test_extrude_taper_volume():
 
 def test_extrude_taper_collapse_rejected():
     circle = {"type": "circle", "center": (0, 0), "d": 40}
-    with pytest.raises(BuildError, match="taper too large"):
+    with pytest.raises(BuildError, match="Verjüngung zu groß"):
         run(extrude(circle, 500, taper=20))
-    with pytest.raises(BuildError, match="taper too large"):
+    with pytest.raises(BuildError, match="Verjüngung zu groß"):
         run(block(), extrude(rect(10, 10), -10, offset=10, mode="cut", taper=30))
 
 
@@ -461,12 +461,12 @@ def test_hull_contained_circle():
 def test_hull_rejects_bad_circles():
     with pytest.raises(ValueError):
         OPS.validate_python([circle_hull([(0, 0, 5)])])
-    with pytest.raises(ValueError, match="radius"):
+    with pytest.raises(ValueError, match="Kreisradius"):
         OPS.validate_python([circle_hull([(0, 0, 5), (10, 0, 0)])])
 
 
 def test_cut_without_effect_warns():
-    warning = "removed no material: check plane, offset and direction"
+    warning = "Kein Material entfernt: Prüfe Ebene, offset und Richtung."
     far = extrude({"type": "circle", "center": (0, 0), "d": 4}, -3, offset=50, mode="cut")  # floats above the part
     assert note(run(block(), far)[1], 1) == {"op_index": 1, "warning": warning}
     swallow = extrude(rect(40, 40), 20, mode="intersect")  # the part lies fully inside
@@ -486,5 +486,5 @@ def test_revolve_profile_crossing_axis_rejected():
         return {"type": "path", "start": (0, 0), "segments": [{"kind": "radius_arc", "to": (0, 10), "r": r}]}
 
     assert run({"op": "revolve", "profile": bulge(-6)})[0].isValid()  # bulges to +r
-    with pytest.raises(BuildError, match="crosses the revolve axis"):
+    with pytest.raises(BuildError, match="kreuzt die Drehachse"):
         run({"op": "revolve", "profile": bulge(6)})

@@ -111,14 +111,14 @@ def test_export_writes_files(session):
     assert json.loads((folder / "report.json").read_text())["ok"] is True
     review = json.loads((folder / "review.json").read_text())
     assert review["all_ok"] is True and review["assumptions"][0]["id"] == "rv1"
-    assert "All checks passed: yes" in (folder / "review.md").read_text()
+    assert "Alle Prüfungen bestanden: ja" in (folder / "review.md").read_text()
 
 
 def test_export_refuses_when_not_ok(session):
     session.apply("plate", box())
     session.apply("plate", box(center=[50, 0]))
     result = session.export("plate")
-    assert (result["ok"], result["error"]) == (False, "validation failed")
+    assert (result["ok"], result["error"]) == (False, "Prüfung fehlgeschlagen")
     assert result["report"]["ok"] is False
     assert not list((results_root() / "plate").glob("*.step"))
 
@@ -135,9 +135,11 @@ def test_failed_export_removes_older_results(session):
 def test_review_lists_every_assumed_dimension(session):
     session.apply("plate", box())
     markdown = (Path(session.export("plate")["files"]["review"])).read_text()
-    assumptions = section(markdown, "Assumptions and open issues")
-    assert "| rv1 | t | missing | thickness 5 mm | not dimensioned | - | 1 face(s) |" in assumptions
+    assumptions = section(markdown, "Annahmen und offene Punkte")
+    assert "| rv1 | t | fehlt | thickness 5 mm | not dimensioned | - | Flächen: 1 |" in assumptions
     assert "Plate" in markdown and "ISO 2768-m" in markdown
+    assert "| Außenmaß X |" in markdown
+    assert to_json(session.specs["plate"], session.ops["plate"], session.last["plate"])["assumptions"][0]["issue"] == "missing"
 
 
 def test_umlaut_part_name():
@@ -151,7 +153,7 @@ def test_umlaut_part_name():
 
 
 def test_unknown_part_error():
-    with pytest.raises(KeyError, match="unknown part 'ghost'; call submit_spec first"):
+    with pytest.raises(KeyError, match="Unbekanntes Bauteil 'ghost'; rufe zuerst `submit_spec` auf"):
         Session().state("ghost")
 
 
@@ -159,17 +161,17 @@ def test_review_lists_unreferenced_op_values(session):
     session.apply("plate", box())
     session.apply("plate", hole(3))
     markdown = Path(session.export("plate")["files"]["review"]).read_text()
-    unreferenced = section(markdown, "Values without dimension reference")
+    unreferenced = section(markdown, "Werte ohne Maßbezug")
     assert "| 1 | d | 3 |" in unreferenced  # the hole diameter matches no dimension
     assert "profile.w" not in unreferenced  # 20 equals dimension w by value
-    assert "profile.w" not in section(markdown, "Traceability")
+    assert "profile.w" not in section(markdown, "Rückverfolgbarkeit")
 
 
 def test_refs_unknown_dimension_rejected(session):
     session.apply("plate", box())
-    with pytest.raises(ValueError, match="unknown dimension id 'nope' in refs"):
+    with pytest.raises(ValueError, match="Unbekannte Maß-ID 'nope' in `refs`"):
         session.apply("plate", hole(4, refs={"d": "nope"}))
-    with pytest.raises(ValueError, match="unknown dimension id 'nope' in refs"):
+    with pytest.raises(ValueError, match="Unbekannte Maß-ID 'nope' in `refs`"):
         session.edit_op("plate", 0, box(refs={"profile.w": "nope"}))
     assert session.ops["plate"] == [box()]
 
@@ -178,8 +180,8 @@ def test_review_traceability_table(session):
     session.apply("plate", box())
     session.apply("plate", hole(4, refs={"d": "d1"}))
     markdown = Path(session.export("plate")["files"]["review"]).read_text()
-    assert "| 1 | d | 4 | d1 | Ø4 |" in section(markdown, "Traceability")
-    assert "| 1 | d |" not in section(markdown, "Values without dimension reference")
+    assert "| 1 | d | 4 | d1 | Ø4 |" in section(markdown, "Rückverfolgbarkeit")
+    assert "| 1 | d |" not in section(markdown, "Werte ohne Maßbezug")
     data = to_json(session.specs["plate"], session.ops["plate"], session.last["plate"])
     assert data["traceability"] == [{"op_index": 1, "path": "d", "value": 4, "dimension": "d1", "text": "Ø4"}]
 
@@ -200,20 +202,20 @@ def test_part_name_with_path_rejected(session, name):
     outside.mkdir()
     (outside / "spec.json").write_text(make_spec().model_dump_json(), encoding="utf-8")
     for call in (session.state, lambda n: session.apply(n, box()), session.export):
-        with pytest.raises(KeyError, match="unknown part"):
+        with pytest.raises(KeyError, match="Unbekanntes Bauteil"):
             call(name)
     assert sorted(p.name for p in outside.iterdir()) == ["spec.json"]
 
 
 def test_refs_must_be_an_object(session):
-    with pytest.raises(ValueError, match="refs must be an object"):
+    with pytest.raises(ValueError, match="`refs` muss ein Objekt sein"):
         session.apply("plate", box(refs=["w"]))
     assert session.ops["plate"] == []
 
 
 def test_unreadable_file_names_part_and_file(session):
     (results_root() / "plate" / "ops.json").write_text("{not json", encoding="utf-8")
-    with pytest.raises(ValueError, match="plate/ops.json is unreadable"):
+    with pytest.raises(ValueError, match="plate/ops.json ist nicht lesbar"):
         Session().state("plate")
 
 
@@ -247,6 +249,6 @@ def test_review_lists_revolve_radii(session):
     session.apply("plate", box())
     session.apply("plate", {"op": "revolve", "points": [[3, 0], [7, 0], [7, 2], [3, 2]], "mode": "cut"})
     unreferenced = section(Path(session.export("plate")["files"]["review"]).read_text(),
-                           "Values without dimension reference")
+                           "Werte ohne Maßbezug")
     assert "| 1 | points.0.0 | 3 |" in unreferenced and "| 1 | points.1.0 | 7 |" in unreferenced
     assert "points.0.1" not in unreferenced

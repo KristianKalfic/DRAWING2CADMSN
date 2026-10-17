@@ -8,5 +8,5 @@
     {"type": "hole", "x": 0, "y": 0, "diameter": 40, "through": true},
     {"type": "fillet", "edges": "|Z", "size": 20}
   ],
-  "review": [{"feature": "hole", "reason": "Wert fehlt im JSON"}]
+  "review": [{"feature": "Bohrung", "reason": "Wert fehlt im JSON"}]
 }

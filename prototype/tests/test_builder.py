@@ -211,12 +211,12 @@ def test_fehler_senkung_ohne_tiefe_wird_nicht_geraten():
 
 def test_fehler_blindbohrung_ohne_tiefe():
     r = S.build_from_json(box(50, 50, 10, [{"type": "hole", "x": 0, "y": 0, "diameter": 6, "through": False}]))
-    assert r["ok"] is False and "keine depth" in r["error"]
+    assert r["ok"] is False and "depth fehlt" in r["error"]
 
 
 def test_fehler_seitenflaeche_nicht_unterstuetzt():
     r = build(box(50, 50, 10, [{"type": "hole", "x": 0, "y": 0, "diameter": 6, "face": ">X"}]))
-    assert any("nicht unterstuetzt" in u for u in r["unsupported"])
+    assert any("nicht unterstützt" in u for u in r["unsupported"])
 
 
 def test_fehler_profil_nicht_zentriert_warnt():
