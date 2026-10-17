@@ -1,7 +1,19 @@
+# BCT sample data and everything derived from it stays out of git
+OneDrive*/
+*.stp
+*.prt
+*.pptx
+/data/
+/drawings/
+/tables/
+/results/
+/tests/test_bct.py
 out/
-drawings/
+.env
 __pycache__/
 *.pyc
-.env
-.venv/
+*.egg-info/
 .pytest_cache/
+.venv/
+.DS_Store
+*.zip
