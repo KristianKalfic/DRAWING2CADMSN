@@ -211,7 +211,7 @@ def test_roundtrip_fails_when_pmi_is_lost(tmp_path, monkeypatch):
     result = step_roundtrip(plate, str(tmp_path / "plate.step"), pmi=[entry])
     assert (result["pmi"], result["ok"]) == ({"written": 1, "read_back": 1}, True)
 
-    # a dimension that does not come back from the file fails the round trip while the solid is fine
+    # ein Maß, das nicht aus der Datei zurückkommt, lässt die Hinreise fehlschlagen, während der Festkörper in Ordnung ist
     monkeypatch.setattr(export, "read_pmi", lambda _: {"dimensions": []})
     result = step_roundtrip(plate, str(tmp_path / "plate.step"), pmi=[entry])
     assert (result["pmi"], result["reimport_valid"], result["ok"]) == ({"written": 1, "read_back": 0}, True, False)
@@ -222,7 +222,7 @@ def test_roundtrip_colors_thread_faces(tmp_path):
     thread = {"at": (10.0, 5.0, 0.0), "axis": (0.0, 0.0, 1.0), "d": 4.2}
     path = str(tmp_path / "tapped.step")
     assert step_roundtrip(tapped, path, threads=[thread])["ok"] is True
-    assert export.read_pmi(path)["colors"] == {"#99abb0": 1, "#65f073": 1}  # steel body, green thread
+    assert export.read_pmi(path)["colors"] == {"#99abb0": 1, "#65f073": 1}  # Stahlkörper, grünes Gewinde
 
 
 def test_mark_without_face_not_ok(tmp_path):
@@ -248,7 +248,7 @@ def test_metrics_cyl_diameters():
 
 
 def test_cylinder_on_trimmed_surface():
-    """STEP readers put cylinders on trimmed surfaces. Such a face has no point at the parameters (0.5, 0.5)."""
+    """STEP-Leser setzen Zylinder auf abgeschnittene Flächen. Eine solche Fläche hat keinen Punkt an den Parametern (0,5, 0,5)."""
     surface = Geom_RectangularTrimmedSurface(Geom_CylindricalSurface(gp_Ax3(), 5.0), 2.0, 3.0, 2.0, 4.0)
     outside = cq.Face(BRepBuilderAPI_MakeFace(surface, 1e-7).Face())  # its normals point away from the Z axis
     inside = cq.Face(outside.wrapped.Reversed())  # its normals point to the axis, like those of a hole

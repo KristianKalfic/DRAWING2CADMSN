@@ -1,6 +1,6 @@
-"""The scripts of scripts/ (eval_refs.py, replay.py), run as subprocesses on folders built in tmp.
+"""Die Skripte von scripts/ (eval_refs.py, replay.py), als Teilprozesse auf in tmp aufgebauten Ordnern.
 
-References are CadQuery plates written to STEP here; sample data is only touched by the bct test.
+Referenzen sind hier als STEP geschriebene CadQuery-Platten; Beispieldaten berührt nur der bct-Test.
 """
 
 import json
@@ -24,19 +24,19 @@ EVAL_KEYS = {"part", "dv_pct", "dbbox_max_mm", "missing_d", "extra_d", "match", 
 
 
 def run(script: str, *args: str) -> subprocess.CompletedProcess:
-    """A script of scripts/ in its own process, with the environment of the test (D2C_RESULTS, D2C_REF_DATA)."""
+    """Ein Skript aus scripts/ in seinem eigenen Prozess, mit der Umgebung des Tests (D2C_RESULTS, D2C_REF_DATA)."""
     return subprocess.run([sys.executable, str(SCRIPTS / script), *args], capture_output=True, text=True,
                           encoding="utf-8", timeout=300)
 
 
 def plate(length: float = 40.0, hole: float | None = None) -> cq.Workplane:
-    """A plate of length x 30 x 10 mm, with a through hole of that diameter along Z if given."""
+    """Eine Platte von Länge x 30 x 10 mm, mit einer durchgehenden Bohrung dieses Durchmessers entlang Z, wenn gegeben."""
     body = cq.Workplane().box(length, 30, 10)
     return body if hole is None else body.faces(">Z").workplane().hole(hole)
 
 
 def pocketed(depth: float) -> cq.Workplane:
-    """The 40 mm plate with a 10 x 10 mm pocket of that depth in its top face: no cylinder, same bounding box."""
+    """Die 40-mm-Platte mit einer Tasche 10 x 10 mm dieser Tiefe in ihrer Deckfläche: kein Zylinder, gleiche Begrenzungsbox."""
     return plate().faces(">Z").workplane().rect(10, 10).cutBlind(-depth)
 
 
@@ -48,7 +48,7 @@ def save(shape: cq.Workplane | cq.Shape, path: Path) -> Path:
 
 @pytest.fixture
 def refs(tmp_path, monkeypatch) -> Path:
-    """An empty reference data folder, set as D2C_REF_DATA."""
+    """Ein leerer Referenzdatenordner, gesetzt als D2C_REF_DATA."""
     root = tmp_path / "refs"
     root.mkdir()
     monkeypatch.setenv("D2C_REF_DATA", str(root))
@@ -56,7 +56,7 @@ def refs(tmp_path, monkeypatch) -> Path:
 
 
 def add_part(name: str, drawing: str, model: cq.Workplane) -> None:
-    """results/<name>/ with a valid spec.json for `drawing` and the model as <name>.step."""
+    """results/<name>/ mit einer gültigen spec.json zu `drawing` und dem Modell als <name>.step."""
     spec = json.loads((FIXTURES / "demo_spec.json").read_text("utf-8")) | {"name": name, "drawing": drawing}
     folder = results_root() / name
     folder.mkdir(parents=True)
@@ -65,7 +65,7 @@ def add_part(name: str, drawing: str, model: cq.Workplane) -> None:
 
 
 def evaluate() -> tuple[subprocess.CompletedProcess, dict[str, dict]]:
-    """Run eval_refs.py: the process and the rows of EVAL.json by part. The table is on stdout and in EVAL.md."""
+    """eval_refs.py ausführen: der Prozess und die Zeilen von EVAL.json je Teil. Die Tabelle ist auf stdout und in EVAL.md."""
     done = run("eval_refs.py")
     assert done.returncode == 0, done.stderr
     assert (results_root() / "EVAL.md").read_text("utf-8") == done.stdout
@@ -129,7 +129,7 @@ def test_eval_json_keys(refs):
 
 
 def test_eval_thresholds(refs):
-    """MATCH needs volume within 1.0 %, every sorted bbox edge within 0.05 mm and the same diameters."""
+    """MATCH verlangt Volumen innerhalb 1,0 %, jede sortierte bbox-Kante innerhalb 0,05 mm und dieselben Durchmesser."""
     save(plate(), refs / "Plate A" / "plate.stp")
     cases = {  # part: (model, expected match, volume deviation in %, bbox deviation in mm)
         "edge_within": (plate(40.04), "MATCH", 0.1, 0.04),
@@ -147,7 +147,7 @@ def test_eval_thresholds(refs):
 
 
 def test_eval_flags_unusable_references(refs):
-    """No folder, two candidates, an unreadable file or no solid: a row 'reference invalid', never a failure."""
+    """Kein Ordner, zwei Kandidaten, eine unlesbare Datei oder kein Festkörper: eine Zeile 'reference invalid', niemals ein Misserfolg."""
     save(plate(), refs / "Two" / "a.stp")
     save(plate(), refs / "Two" / "b.stp")
     (refs / "Broken").mkdir()
@@ -171,7 +171,7 @@ def test_eval_without_results_is_an_empty_table(refs):
 
 @pytest.fixture
 def demo_part() -> Path:
-    """results/demo_bracket/ with the spec and ops of the demo part, nothing built yet."""
+    """results/demo_bracket/ mit der Spezifikation und den Ops des Demoteils, noch nichts gebaut."""
     folder = results_root() / "demo_bracket"
     folder.mkdir(parents=True)
     for name in ("spec", "ops"):
@@ -220,7 +220,7 @@ def test_replay_export_rewrites_step(demo_part):
 
 @pytest.mark.bct
 def test_eval_bct_fuss_reference():
-    """The reference of the sample part Fuss loads, is valid and has a volume."""
+    """Die Referenz des Beisteils Fuss lädt, ist gültig und hat ein Volumen."""
     reference = cq.importers.importStep(str(BCT_DATA / "Fuss" / "Fuss.stp")).vals()
     shape = cq.Compound.makeCompound(reference)
     assert shape.isValid()

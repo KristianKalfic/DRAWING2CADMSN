@@ -1,17 +1,18 @@
-"""Open an exported STEP file in FreeCAD and measure it: a check of the result that does not use CadQuery.
+"""Eine exportierte STEP-Datei in FreeCAD öffnen und messen: eine Prüfung des Ergebnisses ohne CadQuery.
 
-FreeCAD runs headless (freecadcmd) outside the container, it is not part of the image. This script needs
-only the standard library, so any recent Python will do. FreeCAD also builds on OpenCASCADE: what is
-independent is the STEP reader and the measuring code, not the geometry kernel.
+FreeCAD läuft kopflos (freecadcmd) außerhalb des Containers, es gehört nicht zum Image. Dieses Skript braucht
+nur die Standardbibliothek, also reicht jedes aktuelle Python. FreeCAD baut ebenfalls auf OpenCASCADE: unabhängig
+sind der STEP-Leser und der Messcode, nicht der Geometriekern.
 
-Without --spec the solid is checked: valid, exactly one solid, positive volume. With --spec (the spec.json
-that export_step writes) the size and every hole of its `expected` are checked as well, with the thresholds
-of d2c/checks.py: 0.01 mm, axes parallel from |cos| 0.9999, holes are concave cylinders.
+Ohne --spec wird der Festkörper geprüft: gültig, genau ein Festkörper, positives Volumen. Mit --spec (die spec.json,
+die export_step schreibt) werden auch Größe und jede Bohrung von `expected` geprüft, mit den Schwellwerten von
+d2c/checks.py: 0,01 mm, Achsen parallel ab |cos| 0,9999, Bohrungen sind konkave Zylinder.
 
-Usage: python scripts/freecad_check.py part.step [--spec spec.json] [--freecad PATH]
+Aufruf: python scripts/freecad_check.py part.step [--spec spec.json] [--freecad PFAD]
 
-Exit code: 0 all checks passed, 1 a check failed or FreeCAD could not read the file, 2 FreeCAD not found
-(argparse also uses 2 for a malformed command line), which lets CI tell a missing tool from a failed check.
+Rückkehrcode: 0 alle Prüfungen bestanden, 1 eine Prüfung durchgefallen oder FreeCAD konnte die Datei nicht lesen,
+2 FreeCAD nicht gefunden (argparse benutzt 2 ebenfalls für eine fehlerhafte Kommandozeile), damit CI ein fehlendes
+Werkzeug von einer durchgefallenen Prüfung unterscheiden kann.
 """
 
 from __future__ import annotations
@@ -28,16 +29,16 @@ import tempfile
 from collections import Counter
 from pathlib import Path
 
-LINEAR_TOL = 0.01  # mm, as in d2c/checks.py
-AXIS_COS = 0.9999  # smallest |cos| of the angle between two axes that count as parallel, as in d2c/checks.py
-TIMEOUT = 120  # seconds for one FreeCAD run
-FREECAD_PATHS = (  # where the headless binary usually is when it is not on PATH
+LINEAR_TOL = 0.01  # mm, wie in d2c/checks.py
+AXIS_COS = 0.9999  # kleinster |cos| des Winkels zweier Achsen, der als parallel zählt, wie in d2c/checks.py
+TIMEOUT = 120  # Sekunden je FreeCAD-Lauf
+FREECAD_PATHS = (  # wo das kopflose Programm üblicherweise liegt, wenn es nicht im PATH ist
     "/Applications/FreeCAD.app/Contents/Resources/bin/freecadcmd",
     "C:/Program Files/FreeCAD 1.0/bin/FreeCADCmd.exe",
 )
 
-# Runs inside FreeCAD: reads the STEP named in D2C_STEP, writes the measurement as JSON to D2C_FC_OUT.
-# A cylinder is concave (a hole) if the outward normal of its face points at the axis.
+# Läuft in FreeCAD: liest die in D2C_STEP genannte STEP, schreibt die Messung als JSON nach D2C_FC_OUT.
+# Ein Zylinder ist konkav (eine Bohrung), wenn die äußere Normale seiner Fläche zur Achse weist.
 MEASURE = r'''
 import json, os
 import FreeCAD, Part
@@ -62,7 +63,7 @@ json.dump({"version": ".".join(FreeCAD.Version()[:3]), "valid": shape.isValid(),
 
 
 def find_freecad(path: str | None) -> str | None:
-    """The FreeCAD binary: the given path or name, else one on PATH, else a usual install location."""
+    """Das FreeCAD-Programm: der gegebene Pfad oder Name, sonst einer im PATH, sonst ein üblicher Installationsort."""
     if path:
         return path if Path(path).is_file() else shutil.which(path)
     on_path = shutil.which("freecadcmd") or shutil.which("FreeCADCmd")
@@ -76,7 +77,7 @@ def no_freecad(message: str) -> None:
 
 
 def measure(exe: str, step: Path) -> dict:
-    """Let FreeCAD measure the STEP; exits with code 1 if it delivers nothing."""
+    """FreeCAD die STEP messen lassen; Beendigung mit Code 1, wenn es nichts liefert."""
     with tempfile.TemporaryDirectory() as tmp:
         script, result = Path(tmp, "measure.py"), Path(tmp, "result.json")
         script.write_text(MEASURE, encoding="utf-8")
@@ -105,7 +106,7 @@ def xyz(v: list[float]) -> str:
 
 
 def is_hole(cylinder: dict, hole: dict) -> bool:
-    """A concave cylinder with the diameter of the hole, its axis through hole['at'] and parallel to it."""
+    """Ein konkaver Zylinder mit dem Durchmesser der Bohrung, seine Achse durch hole['at'] und parallel zu ihr."""
     axis = unit(cylinder["axis"])
     rel = [p - q for p, q in zip(hole["at"], cylinder["point"])]
     along = sum(r * a for r, a in zip(rel, axis))
@@ -116,7 +117,7 @@ def is_hole(cylinder: dict, hole: dict) -> bool:
 
 
 def evaluate(measured: dict, expected: dict | None) -> list[tuple[str, bool]]:
-    """One (description, ok) per check."""
+    """Je Prüfung ein (Beschreibung, ok)."""
     solid = (f"solid: valid={measured['valid']}, solids={measured['solids']}, volume={measured['volume']:.2f} mm3",
              measured["valid"] and measured["solids"] == 1 and measured["volume"] > 0)
     checks = [solid]

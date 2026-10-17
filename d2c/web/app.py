@@ -25,15 +25,15 @@ from d2c.session import PART_NAME, results_root
 
 STATIC = Path(__file__).parent / "static"
 MEDIA_TYPES = {".glb": "model/gltf-binary", ".step": "model/step", ".stp": "model/step", ".md": "text/markdown"}
-SSE_POLL_SECONDS = 0.05  # ponytail: polling a list, a per-run queue only if many viewers matter
+SSE_POLL_SECONDS = 0.05  # ponytail: Polen einer Liste, Warteschlange je Lauf nur, wenn viele Betrachter wichtig sind
 MAX_UPLOAD = 20 * 1024 * 1024
-FORM_OVERHEAD = 64 * 1024  # what the other form fields and the multipart framing may add to a maximal upload
+FORM_OVERHEAD = 64 * 1024  # was die übrigen Formularfelder und der Multipart-Rahmen zu einem größten Upload hinzufügen dürfen
 IMAGE_SIGNATURES = {b"\x89PNG\r\n\x1a\n": "png", b"\xff\xd8\xff": "jpeg"}
 CLAUDE_MODELS = (("claude-sonnet-5-5", "Claude Sonnet 5.5"), ("claude-opus-5-5", "Claude Opus 5.5"),
                  ("claude-haiku-5-5", "Claude Haiku 5.5"))
 TOO_LARGE = "Die Datei ist größer als 20 MB"
 
-mimetypes.add_type("font/woff2", ".woff2")  # the platform tables lack it, StaticFiles would send text/plain
+mimetypes.add_type("font/woff2", ".woff2")  # die Tabellen der Plattform kennen es nicht, StaticFiles würde text/plain senden
 
 Agent = Callable[..., Awaitable[dict]]
 
@@ -148,7 +148,7 @@ def _ollama_url() -> str:
 
 
 def _ollama_models() -> list[str]:
-    """The models of the Ollama at D2C_OLLAMA_URL, [] if it does not answer within 1.5 s."""
+    """Die Modelle des Ollama unter D2C_OLLAMA_URL, [] wenn er nicht innerhalb von 1,5 s antwortet."""
     try:
         with urllib.request.urlopen(_ollama_url() + "/api/tags", timeout=1.5) as response:
             return sorted(m["name"] for m in json.load(response)["models"])
@@ -189,9 +189,9 @@ async def models(request: Request) -> Response:
 
 
 def _agent_settings(model: str | None) -> dict[str, object]:
-    """What the agent gets for a run. A choice "claude/<m>" uses the Claude login or Anthropic key of the agent,
-    "ollama/<m>" the Ollama at D2C_OLLAMA_URL; anything else (also "custom/<m>" and a free model name) the endpoint
-    of D2C_LLM_BASE_URL, or Anthropic without it. Empty values count as unset."""
+    """Was der Agent für einen Lauf erhält. Die Wahl "claude/<m>" nutzt die Claude-Anmeldung oder den Anthropic-Schlüssel
+    des Agents, "ollama/<m>" das Ollama unter D2C_OLLAMA_URL; alles andere (auch "custom/<m>" und ein freier Modellname)
+    den Endpunkt von D2C_LLM_BASE_URL, sonst Anthropic. Leere Werte gelten als nicht gesetzt."""
     backend, _, name = (model or "").partition("/")
     server = os.environ.get("D2C_MCP_URL", "stdio")
     if backend == "claude" and name:
@@ -208,8 +208,8 @@ def _agent_settings(model: str | None) -> dict[str, object]:
 
 
 def _as_pdf(content: bytes) -> bytes:
-    """The upload as PDF bytes: a PDF as it is, a PNG or JPG (told by signature, not by extension) as a
-    one-page PDF. ValueError with the reason for anything else."""
+    """Den Upload als PDF-Bytes: eine PDF unverändert, ein PNG oder JPG (an der Signatur erkannt, nicht an der
+    Endung) als einseitige PDF. ValueError mit dem Grund bei allem anderen."""
     if content.startswith(b"%PDF"):
         return content
     kind = next((kind for signature, kind in IMAGE_SIGNATURES.items() if content.startswith(signature)), None)
@@ -218,16 +218,17 @@ def _as_pdf(content: bytes) -> bytes:
     try:
         with pymupdf.open(stream=content, filetype=kind) as image:
             return image.convert_to_pdf()
-    except (RuntimeError, pymupdf.mupdf.FzErrorBase) as e:  # ponytail: no pixel limit, a PNG bomb within 20 MB can cost memory
+    except (RuntimeError, pymupdf.mupdf.FzErrorBase) as e:  # ponytail: keine Pixelgrenze, eine PNG-Bombe in 20 MB kann Speicher kosten
+
         raise ValueError(f"Das hochgeladene Bild konnte nicht gelesen werden: {e}") from e
 
 
 async def start_run(request: Request) -> Response:
     declared = request.headers.get("content-length", "")
-    # ponytail: a body without Content-Length is only checked after it is spooled
+    # ponytail: ein Body ohne Content-Length wird erst geprüft, wenn er ausgespült ist
     if declared.isdigit() and int(declared) > MAX_UPLOAD + FORM_OVERHEAD:
         return _error(413, TOO_LARGE)
-    async with request.form() as form:  # reads the whole body first: an answer sent before it ends can reset the connection
+    async with request.form() as form:  # liest erst den ganzen Body: eine Antwort vor dem Ende kann die Verbindung zurücksetzen
         upload, model = form.get("pdf"), form.get("model") or None
         name = unicodedata.normalize("NFC", str(form.get("part", "")))
         if not hasattr(upload, "read"):

@@ -248,7 +248,7 @@ def test_upload_rejects_file_in_model_field(monkeypatch, tmp_path):
 
 
 def set_llm_env(monkeypatch, tmp_path, **env):
-    """Only the given LLM variables are set."""
+    """Nur die gegebenen LLM-Variablen sind gesetzt."""
     monkeypatch.setenv("D2C_DATA", str(tmp_path))
     for key in LLM_VARS:
         monkeypatch.delenv(key, raising=False)
@@ -302,7 +302,7 @@ def image_bytes(fmt: str) -> bytes:
 
 
 def stored_pdf_pages(monkeypatch, tmp_path, content: bytes, filename: str) -> int:
-    """Upload content under the given file name, return the page count of uploads/scan.pdf."""
+    """Inhalt unter dem gegebenen Dateinamen hochladen, die Seitenzahl von uploads/scan.pdf zurückgeben."""
     set_llm_env(monkeypatch, tmp_path, **LLM_ENV)
     with TestClient(create_app(fake_agent([]))) as client:
         response = client.post("/api/runs", files={"pdf": (filename, content)}, data={"part": "scan"})
@@ -336,7 +336,7 @@ def test_upload_broken_image_is_400(monkeypatch, tmp_path):
 
 @pytest.mark.parametrize("excess", [1, 200_000], ids=["just_over", "far_over"])
 def test_upload_too_large_is_413(monkeypatch, tmp_path, excess):
-    """Just over the limit is caught after reading the file, far over from Content-Length before it is spooled."""
+    """Knapp über der Grenze wird nach dem Lesen der Datei erwischt, weit über aus Content-Length, bevor er ausgespült ist."""
     set_llm_env(monkeypatch, tmp_path, **LLM_ENV)
     with TestClient(create_app(fake_agent([]))) as client:
         response = upload(client, pdf=b"%PDF" + bytes(20 * 1024 * 1024 - 4 + excess))

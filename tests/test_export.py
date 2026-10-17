@@ -192,7 +192,7 @@ def test_pmi_from_skips_what_it_cannot_place(demo):
 
 
 def test_pmi_from_tolerance_follows_the_build():
-    """A hole 0.05 over its drawn size gets its diameter only if the caller allows that much, as for a mid build."""
+    """Eine Bohrung 0,05 über ihrer gezeichneten Größe bekommt ihren Durchmesser nur, wenn der Aufrufer so viel erlaubt, wie bei einem Mitte-Bau."""
     spec = PartSpec.model_validate({
         "name": "plate", "drawing": "Demo/plate.pdf", "title": "Plate", "scale": "1:1", "views": [], "features": [],
         "dimensions": [dimension("d10", "diameter", 10, "Ø10")],

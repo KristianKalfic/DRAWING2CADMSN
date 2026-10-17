@@ -1,4 +1,4 @@
-"""The agent with scripted SDK sessions in place of the CLI: events, phases, tool lists, stops, backends, command line."""
+"""Der Agent mit geskripteten SDK-Sitzungen anstelle der CLI: Ereignisse, Phasen, Werkzeuglisten, Stopps, Backends, Kommandozeile."""
 
 import asyncio
 import json
@@ -14,12 +14,12 @@ from d2c import agent
 
 P = "mcp__d2c__"
 FILES = {"step": "/app/results/plate/plate.step", "review": "/app/results/plate/review.md"}
-SPEC = {"name": "plate", "drawing": "A/plate.pdf", "title": "Plate", "scale": "1:1"}  # the agent does not look inside
+SPEC = {"name": "plate", "drawing": "A/plate.pdf", "title": "Plate", "scale": "1:1"}  # der Agent schaut nicht hinein
 ids = count(1)
 
 
 class Scripted:
-    """Stands in for query(): plays the next scripted session per call and keeps the options it was called with."""
+    """Springt für query() ein: spielt je Aufruf die nächste geskriptete Sitzung und behält die Optionen, mit denen er gerufen wurde."""
 
     def __init__(self, *sessions):
         self.sessions, self.calls, self.cut = list(sessions), [], 0
@@ -31,18 +31,18 @@ class Scripted:
                 if isinstance(item, Exception):
                     raise item
                 yield item
-        except GeneratorExit:  # the consumer closed the session before the script ended
+        except GeneratorExit:  # der Verbraucher schloss die Sitzung, bevor das Skript endete
             self.cut += 1
             raise
 
 
 def text(obj) -> list:
-    """An MCP tool result as the CLI reports it: a list of content blocks."""
+    """Ein MCP-Werkzeugergebnis, wie die CLI es meldet: eine Liste von Inhaltsblöcken."""
     return [{"type": "text", "text": obj if isinstance(obj, str) else json.dumps(obj, indent=2)}]
 
 
 def step(name, args, result, *, error=False) -> list:
-    """An assistant tool call and the result that follows it."""
+    """Ein Werkzeugaufruf des Assistenten und das Ergebnis, das ihm folgt."""
     tid = f"toolu_{next(ids)}"
     return [AssistantMessage(content=[ToolUseBlock(tid, P + name, args)], model="m"),
             UserMessage(content=[ToolResultBlock(tid, result, is_error=True if error else None)])]
@@ -263,7 +263,7 @@ def test_backend_env_ollama():
     assert env["ANTHROPIC_BASE_URL"] == "http://localhost:11434"
     assert env["ANTHROPIC_AUTH_TOKEN"] == "ollama" and env["ANTHROPIC_API_KEY"] == ""
     assert {env[name] for name in agent.MODEL_VARS} == {"qwen3.8:27b-mlx"}
-    assert env["CLAUDE_CODE_MAX_CONTEXT_TOKENS"] == "65536"  # a model id the CLI does not know has no window of its own
+    assert env["CLAUDE_CODE_MAX_CONTEXT_TOKENS"] == "65536"  # eine Modellkennung, die die CLI nicht kennt, hat kein eigenes Fenster
     assert "CLAUDE_CODE_MAX_CONTEXT_TOKENS" not in agent.backend_env("http://localhost:11434", None, "claude-sonnet-5-5")
     assert not any(name in agent.backend_env("http://localhost:11434", None, None) for name in agent.MODEL_VARS)
 
@@ -275,7 +275,7 @@ def test_server_config_stdio_http_command(monkeypatch):
     stdio = agent.server_config("stdio")
     assert (stdio["type"], stdio["command"], stdio["args"]) == ("stdio", sys.executable, ["-m", "d2c.server"])
     assert stdio["env"]["D2C_DATA"] == "/drawings" and stdio["env"]["D2C_TIMEOUT"] == "5"
-    # The CLI hands its own environment on to a stdio server: a credential is overridden with an empty value, not just left out.
+    # Die CLI reicht ihre eigene Umgebung an einen stdio-Server weiter: eine Zugangsnummer wird mit Leerwert überschrieben, nicht nur ausgelassen.
     assert all(stdio["env"][name] == "" for name in ("D2C_LLM_API_KEY", "ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "CLAUDE_CODE_OAUTH_TOKEN"))
     assert "D2C_LLM_MODEL" not in stdio["env"]
     assert agent.server_config("http://mcp:8765/mcp") == {"type": "http", "url": "http://mcp:8765/mcp"}

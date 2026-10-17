@@ -300,13 +300,13 @@ def test_review_lists_revolve_radii(session):
 
 
 def plain_ops(*ops: dict) -> list[dict]:
-    """Ops as the session keeps them: parsed through the Op union, then dumped."""
+    """Die Ops, wie die Sitzung sie hält: durch die Op-Vereinigung geparst, dann wieder ausgegeben."""
     return [op.model_dump() for op in OPS.validate_python(list(ops))]
 
 
 @pytest.fixture(scope="module")
 def demo(tmp_path_factory):
-    """The demo bracket exported nominal and on the tolerance mid, once for the tests that read the files."""
+    """Die Demo-Halterung, exportiert nominell und auf der Toleranzmitte, einmal für die Tests, die die Dateien lesen."""
     results = tmp_path_factory.mktemp("results")
     with pytest.MonkeyPatch.context() as patch:
         patch.setenv("D2C_RESULTS", str(results))
@@ -319,7 +319,7 @@ def demo(tmp_path_factory):
 
 
 def block_session(width_lower: float) -> Session:
-    """A block 20 wide with a hole O4: the width 20 0/<width_lower> and the bore O4 +0.2/0 are bound to the ops."""
+    """Ein Block 20 breit mit einer Bohrung O4: das Maß 20 0/<width_lower> und die Grundbohrung O4 +0.2/0 sind an die Ops gebunden."""
     session = Session()
     session.submit_spec(PartSpec.model_validate({
         "name": "block", "drawing": "Demo/block.pdf", "title": "Block", "scale": "1:1", "views": [], "features": [],
@@ -341,11 +341,11 @@ def test_export_mid_variant(demo):
     report = json.loads((demo.folder / "report_mid.json").read_text())
     assert report == demo.mid["report"] and report["ok"] is True
     d16 = next(c for c in report["compliance"] if c["dim_id"] == "d16")
-    assert d16["values"] == [16.009, pytest.approx(16.009)]  # the op value, then the diameter measured in the model
+    assert d16["values"] == [16.009, pytest.approx(16.009)]  # der Op-Wert, dann der im Modell gemessene Durchmesser
     assert d16["in_tolerance"] is True
     assert all(c["in_tolerance"] is not False for c in report["compliance"])
 
-    # the bore is O16.009 in the mid file and O16 in the nominal one; the op list itself is untouched
+    # die Grundbohrung ist O16.009 in der Mitte-Datei und O16 in der nominellen; die Opliste selbst bleibt unberührt
     def diameters(name: str) -> list[float]:
         return metrics(cq.importers.importStep(str(demo.folder / name)).val())["cyl_diameters"]
 
@@ -375,7 +375,7 @@ def test_session_export_writes_glb_and_marks(demo):
 def test_roundtrip_pmi_counts(demo):
     trip = demo.nominal["report"]["roundtrip"]
     assert trip["pmi"]["written"] == trip["pmi"]["read_back"] >= 2
-    assert trip["pmi"] == {"written": 6, "read_back": 6}  # O16 H7, four O6.6 and the assumed thickness
+    assert trip["pmi"] == {"written": 6, "read_back": 6}  # O16 H7, vier O6.6 und die angenommene Stärke
     assert trip["ok"] is True
     assert demo.mid["report"]["roundtrip"]["pmi"] == {"written": 6, "read_back": 6}
     stored = json.loads((demo.folder / "pmi.json").read_text())
@@ -389,7 +389,7 @@ def test_review_has_tolerance_and_pmi_sections(demo):
     assert "| Maß | Gedruckter Text | Nennmaß | Mindestmaß | Höchstmaß | Toleranzmitte | Quelle |" in tolerances
     assert "| d16 | Ø16 H7 | 16 | 0 | 0.018 | 16.009 | fit | ja | ja |" in tolerances
     assert "| d80 | 80 | 80 | -0.3 | 0.3 | 80 | general | ja | ja |" in tolerances
-    # nothing is bound to the hole spacing: it is not checked, which is not the same as in tolerance
+    # nichts ist an den Bohrungsabstand gebunden: er wird nicht geprüft, was nicht dasselbe wie in Toleranz ist
     assert "| p60 | 60 | 60 | -0.3 | 0.3 | 60 | general | nicht geprüft | nicht geprüft |" in tolerances
     pmi = section(markdown, "PMI in der STEP-Datei")
     assert "| Art | Wert | Toleranz | Flächen | Beschreibung |" in pmi
@@ -452,7 +452,7 @@ def test_failed_export_removes_glb_and_mid_files(session):
 
 
 def test_failed_mid_export_removes_only_the_mid_files():
-    """On the mid the block is 19.4 wide: a mark 0.4 mm off its right face at 20 is 0.7 mm off it then, out of reach."""
+    """Auf der Mitte ist der Block 19,4 breit: eine Markierung 0,4 mm über seiner rechten Fläche bei 20 ist dann 0,7 mm von ihr entfernt, außerhalb der Reichweite."""
     session = block_session(width_lower=-1.2)
     folder = results_root() / "block"
     assert session.export("block")["ok"] is True and session.export("block", variant="mid")["ok"] is True
@@ -468,7 +468,7 @@ def test_failed_mid_export_removes_only_the_mid_files():
 
 
 def test_mid_variant_with_wide_band():
-    """20 0/-0.2 and O4 +0.2/0 move 0.1 mm each, ten times what a dimension check allows on its own."""
+    """20 0/-0.2 und O4 +0.2/0 verschieben sich je 0,1 mm, zehnmal so viel, wie eine Maßprüfung allein erlaubt."""
     session = block_session(width_lower=-0.2)
     nominal, mid = session.export("block"), session.export("block", variant="mid")
     assert (nominal["ok"], mid["ok"]) == (True, True)
@@ -477,12 +477,12 @@ def test_mid_variant_with_wide_band():
     assert by_id["w"]["values"] == [19.9] and by_id["d4"]["values"] == [4.1, pytest.approx(4.1)]
     assert all(c["in_tolerance"] is True for c in by_id.values())
     assert [(d["value"], d["tol_upper"], d["tol_lower"]) for d in read_pmi(mid["files"]["step"])["dimensions"]] == [
-        (4.0, 0.2, 0.0)]  # the bore is found 0.1 mm over its drawn size and keeps its dimension
+        (4.0, 0.2, 0.0)]  # die Bohrung wird 0,1 mm über ihrer gezeichneten Größe gefunden und behält ihr Maß
     assert all(d["ok"] for d in nominal["report"]["dims"])
 
 
 def test_mid_variant_moves_a_radius_twice_as_far_across():
-    """R20 +0.2/0 is R20.1 on the mid: the cone grows 0.2 across, which the checks have to allow."""
+    """R20 +0.2/0 ist R20.1 in der Mitte: der Kegel wächst um 0,2 quer, was die Prüfungen erlauben müssen."""
     session = Session()
     session.submit_spec(PartSpec.model_validate({
         "name": "disc", "drawing": "Demo/disc.pdf", "title": "Cone", "scale": "1:1", "views": [], "features": [],

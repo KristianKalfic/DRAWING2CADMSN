@@ -1,7 +1,7 @@
-"""Checks on the PartSpec alone, before any geometry exists: plausibility rules and the comparison of two readings.
+"""Prüfungen allein an der PartSpec, bevor es Geometrie gibt: Plausibilitätsregeln und der Vergleich zweier Lesungen.
 
-Every finding carries the draft of a review item, so a point that cannot be right, or on which two independent
-readings of one drawing page disagree, can go onto the review list as it is.
+Jeder Befund trägt den Entwurf eines Prüfpunkts, damit eine Stelle, die nicht stimmen kann, oder über die zwei
+unabhängige Lesungen einer Zeichnungsseite streiten, unverändert auf die Prüfliste wandern kann.
 """
 
 import math
@@ -11,14 +11,14 @@ from itertools import combinations
 from d2c.checks import AXIS_COS
 from d2c.spec import Dimension, ExpectedHole, PartSpec
 
-TOL = 0.05  # mm (degrees for angles); smaller differences between two readings are no finding
+TOL = 0.05  # mm (Grad bei Winkeln); kleinere Abweichungen zwischen zwei Lesungen sind kein Befund
 
 Vector = tuple[float, float, float]
 
 
 def _finding(code: str, message: str, where: str, assumption: str, refs: Iterable[str] = (),
              issue: str = "ambiguous") -> dict:
-    """A finding with the draft of the review item that answers it; the message is the reason."""
+    """Ein Befund samt Entwurf des Prüfpunkts, der ihn beantwortet; die Message ist der Grund."""
     review = {"issue": issue, "refs": list(dict.fromkeys(refs)), "assumption": assumption, "reason": message}
     return {"code": code, "message": message, "where": where, "suggested_review": review}
 
@@ -29,11 +29,11 @@ def _xyz(v: Vector) -> str:
 
 def _unit(v: Vector) -> tuple[float, ...]:
     length = math.hypot(*v)
-    return tuple(c / length for c in v)  # the spec rejects a zero axis
+    return tuple(c / length for c in v)  # die Spezifikation lehnt eine Nullachse ab
 
 
 def _line_distance(point: Vector, hole: ExpectedHole) -> float:
-    """Distance of a point from the axis line of a hole."""
+    """Abstand eines Punkts von der Achsengeraden einer Bohrung."""
     axis = _unit(hole.axis)
     rel = [p - q for p, q in zip(point, hole.at)]
     along = sum(r * a for r, a in zip(rel, axis))
@@ -41,9 +41,9 @@ def _line_distance(point: Vector, hole: ExpectedHole) -> float:
 
 
 def _offset(h: ExpectedHole, g: ExpectedHole) -> float:
-    """How far the axes of two holes are apart: the distance of the lines if they are parallel.
+    """Abstand der Achsen zweier Bohrungen: der Abstand der Geraden, wenn sie parallel sind.
 
-    `at` is any point on the axis, so two readings may name different points of one line.
+    `at` ist ein beliebiger Punkt der Achse, also dürfen zwei Lesungen verschiedene Punkte derselben Geraden nennen.
     """
     return max(_line_distance(h.at, g), _line_distance(g.at, h))
 
@@ -53,11 +53,11 @@ def _parallel(h: ExpectedHole, g: ExpectedHole) -> bool:
 
 
 def _along(hole: ExpectedHole) -> int | None:
-    """Index of the coordinate axis a hole runs along, None for a slanted one."""
+    """Index der Koordinatenachse, der eine Bohrung folgt, None bei einer schrägen."""
     return next((k for k, c in enumerate(_unit(hole.axis)) if abs(c) >= AXIS_COS), None)
 
 
-# ---------------------------------------------------------------- two readings of one page
+# ---------------------------------------------------------------- zwei Lesungen einer Seite
 
 def _label(d: Dimension) -> str:
     return f"{d.kind} {d.value:g}" + (f" ({d.text!r})" if d.text else "")
@@ -76,9 +76,9 @@ def _deviation(d: Dimension) -> str:
 
 
 def _pair_dimensions(a: list[Dimension], b: list[Dimension], tol: float) -> tuple[list, list, list]:
-    """Pair dimensions of one kind whose values differ by at most tol, one to one.
+    """Paare von Maßen gleicher Art, deren Werte um höchstens tol abweichen, eins zu eins.
 
-    Returns the pairs and the dimensions of a and of b that stay without a partner.
+    Gibt die Paare und die Maße von a und von b zurück, die ohne Partner bleiben.
     """
     pairs, left_a, left_b = [], [], []
     for kind in sorted({d.kind for d in (*a, *b)}):
@@ -112,7 +112,7 @@ def _compare_dimensions(a: PartSpec, b: PartSpec, tol: float) -> list[dict]:
             findings.append(_finding(
                 "EXTRACTION_MISMATCH", f"{_label(x)}: deviations {_deviation(x)} in A vs {_deviation(y)} in B",
                 f"dimensions.{x.id}.tol", f"deviations {_deviation(x)} for {_label(x)}", [x.id]))
-    # what has no partner by value may still be one printed text that the readings split up differently
+    # was keinen Partner nach Wert hat, kann trotzdem ein gedruckter Text sein, den die Lesungen anders trennen
     for x in list(left_a):
         y = next((y for y in left_b if x.text.strip() and _text_key(x) == _text_key(y)), None)
         if y is not None:
@@ -127,7 +127,7 @@ def _compare_dimensions(a: PartSpec, b: PartSpec, tol: float) -> list[dict]:
         for x in left_a]
     findings += [
         _finding("ONLY_IN_B", f"{_label(y)} only in B: the first reading has no such dimension",
-                 f"second.dimensions.{y.id}", f"there is no {_label(y)}")  # B's id does not exist in the spec
+                 f"second.dimensions.{y.id}", f"there is no {_label(y)}")  # die Kennung von B fehlt in der Spezifikation
         for y in left_b]
     return findings
 
@@ -140,9 +140,9 @@ def _compare_bbox(a: PartSpec, b: PartSpec, tol: float) -> list[dict]:
 
 
 def _pair_holes(a: list[ExpectedHole], b: list[ExpectedHole]) -> list[tuple[int, int]]:
-    """Pair holes one to one, the pairs with the nearest axes first, then those with the closest diameters.
+    """Bohrungen eins zu eins paaren, zuerst die Paare mit den nächsten Achsen, dann die mit den nächsten Durchmessern.
 
-    The offset is rounded, so the noise of 1e-15 between equal axes cannot outrank the diameter.
+    Der Abstand wird gerundet, damit das Rauschen von 1e-15 zwischen gleichen Achsen den Durchmesser nicht überstimmen kann.
     """
     candidates = sorted((round(_offset(h, g), 6), abs(h.d - g.d), i, j)
                         for i, h in enumerate(a) for j, g in enumerate(b))
@@ -166,7 +166,7 @@ def _compare_holes(a: PartSpec, b: PartSpec, tol: float) -> list[dict]:
             findings.append(_finding(
                 "EXTRACTION_MISMATCH", f"hole {i} diameter: A={h.d:g} vs B={g.d:g}", f"{where}.d",
                 f"hole {i} diameter {h.d:g} mm", h.dim_ids))
-        if not _parallel(h, g):  # the position of a slanted hole is not meaningful
+        if not _parallel(h, g):  # die Lage einer schrägen Bohrung ist nicht aussagekräftig
             findings.append(_finding(
                 "EXTRACTION_MISMATCH", f"hole {i} axis: A={_xyz(h.axis)} vs B={_xyz(g.axis)}", f"{where}.axis",
                 f"hole {i} axis {_xyz(h.axis)}", h.dim_ids))
@@ -186,22 +186,22 @@ def _compare_holes(a: PartSpec, b: PartSpec, tol: float) -> list[dict]:
 
 
 def compare_specs(a: PartSpec, b: PartSpec, tol: float = TOL) -> list[dict]:
-    """The differences between two independent readings of one page; a is the spec that gets submitted.
+    """Die Unterschiede zweier unabhängiger Lesungen einer Seite; a ist die Spezifikation, die übermittelt wird.
 
-    Dimensions are paired by kind and value, what stays over by printed text. Holes are paired by the
-    distance of their axes, so ids, order and the point chosen on an axis do not matter. Each difference
-    larger than tol (mm) is a finding with the code EXTRACTION_MISMATCH, ONLY_IN_A, ONLY_IN_B or HOLE_COUNT.
+    Maße werden nach Art und Wert gepaart, das Überzählige zu gedruckten Texten. Bohrungen werden nach dem Abstand
+    ihrer Achsen gepaart, also zählen Kennungen, Reihenfolge und der gewählte Punkt auf einer Achse nicht. Jeder
+    Unterschied über tol (mm) ist ein Befund mit dem Code EXTRACTION_MISMATCH, ONLY_IN_A, ONLY_IN_B oder HOLE_COUNT.
     """
     return _compare_dimensions(a, b, tol) + _compare_bbox(a, b, tol) + _compare_holes(a, b, tol)
 
 
-# ---------------------------------------------------------------- rules without a reference
+# ---------------------------------------------------------------- Regeln ohne Referenz
 
 def _holes_outside_bbox(spec: PartSpec) -> list[dict]:
-    """Holes that cannot sit inside the expected bbox, wherever the bbox is.
+    """Bohrungen, die in keiner Lage in die erwartete bbox passen.
 
-    expected.bbox holds sizes only, no position, so the holes drilled across an axis must fit together
-    into the size along it. A single hole is only caught if it is larger than the part.
+    expected.bbox enthält nur Größen, keine Lage, also müssen die über eine Achse gebohrten Bohrungen zusammen
+    in die Größe entlang dieser Achse passen. Eine einzelne Bohrung fällt nur auf, wenn sie größer als das Teil ist.
     """
     findings = []
     for k, axis in enumerate("xyz"):
@@ -223,7 +223,7 @@ def _holes_outside_bbox(spec: PartSpec) -> list[dict]:
 
 
 def _holes_overlap(spec: PartSpec) -> list[dict]:
-    """Parallel holes whose cross sections overlap. Holes on one axis form a stepped hole, crossing ones a cross hole."""
+    """Parallele Bohrungen, deren Querschnitte überlappen. Bohrungen auf einer Achse bilden ein Stufenloch, kreuzende ein Kreuzloch."""
     findings = []
     for (i, h), (j, g) in combinations(enumerate(spec.expected.holes), 2):
         reach = (h.d + g.d) / 2
@@ -236,9 +236,9 @@ def _holes_overlap(spec: PartSpec) -> list[dict]:
 
 
 def _fillets_too_big(spec: PartSpec) -> list[dict]:
-    """Fillet radii above half the middle edge of the bbox.
+    """Rundungsradien über der halben mittleren Kante der bbox.
 
-    The middle edge, not the smallest: the thickness of a plate says nothing about the radius of its corners.
+    Die mittlere Kante, nicht die kleinste: die Stärke einer Platte sagt nichts über den Radius ihrer Ecken.
     """
     limit = sorted(spec.expected.bbox)[1] / 2
     dims = {d.id: d for d in spec.dimensions}
@@ -255,5 +255,5 @@ def _fillets_too_big(spec: PartSpec) -> list[dict]:
 
 
 def plausibility(spec: PartSpec) -> list[dict]:
-    """Findings of the rules that need no reference: holes that do not fit, overlapping holes, oversized fillets."""
+    """Befunde der Regeln, die keine Referenz brauchen: Bohrungen, die nicht passen, überlappende Bohrungen, zu große Rundungen."""
     return _holes_outside_bbox(spec) + _holes_overlap(spec) + _fillets_too_big(spec)

@@ -1,17 +1,17 @@
-"""Compare every exported model in the results folder with the reference STEP of its drawing.
+"""Jedes exportierte Modell im results-Ordner gegen die Referenz-STEP seiner Zeichnung vergleichen.
 
-The reference of a part is the one *.stp without _PMI in the folder of D2C_REF_DATA (default /app/data)
-that the first path component of the drawing in its spec.json names. A row shows the volume deviation in
-percent, the largest deviation of the sorted bounding box edges in mm, the cylinder diameters (rounded to
-0.01 mm) that the model lacks and those it has in excess, and MATCH if the volume is within 1.0 %, every
-edge within 0.05 mm and the diameters are the same. A reference that is not a valid solid, or that cannot
-be found or read, gives "reference invalid" instead.
+Die Referenz eines Teils ist die eine *.stp ohne _PMI im Ordner von D2C_REF_DATA (Standard /app/data), den die
+erste Pfadkomponente der Zeichnung in seiner spec.json nennt. Eine Zeile zeigt die Volumenabweichung in Prozent,
+die größte Abweichung der sortierten Begrenzungsboxkanten in mm, die Zylinderdurchmesser (gerundet auf
+0,01 mm), die dem Modell fehlen und die es zu viel hat, und MATCH, wenn das Volumen innerhalb von 1,0 %,
+jede Kante innerhalb von 0,05 mm und die Durchmesser gleich sind. Eine Referenz, die kein gültiger Festkörper
+ist oder fehlt oder nicht lesbar ist, gibt "reference invalid" statt dessen.
 
-The table goes to stdout and to <results>/EVAL.md, the rows to <results>/EVAL.json. The exit code is
-always 0: the table is information, not a pass or fail. The server never sees reference data, this script
-is for development and QA.
+Die Tabelle geht nach stdout und nach <results>/EVAL.md, die Zeilen nach <results>/EVAL.json. Der Rückkehrcode
+ist immer 0: die Tabelle ist Information, nicht bestanden oder durchgefallen. Der Server sieht nie
+Referenzdaten, dieses Skript ist für Entwicklung und QA.
 
-Usage: python scripts/eval_refs.py
+Aufruf: python scripts/eval_refs.py
 """
 
 import json
@@ -26,23 +26,23 @@ from d2c.checks import metrics
 from d2c.session import results_root
 from d2c.spec import PartSpec
 
-VOLUME_TOL_PCT = 1.0  # largest volume deviation of a MATCH, in percent of the reference volume
-BBOX_TOL = 0.05  # mm, largest deviation of a sorted bounding box edge of a MATCH
+VOLUME_TOL_PCT = 1.0  # größte Volumenabweichung eines MATCH, in Prozent des Referenzvolumens
+BBOX_TOL = 0.05  # mm, größte Abweichung einer sortierten Begrenzungsboxkante eines MATCH
 HEADERS = ["Part", "ΔV %", "ΔBBox max mm", "Missing Ø", "Extra Ø", "MATCH"]
 
 
 def ref_root() -> Path:
-    """The folder that holds the reference folders: D2C_REF_DATA, read on every call."""
+    """Der Ordner mit den Referenzordnern: D2C_REF_DATA, bei jedem Aufruf gelesen."""
     return Path(os.environ.get("D2C_REF_DATA", "/app/data"))
 
 
 def find_reference(drawing: str) -> Path:
-    """The reference STEP of a drawing: the one *.stp without _PMI in the folder its first path component names.
+    """Die Referenz-STEP einer Zeichnung: die eine *.stp ohne _PMI in dem Ordner, den ihre erste Pfadkomponente nennt.
 
-    ValueError if there is no such folder or not exactly one such file.
+    ValueError, wenn es keinen solchen Ordner oder nicht genau eine solche Datei gibt.
     """
     first = unicodedata.normalize("NFC", drawing.split("/")[0])
-    # Both sides as NFC: macOS mounts list umlauts decomposed, a spec holds them composed.
+    # Beide Seiten als NFC: macOS-Mounts listen Umlaute zerlegt, eine Spezifikation hält sie zusammengesetzt.
     folders = [p for p in ref_root().iterdir() if p.is_dir() and unicodedata.normalize("NFC", p.name) == first]
     if not folders:
         raise ValueError(f"no reference folder {first!r} in {ref_root()}")
@@ -53,22 +53,22 @@ def find_reference(drawing: str) -> Path:
 
 
 def measure(path: Path, part: str) -> dict:
-    """The metrics of a STEP file of a part plus `valid`: a valid shape with a solid of positive volume.
+    """Die Metriken einer STEP-Datei eines Teils plus `valid`: eine gültige Form mit Festkörper positiven Volumens.
 
-    {} if the file cannot be read; the reason goes to stderr.
+    {} wenn die Datei nicht lesbar ist; der Grund geht nach stderr.
     """
     try:
         shape = cq.Compound.makeCompound(cq.importers.importStep(str(path)).vals())
         found = metrics(shape)
         valid = shape.isValid() and bool(shape.Solids()) and found["volume"] > 0
-    except Exception as e:  # OpenCascade raises more than ValueError for a damaged or empty file
+    except Exception as e:  # OpenCascade wirft bei einer beschädigten oder leeren Datei mehr als ValueError
         print(f"{part}: cannot read {path} ({type(e).__name__}: {e})", file=sys.stderr)
         return {}
     return found | {"valid": valid}
 
 
 def compare(part: str, mine: dict, ref: dict) -> dict:
-    """The row of a part: its model against the reference. A model or reference that could not be read is {}."""
+    """Die Zeile eines Teils: sein Modell gegen die Referenz. Ein Modell oder eine Referenz, die nicht lesbar waren, sind {}."""
     dv_pct = dbbox = None
     missing, extra = [], []
     if mine and ref:
@@ -92,19 +92,19 @@ def compare(part: str, mine: dict, ref: dict) -> dict:
 
 
 def evaluate(folder: Path) -> dict:
-    """The row of one part folder, results/<part>/."""
+    """Die Zeile eines Teilordners, results/<teil>/."""
     mine = measure(folder / f"{folder.name}.step", folder.name)
     try:
         spec = PartSpec.model_validate_json((folder / "spec.json").read_text(encoding="utf-8"))
         ref = measure(find_reference(spec.drawing), folder.name)
-    except (OSError, ValueError) as e:  # no usable spec.json, or not exactly one reference file
+    except (OSError, ValueError) as e:  # keine brauchbare spec.json, oder nicht genau eine Referenzdatei
         print(f"{folder.name}: no reference ({e})", file=sys.stderr)
         ref = {}
     return compare(folder.name, mine, ref)
 
 
 def cells(row: dict) -> list[str]:
-    """The table cells of a row, in the order of HEADERS; "-" where there is nothing to show."""
+    """Die Tabellenzellen einer Zeile, in der Reihenfolge von HEADERS; "-", wo nichts zu zeigen ist."""
     dv_pct, dbbox = row["dv_pct"], row["dbbox_max_mm"]
     return [
         row["part"],
@@ -117,15 +117,15 @@ def cells(row: dict) -> list[str]:
 
 
 def render(rows: list[dict]) -> str:
-    """The rows as a Markdown table."""
+    """Die Zeilen als Markdown-Tabelle."""
     lines = ["| " + " | ".join(HEADERS) + " |", "|" + "---|" * len(HEADERS)]
     lines += ["| " + " | ".join(cells(row)) + " |" for row in rows]
     return "\n".join(lines) + "\n"
 
 
 def main() -> None:
-    with os.fdopen(os.dup(1), "w", encoding="utf-8") as out:  # the real stdout, kept for the table
-        os.dup2(2, 1)  # OpenCascade prints read errors to stdout: they go to stderr, not into the table
+    with os.fdopen(os.dup(1), "w", encoding="utf-8") as out:  # das echte stdout, für die Tabelle aufgehoben
+        os.dup2(2, 1)  # OpenCascade gibt Lesefehler auf stdout aus: sie gehen nach stderr, nicht in die Tabelle
         root = results_root()
         folders = [p for p in sorted(root.iterdir()) if (p / f"{p.name}.step").is_file()] if root.is_dir() else []
         rows = [evaluate(folder) for folder in folders]

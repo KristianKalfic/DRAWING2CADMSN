@@ -8,7 +8,7 @@ TABLES = Path(__file__).parent / "fixtures" / "tables"
 
 @pytest.fixture(autouse=True)
 def _isolated_env(monkeypatch, tmp_path):
-    """No test writes into the real results folder; D2C_DATA points at the BCT mount, D2C_TABLES at the test tables."""
+    """Kein Test schreibt in den echten results-Ordner; D2C_DATA zeigt auf den BCT-Mount, D2C_TABLES auf die Testtabellen."""
     monkeypatch.setenv("D2C_RESULTS", str(tmp_path / "results"))
     monkeypatch.setenv("D2C_DATA", str(BCT_DATA))
     monkeypatch.setenv("D2C_TABLES", str(TABLES))

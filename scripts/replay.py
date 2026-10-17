@@ -1,13 +1,13 @@
-"""Rebuild stored parts from their spec.json and ops.json and print one line per part.
+"""Gespeicherte Teile aus ihrer spec.json und ops.json neu aufbauen und je Teil eine Zeile ausgeben.
 
-Without --export the ops are built and checked against the expected sizes of the spec; nothing is
-written. With --export each part goes through Session.export in a fresh session, which loads it from the
-results folder and writes the STEP, report and review files again, so a change to the build or the
-export reaches existing parts without a new model session. A part that is not ok loses these files, as
-with export_step. The parts are every folder of the results folder with an ops.json, or the ones named.
-The exit code is 1 if any part is not ok.
+Ohne --export werden die Ops aufgebaut und gegen die erwarteten Größen der Spezifikation geprüft; nichts wird
+geschrieben. Mit --export geht jedes Teil durch Session.export in einer frischen Sitzung, die es aus dem
+results-Ordner lädt und die STEP-, Report- und Review-Dateien erneut schreibt, damit eine Änderung am Aufbau oder
+am Export bestehende Teile ohne neue Modellsitzung erreicht. Ein Teil, das nicht ok ist, verliert diese Dateien,
+wie bei export_step. Die Teile sind jeder Ordner des results-Ordners mit einer ops.json, oder die genannten.
+Der Rückkehrcode ist 1, wenn ein Teil nicht ok ist.
 
-Usage: python scripts/replay.py [--export] [part ...]
+Aufruf: python scripts/replay.py [--export] [teil ...]
 """
 
 import argparse
@@ -22,7 +22,7 @@ from d2c.spec import PartSpec
 
 
 def rebuild(part: str) -> dict:
-    """The worker report of the stored ops of a part, built against its stored spec. Nothing is written."""
+    """Der Worker-Report der gespeicherten Ops eines Teils, aufgebaut gegen seine gespeicherte Spezifikation. Nichts wird geschrieben."""
     folder = results_root() / part
     spec = PartSpec.model_validate_json((folder / "spec.json").read_text(encoding="utf-8"))
     ops = json.loads((folder / "ops.json").read_text(encoding="utf-8"))
@@ -35,15 +35,15 @@ def rebuild(part: str) -> dict:
 
 
 def export(part: str) -> dict:
-    """The worker report of an export by a fresh session, which loads the part from the results folder."""
+    """Der Worker-Report eines Exports durch eine frische Sitzung, die das Teil aus dem results-Ordner lädt."""
     return Session().export(part)["report"]
 
 
 def problem(build: Callable[[str], dict], part: str) -> str | None:
-    """Why the part is not ok after `build`, or None if it is."""
+    """Warum das Teil nach `build` nicht ok ist, oder None, wenn es ok ist."""
     try:
         report = build(part)
-    except (KeyError, ValueError, OSError) as e:  # unknown part, unreadable files
+    except (KeyError, ValueError, OSError) as e:  # unbekanntes Teil, unlesbare Dateien
         return str(e.args[0] if isinstance(e, KeyError) else e)
     if report["ok"]:
         return None

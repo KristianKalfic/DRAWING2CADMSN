@@ -265,13 +265,13 @@ def test_compliance_lists_tolerated_dimensions_only():
 
 
 def test_compliance_unbound_dim_is_not_checked():
-    """A tolerated dimension without an op value or a measured hole has nothing to check: None, not True."""
+    """Ein toleriertes Maß ohne Op-Wert oder gemessene Bohrung hat nichts zu prüfen: None, nicht True."""
     spec = make_spec(dim(16, "diameter", id="d16", fit="H7"), dim(31, id="l31", tol_upper=0.0, tol_lower=-0.1))
     ops = plain_ops(extrude(31, {"distance": "l31"}))
     by_id = {c["dim_id"]: c for c in compliance(spec, ops, {"ok": True, "dims": []}, "nominal")}
     assert (by_id["d16"]["values"], by_id["d16"]["in_tolerance"]) == ([], None)
     assert (by_id["l31"]["values"], by_id["l31"]["in_tolerance"]) == ([31], True)
-    # a hole the build found counts as a value, so the diameter is checked after all
+    # eine Bohrung, die der Aufbau gefunden hat, zählt als Wert, also wird der Durchmesser doch geprüft
     measured = compliance(spec, ops, hole_report(16.0), "nominal")[0]
     assert (measured["values"], measured["in_tolerance"]) == ([16.0], True)
 

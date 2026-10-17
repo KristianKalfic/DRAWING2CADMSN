@@ -1,4 +1,4 @@
-"""The MCP tools, called in-process through server.call_tool, and the server over HTTP."""
+"""Die MCP-Werkzeuge, im Prozess über server.call_tool gerufen, und der Server über HTTP."""
 
 import asyncio
 import json
@@ -236,7 +236,7 @@ def test_measure_tool_rejects_outside_data(data):
 
 @pytest.fixture
 def http_url(tmp_path):
-    """The /mcp URL of `python -m d2c.server --http` on a free local port; the server stops afterwards."""
+    """Die /mcp-URL von `python -m d2c.server --http` an einem freien lokalen Port; der Server stoppt danach."""
     with socket.socket() as probe:
         probe.bind(("127.0.0.1", 0))
         port = probe.getsockname()[1]

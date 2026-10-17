@@ -261,7 +261,7 @@ def test_export_roundtrip_via_worker(tmp_path, monkeypatch):
 
 
 def pmi_spec() -> dict:
-    """A spec for the 20 x 10 x 5 block with one hole: a diameter with a fit and an assumed thickness."""
+    """Eine Spezifikation für den 20 x 10 x 5 Block mit einer Bohrung: ein Durchmesser mit Passung und eine angenommene Stärke."""
     return {
         "name": "plate", "drawing": "Demo/plate.pdf", "title": "Plate", "scale": "1:1", "views": [], "features": [],
         "dimensions": [
@@ -290,7 +290,7 @@ def test_worker_writes_pmi_and_glb(tmp_path):
     assert json.loads((tmp_path / "marks.json").read_text()) == {"#ff8000": ["rv1"]}
     assert json.loads((tmp_path / "pmi.json").read_text()) == read_pmi(str(step))
 
-    # without a spec there is no PMI, without a glb path no mesh and no JSON files; the colors are written all the same
+    # ohne Spezifikation kein PMI, ohne glb-Pfad kein Netz und keine JSON-Dateien; die Farben werden trotzdem geschrieben
     plain = tmp_path / "plain"
     plain.mkdir()
     again = run_worker(payload(box(), hole, marks=marks, export_path=str(plain / "plate.step")))
@@ -313,7 +313,7 @@ def test_worker_marks_tapped_holes_green(tmp_path):
 
 
 def test_worker_tolerance_widens_the_dimension_checks():
-    """A build moved to the tolerance mid is not 20.0 wide any more: the caller says how far it may be off."""
+    """Ein um die Toleranzmitte verschobener Bau ist nicht mehr 20,0 breit: der Aufrufer sagt, wie weit er abweichen darf."""
     mid = box(w=19.9)
     narrow = run_worker(payload(mid, expected={"bbox": [20, 10, 5]}))
     assert ([d["ok"] for d in narrow["dims"]], narrow["ok"]) == ([False, True, True], False)

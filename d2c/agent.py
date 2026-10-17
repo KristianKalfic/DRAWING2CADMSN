@@ -1,12 +1,13 @@
-"""The agent: drives the MCP server with a model. The Claude Agent SDK runs Claude Code as the agent loop.
+"""Der Agent: steuert den MCP-Server mit einem Modell. Die Claude Agent SDK lässt Claude Code als Agentenschleife laufen.
 
-Every backend speaks the Anthropic Messages API and needs no code path of its own: the Claude login or an Anthropic key
-(no base_url), and OpenRouter or Ollama (base_url, see backend_env). A session sees only the MCP tools of its phase and
-nothing else: no built-in tools, no settings, hooks, plugins or CLAUDE.md, no other MCP server. The CLI hands the server
-instructions (instructions.md) to the model itself, so the system prompt only adds the role and the rules.
+Jedes Backend spricht die Anthropic Messages API und braucht keinen eigenen Codepfad: die Claude-Anmeldung oder ein
+Anthropic-Schlüssel (keine base_url), und OpenRouter oder Ollama (base_url, siehe backend_env). Eine Sitzung sieht nur die
+MCP-Werkzeuge ihrer Phase und nichts sonst: keine eingebauten Werkzeuge, keine Einstellungen, Hooks, Plugins oder
+CLAUDE.md, keinen anderen MCP-Server. Die CLI übergibt dem Modell die Serveranweisungen (instructions.md) selbst, daher
+ergänzt der Systemprompt nur Rolle und Regeln.
 
-Module-level imports are the standard library and the SDK, so `python -m d2c.agent` runs on a host without CadQuery
-(the server then runs elsewhere, e.g. in a container).
+Imports auf Modulebene nur Standardbibliothek und SDK, damit `python -m d2c.agent` auf einem Rechner ohne CadQuery läuft
+(dann läuft der Server woanders, z. B. in einem Container).
 """
 
 import argparse
@@ -25,22 +26,22 @@ from claude_agent_sdk import (
     ToolUseBlock, UserMessage, query,
 )
 
-SERVER = "d2c"  # the key the server is registered under: its tools are called mcp__d2c__<tool>
+SERVER = "d2c"  # der Schlüssel, unter dem der Server registriert ist: seine Werkzeuge heißen mcp__d2c__<werkzeug>
 PREFIX = f"mcp__{SERVER}__"
 READ_TOOLS = ("render_drawing", "read_drawing_text", "measure_drawing", "check_spec", "submit_spec")
 BUILD_TOOLS = ("extrude", "revolve", "add_holes", "edge_finish", "run_script", "edit_op", "delete_op", "move_op", "get_state", "export_step")
-# So that no request carries an Anthropic model name: the aliases and the background and subagent models.
+# Damit kein Request einen Anthropic-Modellnamen enthält: die Aliasse und die Hintergrund- und Subagentenmodelle.
 MODEL_VARS = ("ANTHROPIC_DEFAULT_HAIKU_MODEL", "ANTHROPIC_DEFAULT_SONNET_MODEL", "ANTHROPIC_DEFAULT_OPUS_MODEL", "CLAUDE_CODE_SUBAGENT_MODEL")
 SESSION_ENV = {
-    "CLAUDE_CODE_MAX_MCP_DESCRIPTION_LENGTH": "16000",  # the CLI cuts server instructions at 4096 characters
-    # Every tool in the first request. With tool search (on by default for the Anthropic API) the model would first have to
-    # find the tools, and without built-in tools it has nothing to search with.
+    "CLAUDE_CODE_MAX_MCP_DESCRIPTION_LENGTH": "16000",  # die CLI schneidet Serveranweisungen bei 4096 Zeichen ab
+    # Alle Werkzeuge im ersten Request. Mit Tool-Suche (Standard an der Anthropic-API) müsste das Modell die Werkzeuge
+    # erst suchen, und ohne eingebaute Werkzeuge hat es nichts, womit es suchen könnte.
     "ENABLE_TOOL_SEARCH": "false",
 }
 SECRETS = ("D2C_LLM_API_KEY", "ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "CLAUDE_CODE_OAUTH_TOKEN")
 TOKENS = ("input_tokens", "output_tokens", "cache_read_input_tokens", "cache_creation_input_tokens")
-MAX_TEXT = 500  # characters of a tool result in its event
-MAX_FAILS = 3  # the same failing call this many times ends the run
+MAX_TEXT = 500  # Zeichen eines Werkzeugergebnisses in seinem Ereignis
+MAX_FAILS = 3  #so viele identische fehlgeschlagene Aufrufe beenden den Lauf
 
 RULES = (
     "You turn one technical drawing into a validated CAD model of a part. Act only through the tools of the d2c server: "
@@ -58,11 +59,12 @@ ENDS = {
 
 
 def backend_env(base_url: str | None, api_key: str | None, model: str | None) -> dict[str, str]:
-    """The environment variables that point the CLI at its backend.
+    """Die Umgebungsvariablen, die die CLI auf ihr Backend zeigen.
 
-    Without base_url the CLI uses the Claude login (nothing to set) or an Anthropic key. With one it talks to that
-    Anthropic-compatible endpoint (OpenRouter, Ollama, a gateway) with a bearer token; the Anthropic key must be an empty
-    string, not unset, or the CLI falls back to an Anthropic login.
+    Ohne base_url nutzt die CLI die Claude-Anmeldung (nichts zu setzen) oder einen Anthropic-Schlüssel. Mit base_url
+    spricht sie einen Anthropic-kompatiblen Endpunkt an (OpenRouter, Ollama, ein Gateway) mit Bearer-Token; der
+    Anthropic-Schlüssel muss dabei ein leerer String sein, nicht unset, sonst fällt die CLI auf eine anthropische
+    Anmeldung zurück.
     """
     if not base_url:
         return {"ANTHROPIC_API_KEY": api_key} if api_key else {}
@@ -74,16 +76,17 @@ def backend_env(base_url: str | None, api_key: str | None, model: str | None) ->
     if model:
         env |= dict.fromkeys(MODEL_VARS, model)
         if not model.startswith("claude"):
-            env["CLAUDE_CODE_MAX_CONTEXT_TOKENS"] = "65536"  # the CLI assumes 200k for a model id it does not know
+            env["CLAUDE_CODE_MAX_CONTEXT_TOKENS"] = "65536"  # die CLI nimmt für eine unbekannte Modellkennung 200k an
     return env
 
 
 def server_config(server: str) -> dict:
-    """The MCP server as the CLI is told to reach it.
+    """Der MCP-Server, wie die CLI ihn erreicht.
 
-    "stdio" starts this interpreter with `-m d2c.server`, an http(s) URL connects to a running server, any other value is
-    a command line (e.g. `docker run -i --rm --network none -v ...:/data:ro d2c`). The CLI hands its own environment on to
-    a stdio server, so the D2C_ settings are passed explicitly, without D2C_LLM_*, and every credential is blanked out.
+    "stdio" startet diesen Interpreter mit `-m d2c.server`, eine http(s)-URL verbindet zu einem laufenden Server, jeder
+    andere Wert ist eine Kommandozeile (z. B. `docker run -i --rm --network none -v ...:/data:ro d2c`). Die CLI reicht
+    ihre eigene Umgebung an einen stdio-Server weiter, daher werden die D2C_-Einstellungen explizit übergeben, ohne
+    D2C_LLM_*, und jede Zugangsnummer wird geleert.
     """
     if server.startswith(("http://", "https://")):
         return {"type": "http", "url": server}
@@ -93,7 +96,7 @@ def server_config(server: str) -> dict:
 
 
 def _read(block: ToolResultBlock) -> tuple[bool, str, dict]:
-    """(ok, text for the event, JSON object of the result): an image shows as "image", ok is false for an error or "ok": false."""
+    """(ok, Ereignistext, JSON-Objekt des Ergebnisses): ein Bild erscheint als "image", ok ist falsch bei einem Fehler oder "ok": false."""
     parts = block.content if isinstance(block.content, list) else [{"type": "text", "text": block.content or ""}]
     text = "\n".join(p.get("text", "") for p in parts if p.get("type") == "text")
     try:
@@ -106,31 +109,31 @@ def _read(block: ToolResultBlock) -> tuple[bool, str, dict]:
 
 
 def _why(result: ResultMessage) -> str:
-    """Why an error result ended its session."""
+    """Warum eine Fehlermeldung die Sitzung beendete."""
     if result.subtype == "error_max_turns":
         return "max_turns reached"
     return result.result or "; ".join(result.errors or []) or result.subtype
 
 
 class _Run:
-    """One run over one or two SDK sessions: the events, the failures seen, the totals and what the sessions achieved."""
+    """Ein Lauf über eine oder zwei SDK-Sitzungen: die Ereignisse, die gesehenen Fehlschläge, die Summen und was die Sitzungen erreichten."""
 
     def __init__(self, part: str, on_event: Callable[[dict], None] | None) -> None:
         self.part, self.emit = part, on_event or (lambda event: None)
         self.building = False
         self.fails: Counter = Counter()
-        self.turns: set = set()  # ids of the model responses seen
+        self.turns: set = set()  # Kennungen der gesehenen Modellantworten
         self.cost, self.usage = 0.0, dict.fromkeys(TOKENS, 0)
-        self.spec: dict | None = None  # the spec of the last successful submit_spec
-        self.files: dict | None = None  # the files of the successful export_step
+        self.spec: dict | None = None  # die Spezifikation des letzten erfolgreichen submit_spec
+        self.files: dict | None = None  # die Dateien des erfolgreichen export_step
 
     def phase(self, name: str) -> None:
         self.building = name == "build"
         self.emit({"type": "phase", "phase": name})
 
     async def session(self, prompt: str, options: ClaudeAgentOptions, finish: str) -> str | None:
-        """Play one session until it ends or has to be stopped; None if it did its job (`finish` succeeded) or ended on its own,
-        else why it failed. Stopping closes the generator, which ends the CLI."""
+        """Spiele eine Sitzung, bis sie endet oder gestoppt werden muss; None, wenn sie ihre Aufgabe erledigte (`finish`
+        gelang) oder von selbst endete, sonst warum sie scheiterte. Ein Stopp schließt den Generator, was die CLI beendet."""
         calls: dict[str, tuple[str, dict]] = {}
         done, reason = False, None
         try:
@@ -143,15 +146,15 @@ class _Run:
                         reason = _why(msg) if msg.is_error else reason
                     elif isinstance(msg, SystemMessage) and msg.subtype == "init":
                         status = {x.get("name"): x.get("status") for x in msg.data.get("mcp_servers", [])}.get(SERVER)
-                        if status not in (None, "connected", "pending"):  # pending: still connecting
+                        if status not in (None, "connected", "pending"):  # pending: verbindet sich noch
                             return f"the MCP server {SERVER} is {status}: check the server setting"
                     elif isinstance(msg, AssistantMessage):
-                        self.turns.add(msg.message_id or id(msg))  # one response can arrive as several messages
+                        self.turns.add(msg.message_id or id(msg))  # eine Antwort kann als mehrere Nachrichten eintreffen
                         for block in msg.content:
                             if isinstance(block, TextBlock) and block.text.strip():
                                 self.emit({"type": "message", "text": block.text})
                             elif isinstance(block, ToolUseBlock):
-                                if done:  # nothing may change the part after the finishing tool
+                                if done:  # nichts darf das Teil nach dem abschließenden Werkzeug verändern
                                     return None
                                 name = block.name.removeprefix(PREFIX)
                                 calls[block.id] = (name, block.input)
@@ -176,7 +179,7 @@ class _Run:
                                 elif name == "export_step":
                                     self.files = data.get("files", {})
                                 done = done or name == finish
-        except ClaudeSDKError as e:  # a ResultError follows the error result that already gave the reason
+        except ClaudeSDKError as e:  # auf das Fehlerergebnis folgt die Ausnahme; den Grund nannte das Ergebnis schon
             reason = reason or f"{type(e).__name__}: {e}"
         return None if done else reason
 
@@ -195,14 +198,14 @@ async def run_agent(pdf: str, part: str, *, model: str | None = None, base_url: 
                     api_key: str | None = None, build_model: str | None = None, server: str = "stdio",
                     spec: dict | None = None, allow_script: bool = True, max_turns: int = 80,
                     on_event: Callable[[dict], None] | None = None) -> dict:
-    """Read the drawing `pdf` (relative to the data folder of the server) and build, check and export the part `part`.
+    """Lies die Zeichnung `pdf` (relativ zum Datenordner des Servers) und baue, prüfe und exportiere das Teil `part`.
 
-    One model does both phases; with a different `build_model` a first session with `model` reads the drawing and submits the
-    spec, a second one with `build_model` builds the part from it (and never sees an image). A given `spec` skips the reading.
-    `on_event` gets {"type": "phase"|"tool_call"|"tool_result"|"message"|"done", ...}, last the done event with the result:
-    {"ok": True, "part", "turns", "files", "usage", "cost_usd"} after a successful export_step, else {"ok": False, "part",
-    "reason", ...}. "turns" counts the model responses; "usage" and "cost_usd" are the CLI's totals of the sessions that ended on
-    their own, a session that had to be stopped is not in them.
+    Ein Modell erledigt beide Phasen; mit anderem `build_model` liest eine erste Sitzung mit `model` die Zeichnung und
+    übermittelt die Spezifikation, eine zweite mit `build_model` baut das Teil daraus (und sieht nie ein Bild). Eine
+    vorgegebene `spec` überspringt das Lesen. `on_event` erhält {"type": "phase"|"tool_call"|"tool_result"|"message"|"done",
+    ...}, zuletzt das done-Ereignis mit dem Ergebnis: {"ok": True, "part", "turns", "files", "usage", "cost_usd"} nach
+    erfolgreichem export_step, sonst {"ok": False, "part", "reason", ...}. "turns" zählt die Modellantworten; "usage" und
+    "cost_usd" sind die Summen der CLI über die Sitzungen, die von selbst endeten, eine gestoppte Sitzung ist nicht dabei.
     """
     if base_url and not model:
         raise ValueError("a model is required with a base_url: the CLI would ask the endpoint for an Anthropic model name")
@@ -214,10 +217,10 @@ async def run_agent(pdf: str, part: str, *, model: str | None = None, base_url: 
         return ClaudeAgentOptions(
             model=session_model, system_prompt=(RULES + ENDS[kind]).format(part=part, pdf=pdf), max_turns=max_turns,
             tools=[], allowed_tools=[PREFIX + t for t in tools],
-            disallowed_tools=[PREFIX + t for t in (*READ_TOOLS, *BUILD_TOOLS) if t not in tools],  # hidden from the model
+            disallowed_tools=[PREFIX + t for t in (*READ_TOOLS, *BUILD_TOOLS) if t not in tools],  # dem Modell verborgen
             mcp_servers={SERVER: mcp}, strict_mcp_config=True, setting_sources=[], permission_mode="dontAsk",
             env=SESSION_ENV | backend_env(base_url, api_key, session_model),
-            extra_args={"no-session-persistence": None},  # no transcript of the drawings in the Claude config folder
+            extra_args={"no-session-persistence": None},  # kein Verlauf der Zeichnungen im Claude-Konfigurationsordner
         )
 
     if spec is not None:
@@ -235,7 +238,7 @@ async def run_agent(pdf: str, part: str, *, model: str | None = None, base_url: 
         if run.spec is None:
             reason = reason or "the session ended without a successful submit_spec"
         else:
-            run.part = run.spec.get("name", part)  # the part is registered under the name of its spec
+            run.part = run.spec.get("name", part)  # das Teil ist unter dem Namen seiner Spezifikation registriert
             run.phase("build")
             prompt = f'The spec of the part "{run.part}" is submitted. Build the part and export it.\n{_json(run.spec)}'
             reason = await run.session(prompt, options("build", build_model, build), "export_step")
@@ -245,7 +248,7 @@ async def run_agent(pdf: str, part: str, *, model: str | None = None, base_url: 
 
 
 def main(argv: list[str] | None = None) -> int:
-    """The command line: prints the result as JSON, the events as JSON lines if asked, exit code 0 only after an export."""
+    """Die Kommandozeile: gibt das Ergebnis als JSON aus, die Ereignisse auf Wunsch als JSON-Zeilen, Rückkehrcode 0 erst nach einem Export."""
     env = os.environ
     cli = argparse.ArgumentParser(prog="python -m d2c.agent", description="Build a part from a drawing PDF with a model.",
                                   epilog="The API key is read from D2C_LLM_API_KEY only.")

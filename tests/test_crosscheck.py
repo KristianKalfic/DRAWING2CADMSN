@@ -1,4 +1,4 @@
-"""Cross-checks of a spec: two readings compared, plausibility rules, the check_spec tool, the FreeCAD script."""
+"""Gegenproben zu einer Spezifikation: zwei Lesungen verglichen, Plausibilitätsregeln, das check_spec-Werkzeug, das FreeCAD-Skript."""
 
 import asyncio
 import json
@@ -26,7 +26,7 @@ def fresh_session(monkeypatch):
 
 
 def demo() -> dict:
-    """The demo spec as a plain dict, fresh on every call, so a test changes exactly one thing."""
+    """Die Demo-Spezifikation als schlichtes Diktat, bei jedem Aufruf frisch, damit ein Test genau eine Sache ändert."""
     return json.loads(DEMO_SPEC.read_text("utf-8"))
 
 
@@ -52,7 +52,7 @@ def test_compare_identical_specs_no_findings():
 
 
 def test_compare_ignores_noise_between_readings():
-    """Other ids, order, anchor point and sign of the axis, printed text and rounding noise are no finding."""
+    """Andere Kennungen, Reihenfolge, Ankerpunkt und Vorzeichen der Achse, gedruckter Text und Rundungsrauschen sind kein Befund."""
     raw = json.loads(json.dumps(demo()).replace('"d80"', '"q80"').replace('"d50"', '"q50"'))
     raw["dimensions"].reverse()
     next(d for d in raw["dimensions"] if d["id"] == "d16")["text"] = "Ø 16 H7"
@@ -67,7 +67,7 @@ def test_compare_ignores_noise_between_readings():
 
 
 def test_compare_pairs_stepped_holes_despite_float_noise():
-    """A counterbore shares the axis of its hole: the diameter tells them apart, not noise in the coordinates."""
+    """Eine Senkung teilt die Achse ihrer Bohrung: der Durchmesser unterscheidet sie, nicht ein Rauschen in den Koordinaten."""
     def with_counterbore(x_hole: float, x_bore: float) -> PartSpec:
         raw = demo()
         raw["expected"]["holes"][1]["at"][0] = x_hole
@@ -171,7 +171,7 @@ def test_plausibility_hole_outside_bbox():
     assert "106.6" in finding["message"] and "80" in finding["message"]
     assert finding["suggested_review"]["issue"] == "conflict"
     assert finding["suggested_review"]["refs"] == ["d66"]
-    # a single hole larger than the part: too wide along x and y
+    # eine einzelne Bohrung größer als das Teil: zu breit entlang x und y
     raw = demo()
     raw["expected"]["holes"] = [{"d": 90, "at": [0, 0, 0], "axis": [0, 0, 1], "dim_ids": ["d16"]}]
     assert [f["where"] for f in plausibility(spec_of(raw))] == ["expected.bbox.x", "expected.bbox.y"]
@@ -183,7 +183,7 @@ def test_plausibility_hole_outside_bbox():
 
 def test_plausibility_overlapping_holes():
     raw = demo()
-    raw["expected"]["holes"][2]["at"] = [30, 12, 0]  # 3 mm from the hole at (30, 15), diameters 6.6
+    raw["expected"]["holes"][2]["at"] = [30, 12, 0]  # 3 mm von der Bohrung bei (30, 15) entfernt, Durchmesser 6,6
     (finding,) = plausibility(spec_of(raw))
     assert (finding["code"], finding["where"]) == ("HOLES_OVERLAP", "expected.holes")
     assert "1 and 2" in finding["message"]
@@ -194,23 +194,23 @@ def test_plausibility_overlapping_holes():
 def test_plausibility_overlap_ignores_stepped_and_cross_holes():
     raw = demo()
     raw["expected"]["holes"] += [
-        {"d": 11, "at": [30, 15, 5], "axis": [0, 0, -1], "dim_ids": ["d66"]},  # counterbore on the axis of hole 1
-        {"d": 4, "at": [0, 0, 5], "axis": [1, 0, 0], "dim_ids": ["d16"]},  # cross hole through the bore
+        {"d": 11, "at": [30, 15, 5], "axis": [0, 0, -1], "dim_ids": ["d66"]},  # Senkung auf der Achse von Bohrung 1
+        {"d": 4, "at": [0, 0, 5], "axis": [1, 0, 0], "dim_ids": ["d16"]},  # Kreuzloch durch die Grundbohrung
     ]
     assert plausibility(spec_of(raw)) == []
 
 
 def test_plausibility_fillet_too_big():
-    # bbox 80 x 50 x 25: the middle edge is 50, so R25 is the largest radius
+    # bbox 80 x 50 x 25: die mittlere Kante ist 50, also ist R25 der größte Radius
     assert plausibility(spec_of(add_fillet(demo(), 25))) == []
     (finding,) = plausibility(spec_of(add_fillet(demo(), 30)))
     assert (finding["code"], finding["where"]) == ("FILLET_TOO_BIG", "features.f_fillet")
     assert finding["suggested_review"]["refs"] == ["rf"]
-    # a thin plate may have corners rounded far beyond half its thickness
+    # eine dünne Platte darf Ecken haben, die weit über die halbe Stärke hinaus gerundet sind
     raw = add_fillet(demo(), 10)
     raw["expected"]["bbox"] = [80, 50, 3]
     assert plausibility(spec_of(raw)) == []
-    # only fillet features are checked: a large arc radius elsewhere is fine
+    # nur Rundungsmerkmale werden geprüft: ein großer Bogenradius woanders ist in Ordnung
     raw = demo()
     next(d for d in raw["dimensions"] if d["id"] == "r5").update(value=60, text="R60")
     assert plausibility(spec_of(raw)) == []
@@ -261,7 +261,7 @@ def test_instructions_name_check_spec():
 # ---------------------------------------------------------------- scripts/freecad_check.py
 
 def stub_freecad(tmp_path: Path, measured: dict) -> Path:
-    """A stand-in for freecadcmd that writes a fixed measurement where the script expects it."""
+    """Ein Ersatz für freecadcmd, der eine feste Messung schreibt, wo das Skript sie erwartet."""
     exe = tmp_path / "freecadcmd"
     exe.write_text(f"#!{sys.executable}\nimport json, os\njson.dump({measured!r}, open(os.environ['D2C_FC_OUT'], 'w'))\n")
     exe.chmod(0o755)
@@ -269,7 +269,7 @@ def stub_freecad(tmp_path: Path, measured: dict) -> Path:
 
 
 def measured(**changes) -> dict:
-    """What FreeCAD reports for the exported demo part: five concave cylinders and a rounded corner."""
+    """Was FreeCAD über das exportierte Demoteil berichtet: fünf konkave Zylinder und eine gerundete Ecke."""
     holes = [(16, (0, 0)), (6.6, (30, 15)), (6.6, (-30, 15)), (6.6, (30, -15)), (6.6, (-30, -15))]
     cylinders = [{"d": d, "axis": [0, 0, -1], "point": [x, y, 10], "concave": True} for d, (x, y) in holes]
     cylinders.append({"d": 10, "axis": [0, 0, -1], "point": [-35, -20, 0], "concave": False})

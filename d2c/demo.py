@@ -1,8 +1,8 @@
-"""python -m d2c.demo [--out DIR]: build, check and export the demo bracket of tests/fixtures.
+"""python -m d2c.demo [--out DIR]: die Demo-Halterung aus tests/fixtures bauen, prüfen und exportieren.
 
-Runs the whole chain (spec, ops, checks, STEP export, review list) without a language model, network or
-sample data. Prints one PASS or FAIL line per check, the assumptions and the files written; the exit code
-is 0 only if the export is ok.
+Läuft die ganze Kette (Spezifikation, Ops, Prüfungen, STEP-Export, Prüfliste) ohne Sprachmodell, Netz oder
+Beispieldaten. Gibt je Prüfung eine PASS- oder FAIL-Zeile aus, die Annahmen und die geschriebenen Dateien;
+der Rückkehrcode ist 0 nur bei erfolgreichem Export.
 """
 
 import argparse
@@ -27,7 +27,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="python -m d2c.demo", description=__doc__)
     parser.add_argument("--out", type=Path, default=Path("/tmp/d2c-demo"), help="results folder (default: %(default)s)")
     out = parser.parse_args(argv).out
-    os.environ["D2C_RESULTS"] = str(out.resolve())  # absolute: the build worker runs in another working directory
+    os.environ["D2C_RESULTS"] = str(out.resolve())  # absolut: die Bau-Sitzung läuft in einem anderen Arbeitsverzeichnis
     os.environ.setdefault("D2C_TABLES", str(FIXTURES / "tables"))
 
     spec = PartSpec.model_validate_json((FIXTURES / "demo_spec.json").read_text("utf-8"))

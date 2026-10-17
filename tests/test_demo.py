@@ -22,7 +22,7 @@ def test_demo_cli_ok(tmp_path):
 
 
 def test_demo_failed_check(tmp_path, monkeypatch, capsys):
-    """A model that misses its expected size fails: FAIL line, verdict no, exit code 1, no STEP file."""
+    """Ein Modell, das seine erwarteten Größen verfehlt, scheitert: FAIL-Zeile, Urteil nein, Rückkehrcode 1, keine STEP-Datei."""
     fixtures = tmp_path / "fixtures"
     shutil.copytree(FIXTURES, fixtures)
     spec = json.loads((FIXTURES / "demo_spec.json").read_text("utf-8"))
