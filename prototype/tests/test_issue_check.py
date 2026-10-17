@@ -1,4 +1,4 @@
-"""Tests fuer issue_check.compare() / plausible() und die FreeCAD-Fehlerbehandlung.
+"""Prüft issue_check.compare(), plausible() und die Fehlerbehandlung für FreeCAD.
 Der eigentliche FreeCAD-Lauf wird nur getestet, wenn FreeCADCmd installiert ist."""
 import json
 import os
@@ -24,10 +24,10 @@ def codes(issues, sev=None):
     return sorted(i["code"] for i in issues if sev is None or i["severity"] == sev)
 
 
-# ---------------------------------------------------------------- compare
+# ---------------------------------------------------------------- Vergleich (compare)
 
 def test_compare_gleich_innerhalb_toleranz():
-    # A: Muster-Objekt, B: 4 Einzelbohrungen in anderer Reihenfolge, Laenge +0.02 mm
+    # A: Musterobjekt, B: vier Einzelbohrungen in anderer Reihenfolge, Länge +0,02 mm
     assert IC.compare(load("extraktion_A.json"), load("extraktion_B_gleich.json")) == []
 
 
@@ -54,7 +54,7 @@ def test_compare_bohrungsanzahl_bei_gleicher_featureanzahl():
     assert "HOLE_COUNT" in codes(IC.compare(a, b))
 
 
-# ---------------------------------------------------------------- plausible
+# ---------------------------------------------------------------- Plausibilitätsprüfung (plausible)
 
 def test_plausible_gutes_teil_nur_review_und_warnung():
     issues = IC.plausible(load("extraktion_A.json"))
@@ -71,7 +71,7 @@ def test_plausible_unplausibel():
     assert "HOLES_OVERLAP" in c              # (0,0) d6 und (4,0) d6
     assert "FILLET_TOO_BIG" in c             # R20 > 30/2
     assert "LOW_CONFIDENCE" in c
-    assert "ASSUMPTION" in c                 # Review-Eintrag ohne 'value' -> kein KeyError
+    assert "ASSUMPTION" in c                 # Eintrag aus review ohne den Schlüssel value -> kein KeyError
 
 
 def test_plausible_zylinder_bohrung_aussen():
@@ -81,7 +81,7 @@ def test_plausible_zylinder_bohrung_aussen():
     assert "HOLES_OVERLAP" not in codes(issues)
 
 
-# ---------------------------------------------------------------- freecad (Fehlerbehandlung)
+# ---------------------------------------------------------------- FreeCAD-Prüfung (freecad, Fehlerbehandlung)
 
 def test_freecad_fehlt_klare_meldung(tmp_path):
     step = tmp_path / "x.step"
@@ -96,7 +96,7 @@ def test_freecad_step_fehlt(tmp_path):
 
 
 def test_cli_ohne_freecad_gesperrt(tmp_path):
-    """Kompletter CLI-Lauf: ohne FreeCAD wird nicht freigegeben, Report wird trotzdem geschrieben."""
+    """Kompletter CLI-Lauf: ohne FreeCAD wird nicht freigegeben, Prüfbericht wird trotzdem geschrieben."""
     step = tmp_path / "teil.step"
     step.write_text("dummy")
     a = os.path.join(DATA, "extraktion_A.json")

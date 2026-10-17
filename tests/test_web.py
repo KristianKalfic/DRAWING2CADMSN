@@ -1,4 +1,4 @@
-"""Web app: part list and detail, file downloads, upload and live run events, on a really exported part."""
+"""Web-App: Teileliste, Detailansicht, Dateidownloads sowie Ereignisse beim Hochladen und während eines Laufs mit einem tatsächlich exportierten Teil."""
 import json
 import shutil
 from pathlib import Path
@@ -20,15 +20,15 @@ def _dimension(dim_id: str, kind: str, value: float, text: str, **more) -> dict:
 
 
 SPEC = {
-    "name": "plate", "drawing": "Demo/plate.pdf", "title": "Plate 80x50", "scale": "1:1", "views": [], "features": [],
+    "name": "plate", "drawing": "Demo/plate.pdf", "title": "Platte 80 × 50", "scale": "1:1", "views": [], "features": [],
     "dimensions": [
         _dimension("w", "length", 80, "80"),
         _dimension("d1", "diameter", 8, "Ø8"),
-        _dimension("t", "length", 10, "", assumed=True, confidence=0.6, assumption_basis="read from the side view"),
+        _dimension("t", "length", 10, "", assumed=True, confidence=0.6, assumption_basis="aus der Seitenansicht abgelesen"),
     ],
     "expected": {"bbox": [80, 50, 10], "holes": [{"d": 8, "at": [20, 10, 0], "axis": [0, 0, 1], "dim_ids": ["d1"]}]},
-    "review": [{"id": "rv1", "refs": ["t"], "issue": "missing", "assumption": "thickness 10 mm",
-                "reason": "not dimensioned", "mark_near": [[0, 0, 10]]}],
+    "review": [{"id": "rv1", "refs": ["t"], "issue": "missing", "assumption": "Dicke 10 mm",
+                "reason": "nicht bemaßt", "mark_near": [[0, 0, 10]]}],
     "general_tolerance": "ISO 2768-m",
 }
 OPS = [
@@ -40,7 +40,7 @@ OPS = [
 
 @pytest.fixture(scope="module")
 def exported(tmp_path_factory) -> Path:
-    """results folder with the demo part exported by a real session."""
+    """Ergebnisordner mit dem Demo-Teil, das in einer echten Sitzung exportiert wurde."""
     results = tmp_path_factory.mktemp("results")
     with pytest.MonkeyPatch.context() as patch:
         patch.setenv("D2C_RESULTS", str(results))
@@ -67,7 +67,7 @@ def client(exported, monkeypatch, tmp_path):
 def test_parts_list_and_detail(client):
     with client:
         (entry,) = client.get("/api/parts").json()
-        assert (entry["name"], entry["title"], entry["review_count"]) == ("plate", "Plate 80x50", 1)
+        assert (entry["name"], entry["title"], entry["review_count"]) == ("plate", "Platte 80 × 50", 1)
         assert "plate.step" in entry["files"] and entry["eval"] is None
         detail = client.get("/api/parts/plate").json()
         assert detail["spec"]["name"] == "plate"
@@ -172,13 +172,13 @@ def test_run_appends_done_and_reports_agent_crash(monkeypatch, tmp_path):
         monkeypatch.setenv(key, value)
 
     async def crashing(**kwargs):
-        raise RuntimeError("endpoint unreachable")
+        raise RuntimeError("Schnittstelle nicht erreichbar")
 
     with TestClient(create_app(crashing)) as client:
         run_id = upload(client).json()["run_id"]
         body = client.get(f"/api/runs/{run_id}/events").text
     (last,) = [json.loads(line[6:]) for line in body.splitlines() if line.startswith("data: ")]
-    assert last["type"] == "done" and not last["ok"] and "endpoint unreachable" in last["reason"]
+    assert last["type"] == "done" and not last["ok"] and "Schnittstelle nicht erreichbar" in last["reason"]
 
 
 @pytest.mark.parametrize("part_name", ["Träger-1", "Tra\u0308ger-1"])

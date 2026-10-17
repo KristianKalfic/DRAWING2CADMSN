@@ -8,7 +8,7 @@ def test_imports():
     import cadquery
     from mcp.server.mcpserver import Image, MCPServer
 
-    import d2c  # resolves through the editable install, also with the repo mounted over /app
+    import d2c  # Wird über die bearbeitbare Installation aufgelöst, auch wenn das Repository unter /app eingehängt ist.
 
     assert cadquery.__version__ == "2.8.0"
 

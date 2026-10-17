@@ -1,4 +1,4 @@
-"""Validation checks: solid integrity, drawing dimensions, STEP round trip, reference metrics."""
+"""Prüfungen von Volumenkörpern und Zeichnungsmaßen, STEP-Rückimport und Referenzwerten."""
 
 import math
 
@@ -8,22 +8,22 @@ import pytest
 from d2c.checks import dimension_check, metrics, solid_check, step_roundtrip
 from d2c.spec import Expected, ExpectedHole
 
-PLATE = (40.0, 30.0, 10.0)  # centred on the origin
+PLATE = (40.0, 30.0, 10.0)  # um den Ursprung zentriert
 
 
 def plate_with_hole(d: float = 5.0) -> cq.Workplane:
-    """Plate with a through hole along Z at x=10, y=5."""
+    """Platte mit einer durchgehenden Bohrung in Z-Richtung bei x=10, y=5."""
     return cq.Workplane().box(*PLATE).faces(">Z").workplane().pushPoints([(10, 5)]).hole(d)
 
 
 def hole_entry(wp: cq.Workplane, **changes) -> dict:
-    """The dimension_check entry for one expected hole: the real hole of plate_with_hole, with `changes`."""
+    """Eintrag aus `dimension_check` für eine erwartete Bohrung: die tatsächliche Bohrung von `plate_with_hole`, mit `changes`."""
     hole = {"d": 5.0, "at": (10.0, 5.0, 0.0), "axis": (0.0, 0.0, 1.0), "dim_ids": ["d2"]} | changes
     return dimension_check(wp, Expected(bbox=PLATE, holes=[ExpectedHole(**hole)]))[-1]
 
 
 def self_intersecting_solid() -> cq.Workplane:
-    """Extruded bowtie profile: one closed solid with positive volume that is still not valid."""
+    """Extrudiertes, selbstüberschneidendes Profil: ein geschlossener Körper mit positivem Volumen, der dennoch ungültig ist."""
     return cq.Workplane().polyline([(0, 0), (20, 10), (20, 0), (0, 4)]).close().extrude(5)
 
 
@@ -37,7 +37,7 @@ def test_box_solid_ok():
         "ok": True,
     }
 
-    # build() results are compounds that hold the solid, not bare solids
+    # `build()` liefert zusammengesetzte Körper, die den Volumenkörper enthalten, keine einzelnen Volumenkörper
     plate = plate_with_hole()
     assert isinstance(plate.val(), cq.Compound)
     result = solid_check(plate)
@@ -46,21 +46,21 @@ def test_box_solid_ok():
 
 
 def test_two_solids_not_ok(tmp_path):
-    """Anything but one closed, valid solid fails; each case breaks a different part of `ok`."""
+    """Alles außer genau einem geschlossenen, gültigen Volumenkörper schlägt fehl; jeder Fall verletzt einen anderen Teil von `ok`."""
     box = cq.Workplane().box(10, 10, 10)
     apart = box.union(box.translate((50, 0, 0)))
     stray_face = cq.Face.makePlane(10, 10, basePnt=(50, 0, 0))
     with_stray_face = cq.Workplane().add(cq.Compound.makeCompound([box.val(), stray_face]))
     second_box = box.translate((50, 0, 0))
     two_in_compound = cq.Workplane().add(cq.Compound.makeCompound([box.val(), second_box.val()]))
-    cases = {  # name: (model, (valid, solids, free_edges))
+    cases = {  # Name: (Modell, (gültig, Volumenkörper, offene Kanten))
         "union of two solids": (apart, (True, 2, 0)),
         "compound of two solids": (two_in_compound, (True, 2, 0)),
-        # one face alone: only the free-bounds constructor without a tolerance finds its edges
+        # Eine einzelne Fläche: Nur der Konstruktor für freie Begrenzungen findet ihre Kanten, wenn keine Toleranz angegeben ist.
         "lone face": (cq.Workplane().add(cq.Face.makePlane(10, 10)), (True, 0, 4)),
         "solid and stray face": (with_stray_face, (True, 1, 4)),
         "self-intersecting profile": (self_intersecting_solid(), (False, 1, 0)),
-        # valid, one solid, closed, but negative volume
+        # gültig, ein Volumenkörper, geschlossen, aber negatives Volumen
         "inside-out solid": (cq.Workplane().add(cq.Shape.cast(box.val().wrapped.Reversed())), (True, 1, 0)),
     }
     for name, (wp, counts) in cases.items():
@@ -68,7 +68,7 @@ def test_two_solids_not_ok(tmp_path):
         assert (result["valid"], result["solids"], result["free_edges"]) == counts, name
         assert result["ok"] is False, name
 
-    # the STEP round trip sees the second solid too
+    # Beim STEP-Rückimport wird auch der zweite Volumenkörper erkannt.
     roundtrip = step_roundtrip(apart, str(tmp_path / "apart.step"))
     assert (roundtrip["solids"], roundtrip["ok"]) == (2, False)
 
@@ -80,13 +80,13 @@ def test_bbox_check_pass_and_fail():
     assert [c["actual"] for c in passed] == pytest.approx([10, 20, 30])
     assert all(c["ok"] and c["dim_ids"] == [] for c in passed)
 
-    # 0.009 mm off is inside the 0.01 mm tolerance, 0.011 mm is not
+    # 0,009 mm Abweichung liegt innerhalb der Toleranz von 0,01 mm, 0,011 mm nicht.
     off = dimension_check(wp, Expected(bbox=(10.009, 20.011, 30)))
     assert [c["ok"] for c in off] == [True, False, True]
     assert off[1]["expected"] == 20.011
     assert off[1]["actual"] == pytest.approx(20)
 
-    # a mesh left on the shape by a GLB export must not enlarge the measured size
+    # Ein vom GLB-Export am Körper belassenes Netz darf das gemessene Maß nicht vergrößern.
     cylinder = cq.Workplane().cylinder(10, 5)
     cylinder.val().tessellate(1.0, 0.5)
     assert all(c["ok"] for c in dimension_check(cylinder, Expected(bbox=(10, 10, 10))))
@@ -101,18 +101,18 @@ def test_hole_found_by_diameter_and_position():
         "ok": True,
         "dim_ids": ["d2"],
     }
-    # any point on the axis, either direction, any axis length: same hole
+    # Jeder Punkt auf der Achse, beide Richtungen und jede Achslänge bezeichnen dieselbe Bohrung.
     assert hole_entry(wp, at=(10.0, 5.0, 3.0), axis=(0.0, 0.0, -2.0))["ok"]
 
-    # a counterbored hole is two coaxial cylinders: each diameter is found
+    # Eine zylindrisch gesenkte Bohrung besteht aus zwei koaxialen Zylindern; beide Durchmesser werden erkannt.
     bore = cq.Workplane().box(*PLATE).faces(">Z").workplane().pushPoints([(10, 5)]).cboreHole(5, 8, 3)
     assert [hole_entry(bore, d=d)["actual"]["d"] for d in (5.0, 8.0)] == pytest.approx([5.0, 8.0])
 
-    # the matching cylinder is reported even when one of another diameter has its axis closer to `at`
+    # Der passende Zylinder wird gemeldet, auch wenn die Achse eines Zylinders mit anderem Durchmesser näher an `at` liegt.
     drills = cq.Compound.makeCompound(
         [
-            cq.Solid.makeCylinder(2.5, 10, cq.Vector(10.008, 5, -5)),  # Ø5 through, axis 0.008 off: the hole
-            cq.Solid.makeCylinder(4.0, 3, cq.Vector(10.001, 5, 2)),  # Ø8 from the top, axis 0.001 off
+            cq.Solid.makeCylinder(2.5, 10, cq.Vector(10.008, 5, -5)),  # Ø5 durchgehend, Achse um 0,008 versetzt: die Bohrung
+            cq.Solid.makeCylinder(4.0, 3, cq.Vector(10.001, 5, 2)),  # Ø8 von oben, Achse um 0,001 versetzt
         ]
     )
     entry = hole_entry(cq.Workplane().box(*PLATE).cut(cq.Workplane(obj=drills)))
@@ -124,11 +124,11 @@ def test_hole_wrong_position_fails():
     wp = plate_with_hole()
     off = hole_entry(wp, at=(10.5, 5.0, 0.0))
     assert off["ok"] is False
-    # the nearest cylinder is the real hole, 0.5 mm away
+    # Der nächstgelegene Zylinder ist die tatsächliche Bohrung, 0,5 mm entfernt.
     assert off["actual"] == {"d": pytest.approx(5.0), "dist": pytest.approx(0.5), "concave": True}
     assert hole_entry(wp, at=(10.005, 5.0, 0.0))["ok"]
     assert not hole_entry(wp, at=(10.02, 5.0, 0.0))["ok"]
-    # right place and diameter, wrong direction: |cos| >= 0.9999 allows a tilt of 0.014 per unit, not 0.015
+    # Richtige Lage und richtiger Durchmesser, falsche Richtung: |cos| >= 0,9999 erlaubt eine Neigung von 0,014 je Einheit, aber nicht 0,015.
     assert not hole_entry(wp, axis=(1.0, 0.0, 0.0))["ok"]
     assert hole_entry(wp, axis=(0.014, 0.0, 1.0))["ok"]
     assert not hole_entry(wp, axis=(0.015, 0.0, 1.0))["ok"]
@@ -141,16 +141,16 @@ def test_hole_wrong_diameter_fails():
     assert wrong["actual"] == {"d": pytest.approx(5.0), "dist": pytest.approx(0.0, abs=1e-9), "concave": True}
     assert hole_entry(wp, d=5.009)["ok"]
     assert not hole_entry(wp, d=5.011)["ok"]
-    # a convex cylinder of the right size and place is no hole: a Ø5 pin on the top face...
+    # Ein konvexer Zylinder mit richtiger Größe und Lage ist keine Bohrung: ein Ø5-Zapfen auf der Oberseite ...
     pin = cq.Workplane().box(*PLATE).faces(">Z").workplane().center(10, 5).circle(2.5).extrude(4)
     pin_entry = hole_entry(pin)
     assert pin_entry["ok"] is False
     assert pin_entry["actual"] == {"d": pytest.approx(5.0), "dist": pytest.approx(0.0, abs=1e-9), "concave": False}
-    # ...and an R2.5 corner round, seen from its arc centre
+    # ... und eine Eckrundung R2,5, betrachtet von ihrem Bogenmittelpunkt aus.
     rounded = cq.Workplane().box(*PLATE).edges("|Z and >X and >Y").fillet(2.5)
     round_entry = hole_entry(rounded, at=(17.5, 12.5, 0.0))
     assert (round_entry["ok"], round_entry["actual"]["concave"]) == (False, False)
-    # a part without any cylindrical face has no nearest cylinder
+    # Ein Teil ohne zylindrische Fläche hat keinen nächstgelegenen Zylinder.
     missing = hole_entry(cq.Workplane().box(*PLATE))
     assert (missing["ok"], missing["actual"]) == (False, None)
 
@@ -168,9 +168,9 @@ def test_roundtrip_ok(tmp_path, monkeypatch):
         "ok": True,
     }
     assert (tmp_path / "plate.step").stat().st_size > 0
-    assert step_roundtrip(plate, str(tmp_path / "plate.stp"))["ok"]  # the file extension does not matter
+    assert step_roundtrip(plate, str(tmp_path / "plate.stp"))["ok"]  # Die Dateiendung ist unerheblich.
 
-    # the re-imported volume decides: 3e-6 off breaks the 1e-6 limit (too large or too small), 3e-7 does not
+    # Entscheidend ist das Volumen nach dem Rückimport: Eine Abweichung von 3e-6 überschreitet die Grenze 1e-6 (nach oben oder unten), 3e-7 nicht.
     for scale, ok in ((1.000001, False), (0.999999, False), (1.0000001, True)):
         read_back = cq.Workplane(obj=plate.val().scale(scale))
         monkeypatch.setattr(cq.importers, "importStep", lambda _, wp=read_back: wp)
@@ -184,14 +184,14 @@ def test_roundtrip_ok(tmp_path, monkeypatch):
 
 def test_marked_faces_colored(tmp_path):
     path = tmp_path / "box.step"
-    above_top = (0, 0, 15.4)  # 0.4 mm over the top face, inside the default 0.5 mm reach
+    above_top = (0, 0, 15.4)  # 0,4 mm über der Oberseite, innerhalb der standardmäßigen Reichweite von 0,5 mm
     marks = [{"id": "rv1", "near": [above_top]}]
-    box = cq.Workplane(obj=cq.Compound.makeCompound(cq.Workplane().box(10, 20, 30).vals()))  # as build returns
+    box = cq.Workplane(obj=cq.Compound.makeCompound(cq.Workplane().box(10, 20, 30).vals()))  # entspricht dem Rückgabewert von `build()`
     result = step_roundtrip(box, str(path), marks=marks)
     assert result["marks"] == [{"id": "rv1", "faces": 1}]
     assert result["ok"] is True
     text = path.read_text()
-    assert text.count("COLOUR_RGB") >= 2  # steel body and the orange face
+    assert text.count("COLOUR_RGB") >= 2  # Stahlkörper und orange Fläche
     assert "ADVANCED_FACE('rv1'" in text
     back = cq.importers.importStep(str(path)).val()
     assert back.isValid()
@@ -200,18 +200,18 @@ def test_marked_faces_colored(tmp_path):
 
 def test_mark_without_face_not_ok(tmp_path):
     marks = [
-        {"id": "far", "near": [(55, 0, 0)]},  # 50 mm from the nearest face
-        {"id": "just_off", "near": [(0, 0, 15.6)]},  # 0.6 mm over the top face, outside the 0.5 mm reach
+        {"id": "far", "near": [(55, 0, 0)]},  # 50 mm von der nächstgelegenen Fläche entfernt
+        {"id": "just_off", "near": [(0, 0, 15.6)]},  # 0,6 mm über der Oberseite, außerhalb der Reichweite von 0,5 mm
     ]
     result = step_roundtrip(cq.Workplane().box(10, 20, 30), str(tmp_path / "box.step"), marks=marks)
     assert result["marks"] == [{"id": "far", "faces": 0}, {"id": "just_off", "faces": 0}]
-    assert (result["reimport_valid"], result["solids"]) == (True, 1)  # only the marks are to blame
+    assert (result["reimport_valid"], result["solids"]) == (True, 1)  # Nur die Markierungen sind dafür verantwortlich.
     assert result["ok"] is False
 
 
 def test_metrics_cyl_diameters():
     wp = cq.Workplane().box(*PLATE).faces(">Z").workplane()
-    for x, y, d in [(-10, 0, 5), (-10, 8, 5.004), (10, 0, 8)]:  # 5.004 rounds to the same 0.01 as 5
+    for x, y, d in [(-10, 0, 5), (-10, 8, 5.004), (10, 0, 8)]:  # 5,004 wird auf dasselbe Hundertstel wie 5 gerundet.
         wp = wp.pushPoints([(x, y)]).hole(d)
     result = metrics(wp.val())
     assert result["cyl_diameters"] == [5.0, 8.0]

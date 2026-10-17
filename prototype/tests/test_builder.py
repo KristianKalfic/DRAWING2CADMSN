@@ -1,4 +1,4 @@
-"""Tests fuer build_from_json + export_step (direkte Funktionsaufrufe, kein MCP-Transport)."""
+"""Prüft build_from_json und export_step mit direkten Funktionsaufrufen, ohne MCP-Transport."""
 import json
 import math
 import os
@@ -10,7 +10,7 @@ import server as S
 from json_builder import generate
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-VOL_TOL = 1e-6  # relativ; analytische Sollvolumina
+VOL_TOL = 1e-6  # Relative Toleranz der analytischen Sollvolumina
 
 
 @pytest.fixture(autouse=True)
@@ -38,7 +38,7 @@ def assert_good(r, e, volume):
     assert v["is_valid"] and v["solids"] == 1
     assert v["all_pass"] is True
     assert v["volume"] == pytest.approx(volume, rel=VOL_TOL)
-    # Re-Import: Datei existiert, genau 1 gueltiger Solid, gleiches Volumen
+    # Rückimport: Datei existiert, genau ein gültiger Volumenkörper, gleiches Volumen
     assert os.path.isfile(e["path"])
     assert v["reimport"]["ok"] and v["reimport"]["solids"] == 1
     assert v["volume_match"]
@@ -55,7 +55,7 @@ def cyl_vol(d, h):
     return math.pi * (d / 2) ** 2 * h
 
 
-# ---------------------------------------------------------------- Gutfaelle
+# ---------------------------------------------------------------- Erfolgsfälle
 
 def test_beispiel_v2():
     spec = json.load(open(os.path.join(ROOT, "examples", "beispiel_v2.json"), encoding="utf-8"))
@@ -96,12 +96,12 @@ def test_zylinder_mit_senkbohrung():
     vol = cyl_vol(60, 20) - cyl_vol(6.6, 14) - cyl_vol(11, 6)
     assert_good(r, e, vol)
     assert {h["d"] for h in e["validation"]["holes_found"]} == {6.6, 11}
-    # Aussenmantel (konvex) darf nicht als Bohrung zaehlen
+    # Außenmantel (konvex) darf nicht als Bohrung zählen
     assert 60 not in {h["d"] for h in e["validation"]["holes_found"]}
 
 
 def test_profil_extrusion():
-    # L-Profil, um den Nullpunkt zentriert (Bounding Box 80 x 60)
+    # L-Profil, um den Nullpunkt zentriert (Begrenzungsquader 80 × 60)
     pts = [[-40, -30], [40, -30], [40, -10], [-20, -10], [-20, 30], [-40, 30]]
     spec = {"part_name": "profil", "base": {"shape": "profile", "points": pts, "height": 15},
             "features": [{"type": "hole", "x": 20, "y": -20, "diameter": 8, "through": True}]}
@@ -134,7 +134,7 @@ def test_tasche_von_unten_und_oben():
 
 @pytest.mark.parametrize("H", [0.5, 3, 20, 80])
 def test_durchgangsbohrung_ohne_restfilm(H):
-    """Durchgangsbohrung muss beide Deckflaechen durchbrechen (kein Restfilm)."""
+    """Durchgangsbohrung muss beide Deckflächen durchbrechen (kein Restfilm)."""
     for face in ("top", "bottom"):
         spec = box(40, 40, H, [{"type": "hole", "x": 0, "y": 0, "diameter": 10, "through": True, "face": face}])
         r, e = build_and_export(spec)
@@ -146,7 +146,7 @@ def test_durchgangsbohrung_ohne_restfilm(H):
 
 
 def test_nullpunkt_konsistent():
-    """Box, Zylinder und (zentriertes) Profil: Mitte der Unterseite = (0,0,0)."""
+    """Quader, Zylinder und zentriertes Profil: Nullpunkt in der Mitte der Unterseite (0,0,0)."""
     specs = [box(30, 20, 5),
              {"base": {"shape": "cylinder", "diameter": 30, "height": 5}},
              {"base": {"shape": "profile", "points": [[-15, -10], [15, -10], [15, 10], [-15, 10]], "height": 5}}]
@@ -165,13 +165,13 @@ def test_legacy_add_hole_unten_nicht_gespiegelt():
     S.add_pocket(pid, -20, -10, 10, 8, 2, face="<Z")
     S.set_expected_dimensions(pid, {"holes": [{"x": 30, "y": 15, "d": 6}]})
     assert S.validate(pid)["all_pass"]
-    # Taschenboden (Tiefe 2 von unten) liegt waagerecht bei Z=2 und muss bei (-20, -10) sitzen
+    # Taschenboden (Tiefe 2 von unten) liegt waagerecht bei Z=2 und muss bei (-20, -10) liegen
     floor = [f for f in S.PARTS[pid]["wp"].faces("%PLANE").vals() if abs(f.Center().z - 2) < 1e-6]
     assert len(floor) == 1
     assert (floor[0].Center().x, floor[0].Center().y) == (pytest.approx(-20), pytest.approx(-10))
 
 
-# ---------------------------------------------------------------- Fehlerfaelle
+# ---------------------------------------------------------------- Fehlerfälle
 
 def test_fehler_bohrung_ausserhalb():
     spec = box(100, 60, 20, [{"type": "hole", "x": 200, "y": 0, "diameter": 10, "through": True}])
@@ -225,14 +225,14 @@ def test_fehler_profil_nicht_zentriert_warnt():
 
 
 def test_eckenrundung_ist_keine_bohrung():
-    """Regression: Fillet-Zylinder R5 bei (45,25) darf eine fehlende Bohrung D10 nicht 'finden'."""
+    """Rückfallprüfung: Zylinder mit Rundung R5 bei (45,25) darf keine fehlende Bohrung D10 'finden'."""
     pid = S.create_base_body("box", 100, 60, 20)["part_id"]
     S.add_fillet_or_chamfer(pid, "fillet", 5)
     S.set_expected_dimensions(pid, {"holes": [{"x": 45, "y": 25, "d": 10}]})
     assert S.validate(pid)["all_pass"] is False
 
 
-# ---------------------------------------------------------------- Injection / Whitelist
+# ---------------------------------------------------------------- Einschleusungsversuche / Positivliste
 
 @pytest.mark.parametrize("feat", [
     {"type": "fillet", "edges": '|Z").cut(__import__("os").system("x"))#', "size": 1},
@@ -258,7 +258,7 @@ def test_dateiname_kein_pfadausbruch(tmp_out):
 
 
 def test_export_fehlgeschlagen_wird_gemeldet(tmp_path, monkeypatch):
-    """CadQuery wirft bei nicht schreibbarem Ziel keine Exception -> export_step muss es selbst melden."""
+    """CadQuery löst bei einem nicht beschreibbaren Ziel keine Ausnahme aus; export_step muss den Fehler selbst melden."""
     (tmp_path / "datei").write_text("x")
     monkeypatch.setattr(S, "OUT", str(tmp_path / "datei" / "unterordner"))
     r = build(box(10, 10, 10))

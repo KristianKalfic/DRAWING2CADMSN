@@ -1,4 +1,4 @@
-"""Vector measurement on synthetic sheets built with pymupdf."""
+"""Vektormessung auf synthetischen Zeichnungsblättern mit PyMuPDF."""
 
 import math
 from pathlib import Path
@@ -9,17 +9,17 @@ import pytest
 from d2c.vector import extract, suggest_scale, verify
 
 DEMO = Path(__file__).parent / "fixtures" / "demo_drawing.pdf"
-DEMO_FRONT_VIEW = (0.21, 0.202, 0.781, 0.333)  # regions of the demo drawing, page fractions
+DEMO_FRONT_VIEW = (0.21, 0.202, 0.781, 0.333)  # Bereiche der Demo-Zeichnung als Seitenanteile
 DEMO_TOP_VIEW = (0.21, 0.404, 0.781, 0.69)
 
-MM = 72 / 25.4  # PDF points per mm
-EDGE = 1.417  # stroke width (pt) of the visible edges in the BCT drawings
-THIN = 0.35  # centre lines and the like
-SHEET_W, SHEET_H = 420, 297  # A3 landscape, mm
+MM = 72 / 25.4  # PDF-Punkte je Millimeter
+EDGE = 1.417  # Strichbreite (pt) der sichtbaren Kanten in den BCT-Zeichnungen
+THIN = 0.35  # Mittellinien und ähnliche Elemente
+SHEET_W, SHEET_H = 420, 297  # A3 quer, mm
 
 
 def _sheet(path, draw, rotation=0):
-    """Save a blank A3 sheet on which draw(page) has put the geometry."""
+    """Speichert ein leeres A3-Blatt, auf das `draw(page)` die Geometrie gezeichnet hat."""
     doc = pymupdf.open()
     page = doc.new_page(width=SHEET_W * MM, height=SHEET_H * MM)
     draw(page)
@@ -29,23 +29,22 @@ def _sheet(path, draw, rotation=0):
 
 
 def _plate_pdf(path, scale, rotation=0):
-    """80 x 50 mm plate with a dia 30 hole at (30, 25) and a dia 16 hole at (65, 40), drawn at
-    `scale`. Its lower-left corner sits 60 mm right of and 80 mm above the sheet's lower-left."""
+    """Platte 80 × 50 mm mit einer Bohrung Ø30 bei (30, 25) und einer Bohrung Ø16 bei (65, 40), gezeichnet im Maßstab `scale`. Die linke untere Ecke liegt 60 mm rechts und 80 mm oberhalb der linken unteren Ecke des Blatts."""
 
-    def at(x, y):  # plate mm, y up -> PDF point, y down
+    def at(x, y):  # Plattenmaß in mm: y nach oben → PDF-Punkt, y nach unten
         return pymupdf.Point((60 + x * scale) * MM, (SHEET_H - 80 - y * scale) * MM)
 
     def draw(page):
         page.draw_rect(pymupdf.Rect(at(0, 50), at(80, 0)), width=EDGE)
         page.draw_circle(at(30, 25), 15 * scale * MM, width=EDGE)
         page.draw_circle(at(65, 40), 8 * scale * MM, width=EDGE)
-        page.draw_line(at(30, -5), at(30, 55), width=THIN)  # centre line, no visible edge
+        page.draw_line(at(30, -5), at(30, 55), width=THIN)  # Mittellinie, keine sichtbare Kante
 
     return _sheet(path, draw, rotation)
 
 
 def _region(x0, y0, x1, y1):
-    """Box in sheet mm from the lower-left corner -> region fractions, origin top-left."""
+    """Kasten in Blatt-mm ab der linken unteren Ecke → Bereichsanteile mit Ursprung oben links."""
     return (x0 / SHEET_W, 1 - y1 / SHEET_H, x1 / SHEET_W, 1 - y0 / SHEET_H)
 
 
@@ -55,14 +54,14 @@ def test_synthetic_circles_and_extent(tmp_path, scale):
     assert res["scale_used"] == scale
     assert res["extent_mm"] == pytest.approx([80, 50], abs=0.01)
     assert res["extent_basis"] == "größte Kontur"
-    hole30, hole16 = res["circles"]  # largest first
+    hole30, hole16 = res["circles"]  # größtes zuerst
     assert hole30["d_mm"] == pytest.approx(30, abs=0.01)
     assert hole16["d_mm"] == pytest.approx(16, abs=0.01)
-    # centres relative to the plate's lower-left corner: x right, y up, model mm
+    # Mittelpunkte relativ zur linken unteren Plattenecke: x nach rechts, y nach oben, Modell-mm
     x0, y0, *_ = res["contours"][0]["bbox_mm"]
     assert (hole30["cx"] - x0, hole30["cy"] - y0) == pytest.approx((30, 25), abs=0.01)
     assert (hole16["cx"] - x0, hole16["cy"] - y0) == pytest.approx((65, 40), abs=0.01)
-    # the widest stroke class carries the edges, the thin centre line is no edge
+    # Die breiteste Strichklasse stellt die Kanten dar; die dünne Mittellinie ist keine Kante.
     assert [(s["width"], s["visible"]) for s in res["styles"]] == [(EDGE, True), (THIN, False)]
 
 
@@ -75,7 +74,7 @@ def test_verify_claims(tmp_path):
     assert all(abs(v["deviation_mm"]) <= 0.01 for v in verdicts)
     assert verdicts[0]["n_candidates_within_tol"] == 1
 
-    (wrong,) = verify(res, ["d=17"])  # the closest circle is the dia 16 one
+    (wrong,) = verify(res, ["d=17"])  # Der nächstgelegene Kreis hat Ø16.
     assert wrong["status"] == "MISMATCH"
     assert wrong["measured_mm"] == pytest.approx(16, abs=0.01)
     assert wrong["deviation_mm"] == pytest.approx(-1, abs=0.01)
@@ -103,19 +102,19 @@ def test_region_filters(tmp_path):
     assert blank["contours"] == []
     assert blank["extent_mm"] is None and blank["extent_basis"] is None
 
-    hole = extract(pdf, region=_region(170, 140, 210, 180), scale=2)  # the dia 16 hole only
+    hole = extract(pdf, region=_region(170, 140, 210, 180), scale=2)  # nur die Bohrung Ø16
     (circle,) = hole["circles"]
     assert circle["d_mm"] == pytest.approx(16, abs=0.01)
     assert hole["extent_mm"] == pytest.approx([16, 16], abs=0.01)
-    # the origin is the region's lower-left corner: the centre lies 20 sheet mm = 10 model mm in
+    # Der Ursprung liegt an der linken unteren Ecke des Bereichs: Der Mittelpunkt ist 20 Blatt-mm beziehungsweise 10 Modell-mm nach rechts versetzt
     assert (circle["cx"], circle["cy"]) == pytest.approx((10, 10), abs=0.01)
 
 
 def test_rotated_page(tmp_path):
     pdf = _plate_pdf(tmp_path / "plate.pdf", 1, rotation=90)
-    assert extract(pdf)["extent_mm"] == pytest.approx([50, 80], abs=0.01)  # as displayed
+    assert extract(pdf)["extent_mm"] == pytest.approx([50, 80], abs=0.01)  # wie angezeigt
 
-    # regions are fractions of the displayed page: a box around the dia 16 hole
+    # Bereiche sind Anteile der angezeigten Seite: ein Kasten um die Bohrung Ø16
     page = pymupdf.open(pdf)[0]
     c = pymupdf.Point(125 * MM, (SHEET_H - 120) * MM) * page.rotation_matrix
     w, h, r = page.rect.width, page.rect.height, 12 * MM
@@ -139,10 +138,9 @@ def test_bezier_arc(tmp_path):
 
 
 def test_tessellated_circle_and_arc(tmp_path):
-    """Exports without Bezier curves approximate circles by polylines: a closed polyline is a
-    circle, an open one an arc (here 240 degrees across the 0 degree direction)."""
+    """Exporte ohne Bézierkurven nähern Kreise durch Polylinien an: Eine geschlossene Polylinie ist ein Kreis, eine offene ein Kreisbogen (hier 240° über die 0°-Richtung hinweg)."""
 
-    def ring(cx, cy, r, start, end, steps):  # polyline vertices on a circle, mm -> PDF point
+    def ring(cx, cy, r, start, end, steps):  # Eckpunkte eines Kreis-Polygons in mm → PDF-Punkt
         angles = [math.radians(start + (end - start) * i / steps) for i in range(steps + 1)]
         return [
             pymupdf.Point((cx + r * math.cos(a)) * MM, (cy + r * math.sin(a)) * MM) for a in angles
@@ -179,7 +177,7 @@ def test_extract_rejects_bad_arguments(tmp_path, kwargs, message):
 
 
 def test_page_without_vector_geometry(tmp_path):
-    """A scan or blank page has nothing to measure: empty results, no error."""
+    """Ein Scan oder leeres Blatt enthält nichts Messbares: leere Ergebnisse, kein Fehler."""
     pdf = _sheet(tmp_path / "blank.pdf", lambda page: None)
     res = extract(pdf)
     assert res["styles"] == [] and res["circles"] == [] and res["extent_mm"] is None
@@ -187,7 +185,7 @@ def test_page_without_vector_geometry(tmp_path):
     assert suggest_scale(pdf, [10, 20]) == []
 
 
-PLATE_DIMS = [80, 50, 30, 16, 35, 15]  # plate size, hole diameters, hole spacing in x and y
+PLATE_DIMS = [80, 50, 30, 16, 35, 15]  # Plattengröße, Bohrungsdurchmesser und Bohrungsabstände in x- und y-Richtung
 
 
 def test_suggest_scale_synthetic(tmp_path):
@@ -198,7 +196,7 @@ def test_suggest_scale_synthetic(tmp_path):
 
 
 def test_suggest_scale_keeps_non_standard_ratio(tmp_path):
-    """0.75 is no standard scale. It must still beat chance hits on standard scales."""
+    """0,75 ist kein Normmaßstab. Das Verhältnis muss dennoch besser abschneiden als zufällige Treffer auf Normmaßstäben."""
     best = suggest_scale(_plate_pdf(tmp_path / "plate.pdf", 0.75), PLATE_DIMS)[0]
     assert best["scale"] == pytest.approx(0.75, abs=0.001)
     assert best["standard"] is None
@@ -211,7 +209,7 @@ def test_suggest_scale_rejects_non_positive_value(tmp_path):
 
 
 def test_demo_front_view_thickness():
-    """The plate thickness is not dimensioned on the demo drawing; the front view gives it at 1:1."""
+    """Die Plattendicke ist in der Demo-Zeichnung nicht bemaßt; die Vorderansicht zeigt sie im Maßstab 1:1."""
     res = extract(DEMO, region=DEMO_FRONT_VIEW, scale=1)
     assert [v["status"] for v in verify(res, ["L=10", "L=80", "L=25"])] == ["ok"] * 3
 

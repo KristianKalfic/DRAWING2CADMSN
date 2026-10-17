@@ -1,4 +1,4 @@
-"""STEP AP242 with semantic PMI, review colors and GLB, written and then read back like a CAD system would."""
+"""STEP AP242 mit semantischem PMI, Prüfvermerkfarben und GLB; die Datei wird wie in einem CAD-System geschrieben und anschließend erneut eingelesen."""
 import json
 import struct
 from pathlib import Path
@@ -14,10 +14,10 @@ from d2c.ops import Op, build
 from d2c.spec import PartSpec
 
 AP242 = "AP242_MANAGED_MODEL_BASED_3D_ENGINEERING_MIM_LF"
-STEEL, ORANGE, GREEN = "#99abb0", "#ff8000", "#65f073"  # the colors as read_pmi reports them
+STEEL, ORANGE, GREEN = "#99abb0", "#ff8000", "#65f073"  # Die von `read_pmi` gemeldeten Farben.
 OPS = TypeAdapter(list[Op])
 
-# The demo bracket: plate 80 x 50 (corner R5) at z 0..10, boss O30 up to z 25, bore O16, four O6.6 in the plate.
+# Demo-Halterung: Platte 80 × 50 (Ecke R5) von z=0 bis 10, Ansatz Ø30 bis z=25, Bohrung Ø16 und vier Bohrungen Ø6,6 in der Platte.
 DEMO_OPS = [
     {"op": "extrude", "profile": {"type": "rect", "center": [0, 0], "w": 80, "h": 50, "corner_radius": 5},
      "plane": {"name": "XY"}, "distance": 10},
@@ -30,7 +30,7 @@ DEMO_OPS = [
 HOLES = [{"d": 16, "at": [0, 0, 0], "axis": [0, 0, 1], "dim_ids": ["d16"]}] + [
     {"d": 6.6, "at": [x, y, 0], "axis": [0, 0, 1], "dim_ids": ["d66"]} for x in (30, -30) for y in (15, -15)
 ]
-# plate 30 x 20 x 10, the base of the tests that need a cylinder and nothing else
+# Platte 30 × 20 × 10; Grundlage für Tests, die nur einen Zylinder benötigen
 PLATE = [{"op": "extrude", "profile": {"type": "rect", "center": [0, 0], "w": 30, "h": 20},
           "plane": {"name": "XY"}, "distance": 10}]
 
@@ -40,7 +40,7 @@ def built(ops: list[dict]) -> cq.Shape:
 
 
 def drilled(**hole) -> cq.Shape:
-    """The plate with a through hole O10 at the center, or `hole` changing it."""
+    """Die Platte mit einer durchgehenden Bohrung Ø10 in der Mitte oder einer durch `hole` geänderten Bohrung."""
     drill = {"op": "holes", "plane": {"name": "XY", "offset": 10}, "positions": [[0, 0]], "d": 10}
     return built(PLATE + [drill | hole])
 
@@ -51,23 +51,23 @@ def dimension(dim_id: str, kind: str, value: float, text: str, **more) -> dict:
 
 def demo_spec() -> PartSpec:
     return PartSpec.model_validate({
-        "name": "demo_bracket", "drawing": "Demo Teil (A)/demo drawing.pdf", "title": "D2C Demo Bracket",
+        "name": "demo_bracket", "drawing": "Demo Teil (A)/demo drawing.pdf", "title": "D2C Demo-Halterung",
         "scale": "1:1", "views": [], "features": [],
         "dimensions": [
             dimension("d16", "diameter", 16, "Ø16 H7", fit="H7"),
             dimension("d66", "diameter", 6.6, "4x Ø6,6"),
             dimension("t10", "length", 10, "", assumed=True, confidence=0.6,
-                      assumption_basis="plate thickness not dimensioned; measured in front view at scale 1:1"),
+                      assumption_basis="Plattendicke nicht bemaßt; in der Vorderansicht bei Maßstab 1:1 gemessen"),
         ],
         "expected": {"bbox": [80, 50, 25], "holes": HOLES},
-        "review": [{"id": "rv1", "refs": ["t10"], "issue": "missing", "assumption": "plate thickness 10 mm",
-                    "reason": "not dimensioned; measured in the front view",
+        "review": [{"id": "rv1", "refs": ["t10"], "issue": "missing", "assumption": "Plattendicke 10 mm",
+                    "reason": "nicht bemaßt; in der Vorderansicht gemessen",
                     "mark_near": [[35, 0, 0], [35, 0, 10]]}],
     })
 
 
 def report(spec: PartSpec, lost: tuple[int, ...] = ()) -> dict:
-    """The dims of a build report in the checks format: bbox entries, then a hole entry each, found unless lost."""
+    """Die Maßeinträge eines Prüfberichts im Format von `checks`: zuerst die Begrenzungsmaße, danach je eine Bohrung, sofern sie nicht verloren ging."""
     sizes = [{"check": f"bbox_{axis}", "expected": want, "actual": want, "ok": True, "dim_ids": []}
              for axis, want in zip("xyz", spec.expected.bbox)]
     holes = [{"check": "hole", "expected": h.model_dump(exclude={"dim_ids"}), "actual": {"d": h.d, "dist": 0.0},
@@ -81,7 +81,7 @@ def marks_of(spec: PartSpec) -> list[dict]:
 
 @pytest.fixture(scope="module")
 def demo(tmp_path_factory):
-    """The demo bracket exported once: shape, spec, PMI entries, marks, the file and what write_step returned."""
+    """Die einmal exportierte Demo-Halterung: Körper, Spezifikation, PMI-Einträge, Markierungen, Datei und Rückgabewert von `write_step`."""
     spec, ops = demo_spec(), OPS.validate_python(DEMO_OPS)
     shape = build(ops)[0].val()
     pmi = pmi_from(spec, ops, shape, report(spec))
@@ -99,7 +99,7 @@ def export(tmp_path, shape: cq.Shape, *pmi: dict, marks=(), threads=()) -> str:
 
 
 def bore_entry(shape: cq.Shape, **changes) -> dict:
-    """A diameter entry for the one cylinder of `shape`."""
+    """Ein Durchmessereintrag für den einzigen Zylinder in `shape`."""
     face = next(f for f in shape.Faces() if f.geomType() == "CYLINDER")
     entry = {"type": "diameter", "face": face, "value": 10.0, "tol_upper": None, "tol_lower": None, "fit": None}
     return entry | changes
@@ -119,7 +119,7 @@ def test_write_step_leaves_other_exports_on_ap214(demo, tmp_path):
 
 
 def test_hole_fit_written_as_h7(demo):
-    # OCCT 7.9.3 writes the grade of a fit 2 too high; write_step compensates, this pins the result
+    # OCCT 7.9.3 schreibt die Passungsklasse um 2 zu hoch; `write_step` gleicht das aus. Dieser Test sichert das Ergebnis ab.
     assert "DIMENSIONAL_SIZE" in demo.text
     assert "LIMITS_AND_FITS('H','hole','7','')" in demo.text
     bores = [d for d in read_pmi(demo.path)["dimensions"] if d["type"] == "diameter"]
@@ -142,7 +142,7 @@ def test_fit_round_trip(tmp_path, fit, written):
     assert [d["fit"] for d in read_pmi(path)["dimensions"]] == [fit]
 
 
-@pytest.mark.parametrize("fit", ["H1", "H19", "Q7"])  # IT1 cannot be written right, IT19 and the letter Q do not exist
+@pytest.mark.parametrize("fit", ["H1", "H19", "Q7"])  # IT1 lässt sich nicht korrekt schreiben; IT19 und der Buchstabe Q existieren nicht.
 def test_unwritable_fit_is_left_out(tmp_path, fit):
     shape = drilled()
     path = export(tmp_path, shape, bore_entry(shape, fit=fit))
@@ -165,7 +165,7 @@ def test_assumed_thickness_as_semantic_distance(demo):
     assert thickness["value"] == 10.0
     assert sorted(thickness["faces"]) == ["plane z=0", "plane z=10"]
     assert thickness["descriptions"] == [
-        "ANNAHME: plate thickness 10 mm - not dimensioned; measured in the front view - bitte prufen"]
+        "ANNAHME: Plattendicke 10 mm - nicht bemasst; in der Vorderansicht gemessen - bitte prufen"]
 
 
 def test_pmi_from_skips_what_it_cannot_place(demo):
@@ -179,16 +179,16 @@ def test_pmi_from_skips_what_it_cannot_place(demo):
         return [e for e in entries(spec.model_copy(update={"review": [review]})) if e[0] == "distance"]
 
     assert sorted(entries()) == [("diameter", 6.6)] * 4 + [("diameter", 16.0), ("distance", 10.0)]
-    # a hole the build check did not find gets no diameter; neither does one whose dimension is no diameter
+    # Für eine vom Aufbau-Test nicht gefundene Bohrung wird kein Durchmesser ausgegeben; dasselbe gilt, wenn ihr Maß kein Durchmessermaß ist.
     assert ("diameter", 16.0) not in entries(lost=(0,))
     thread = spec.dimensions[1].model_copy(update={"kind": "thread"})
     dimensions = [spec.dimensions[0], thread, spec.dimensions[2]]
     assert entries(spec.model_copy(update={"dimensions": dimensions})) == [("diameter", 16.0), ("distance", 10.0)]
 
     assert distances(issue="ambiguous") == []
-    assert distances(mark_near=[(35, 0, 0)]) == []  # one plane only
-    assert distances(mark_near=[(35, 0, 10), (40, 0, 5)]) == []  # the planes z=10 and x=40 are not parallel
-    assert distances(mark_near=[(35, 0, 10), (12, 0, 25)]) == []  # z=10 and z=25 are 15 apart, not the assumed 10
+    assert distances(mark_near=[(35, 0, 0)]) == []  # nur eine Ebene
+    assert distances(mark_near=[(35, 0, 10), (40, 0, 5)]) == []  # Die Ebenen z=10 und x=40 sind nicht parallel.
+    assert distances(mark_near=[(35, 0, 10), (12, 0, 25)]) == []  # z=10 und z=25 liegen 15 auseinander, nicht die angenommenen 10.
 
 
 def test_mark_and_thread_colors(demo, tmp_path):
@@ -197,13 +197,13 @@ def test_mark_and_thread_colors(demo, tmp_path):
     assert info["layers"] == {"ASSUMED_CHECK": 2}
     assert demo.text.count("ADVANCED_FACE('PRUFEN rv1'") == 2
 
-    # an M5 hole is drilled to 4.2: its cylinder turns green
+    # Eine M5-Bohrung erhält den Durchmesser 4,2; ihr Zylinder wird grün.
     tapped = drilled(d=5, kind="tapped", thread="M5")
     threads = [{"at": [0, 0, 0], "axis": [0, 0, 1], "d": 4.2}]
     path = str(tmp_path / "tapped.step")
     assert write_step(tapped, path, name="tapped", marks=[], pmi=[], threads=threads)["colored_faces"] == 1
     assert read_pmi(path)["colors"] == {STEEL: 1, GREEN: 1}
-    # a thread entry that matches no cylinder colors nothing
+    # Ein Gewindeeintrag, der zu keinem Zylinder passt, färbt nichts ein.
     miss = [{"at": [0, 0, 0], "axis": [0, 0, 1], "d": 5.0}, {"at": [1, 0, 0], "axis": [0, 0, 1], "d": 4.2}]
     assert read_pmi(export(tmp_path, tapped, threads=miss))["colors"] == {STEEL: 1}
 
@@ -218,7 +218,7 @@ def test_a_marked_thread_face_stays_orange(tmp_path):
 
 
 def test_two_marks_on_one_face_share_one_color(tmp_path):
-    top = [(35, 0, 10)]  # the plate top, for both marks
+    top = [(35, 0, 10)]  # die Oberseite der Platte für beide Markierungen
     marks = [{"id": "rv1", "near": top}, {"id": "rv2", "near": top + [(-35, 0, 10)]}]
     path = export(tmp_path, built(DEMO_OPS), marks=marks)
     assert Path(path).read_text().count("ADVANCED_FACE('PRUFEN rv1 rv2'") == 1
@@ -226,7 +226,7 @@ def test_two_marks_on_one_face_share_one_color(tmp_path):
 
 
 def test_solid_with_a_location_keeps_its_faces(tmp_path):
-    box = cq.Workplane().box(10, 10, 10).val()  # CadQuery's box carries a location, which hides its faces from XCAF
+    box = cq.Workplane().box(10, 10, 10).val()  # Der Quader von CadQuery hat eine Lageangabe, die seine Flächen für XCAF verdeckt.
     path = export(tmp_path, box, marks=[{"id": "m", "near": [(0, 0, 5)]}])
     assert read_pmi(path)["colors"] == {STEEL: 1, ORANGE: 1}
 
@@ -255,7 +255,7 @@ def test_glb_materials(demo, tmp_path):
     assert 2 <= len(materials) <= 3
     assert {m["pbrMetallicRoughness"]["metallicFactor"] for m in materials} == {0.0}
     assert {m["pbrMetallicRoughness"]["roughnessFactor"] for m in materials} == {0.8}
-    # glTF drops face names: marks.json says which review ids the orange material stands for
+    # glTF verwirft Flächennamen; `marks.json` ordnet dem orangefarbenen Material die Prüfvermerk-IDs zu.
     assert mapping == {ORANGE: ["rv1"]}
     assert json.loads((tmp_path / "marks.json").read_text()) == mapping
 
@@ -263,7 +263,7 @@ def test_glb_materials(demo, tmp_path):
 def test_glb_leaves_no_mesh_on_the_callers_shape(tmp_path):
     cylinder = cq.Workplane().cylinder(10, 5).val()
     assert write_glb(cylinder, str(tmp_path / "cylinder.glb"), [], []) == {}
-    assert cylinder.BoundingBox().xlen == pytest.approx(10)  # a mesh left on the shape would make it 10.07
+    assert cylinder.BoundingBox().xlen == pytest.approx(10)  # Ein am Körper belassenes Netz würde das Maß auf 10,07 vergrößern.
 
 
 def test_reimport_valid_and_volume(demo):

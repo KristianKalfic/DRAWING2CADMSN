@@ -1,4 +1,4 @@
-"""Op-list sessions on real geometry: build rules, persistence, export files and the review list."""
+"""Sitzungstests mit echter Geometrie: Aufbauregeln, Speicherung, Exportdateien und Prüfliste."""
 import json
 import unicodedata
 from pathlib import Path
@@ -18,15 +18,15 @@ def dimension(dim_id: str, kind: str, value: float, text: str, **more) -> dict:
 
 def make_spec(name: str = "plate") -> PartSpec:
     return PartSpec.model_validate({
-        "name": name, "drawing": "Demo/plate.pdf", "title": "Plate", "scale": "1:1", "views": [], "features": [],
+        "name": name, "drawing": "Demo/plate.pdf", "title": "Platte", "scale": "1:1", "views": [], "features": [],
         "dimensions": [
             dimension("w", "length", 20, "20"),
             dimension("d1", "diameter", 4, "Ø4"),
-            dimension("t", "length", 5, "", assumed=True, confidence=0.6, assumption_basis="read from the side view"),
+            dimension("t", "length", 5, "", assumed=True, confidence=0.6, assumption_basis="aus der Seitenansicht abgelesen"),
         ],
         "expected": PLATE,
-        "review": [{"id": "rv1", "refs": ["t"], "issue": "missing", "assumption": "thickness 5 mm",
-                    "reason": "not dimensioned", "mark_near": [[0, 0, 5]]}],
+        "review": [{"id": "rv1", "refs": ["t"], "issue": "missing", "assumption": "Dicke 5 mm",
+                    "reason": "nicht bemaßt", "mark_near": [[0, 0, 5]]}],
         "general_tolerance": "ISO 2768-m",
     })
 
@@ -41,7 +41,7 @@ def hole(d: float, **more) -> dict:
 
 
 def section(markdown: str, title: str) -> str:
-    """The text under the `## title` heading, up to the next heading."""
+    """Der Text unter der Überschrift `## <Titel>` bis zur nächsten Überschrift."""
     return markdown.split(f"## {title}\n", 1)[1].split("\n## ", 1)[0]
 
 
@@ -81,12 +81,12 @@ def test_edit_delete_move_op(session):
 
     assert session.edit_op("plate", 1, hole(2.5))["op_index"] == 1
     assert session.ops["plate"][1]["d"] == 2.5
-    assert session.edit_op("plate", 0, box(mode="cut"))["error"]  # a build error leaves the list as it was
+    assert session.edit_op("plate", 0, box(mode="cut"))["error"]  # Ein Aufbaufehler lässt die Liste unverändert.
     assert session.ops["plate"][0] == box()
 
     assert session.move_op("plate", 2, 1)["op_index"] == 1
     assert [op["d"] for op in session.ops["plate"][1:]] == [4, 2.5]
-    assert session.move_op("plate", 1, 0)["error"]  # a hole before the solid does not build
+    assert session.move_op("plate", 1, 0)["error"]  # Eine Bohrung vor dem Grundkörper kann nicht aufgebaut werden.
     assert session.ops["plate"][0] == box()
 
     assert session.delete_op("plate", 1)["op_index"] == 1
@@ -159,8 +159,8 @@ def test_review_lists_every_assumed_dimension(session):
     session.apply("plate", box())
     markdown = (Path(session.export("plate")["files"]["review"])).read_text()
     assumptions = section(markdown, "Annahmen und offene Punkte")
-    assert "| rv1 | t | fehlt | thickness 5 mm | not dimensioned | - | Flächen: 1 |" in assumptions
-    assert "Plate" in markdown and "ISO 2768-m" in markdown
+    assert "| rv1 | t | fehlt | Dicke 5 mm | nicht bemaßt | - | Flächen: 1 |" in assumptions
+    assert "Platte" in markdown and "ISO 2768-m" in markdown
     assert "| Außenmaß X |" in markdown
     assert to_json(session.specs["plate"], session.ops["plate"], session.last["plate"])["assumptions"][0]["issue"] == "missing"
 
@@ -185,8 +185,8 @@ def test_review_lists_unreferenced_op_values(session):
     session.apply("plate", hole(3))
     markdown = Path(session.export("plate")["files"]["review"]).read_text()
     unreferenced = section(markdown, "Werte ohne Maßbezug")
-    assert "| 1 | d | 3 |" in unreferenced  # the hole diameter matches no dimension
-    assert "profile.w" not in unreferenced  # 20 equals dimension w by value
+    assert "| 1 | d | 3 |" in unreferenced  # Der Bohrungsdurchmesser entspricht keinem Maß.
+    assert "profile.w" not in unreferenced  # Der Wert 20 entspricht dem Maß `w`.
     assert "profile.w" not in section(markdown, "Rückverfolgbarkeit")
 
 
@@ -248,7 +248,7 @@ def test_state_after_apply(session):
     assert state["ops"] == [box()]
     assert state["last_report"] is report
     assert state["spec_summary"] == {
-        "name": "plate", "title": "Plate", "scale": "1:1", "dimensions": 3, "review_items": 1,
+        "name": "plate", "title": "Platte", "scale": "1:1", "dimensions": 3, "review_items": 1,
         "expected_bbox": (20, 10, 5)}
 
 

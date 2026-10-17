@@ -4,7 +4,7 @@ from d2c.spec import PartSpec
 
 
 def minimal_spec() -> dict:
-    """Smallest valid spec as a plain dict, fresh on every call, so a test breaks exactly one rule."""
+    """Minimal gültige Spezifikation als normales Dictionary, bei jedem Aufruf neu erstellt, damit jeder Test genau eine Regel verletzt."""
     return {
         "name": "Flansch",
         "drawing": "Flansch/Flansch.pdf",
@@ -25,7 +25,7 @@ def minimal_spec() -> dict:
 
 def review_item(item_id: str = "r1", refs: tuple[str, ...] = ("d1",), **changes) -> dict:
     return {"id": item_id, "refs": list(refs), "issue": "low_confidence",
-            "assumption": "diameter 19 as printed", "reason": "digits are blurry", **changes}
+            "assumption": "Durchmesser 19 laut Zeichnung", "reason": "Ziffern sind unscharf", **changes}
 
 
 def reject(spec: dict, match: str) -> None:
@@ -37,14 +37,14 @@ def test_minimal_valid():
     spec = PartSpec.model_validate(minimal_spec())
     assert (spec.page, spec.units, spec.notes, spec.general_tolerance) == (1, "mm", [], None)
     assert spec.expected.bbox == (19.0, 19.0, 76.2)
-    assert PartSpec.model_validate_json(spec.model_dump_json()) == spec  # spec.json round trip
-    # extra="forbid" on the root and on nested models
+    assert PartSpec.model_validate_json(spec.model_dump_json()) == spec  # Rundlauf für `spec.json`
+    # `extra="forbid"` gilt für das Wurzelmodell und verschachtelte Modelle.
     reject({**minimal_spec(), "colour": "red"}, "colour")
     nested = minimal_spec()
     nested["dimensions"][0]["colour"] = "red"
     reject(nested, "colour")
     reject({**minimal_spec(), "units": "inch"}, "units")
-    # sizes are positive and finite: NaN, inf, zero or negative would let later size comparisons pass silently
+    # Maße müssen positiv und endlich sein: NaN, inf, null oder negative Werte könnten spätere Größenvergleiche fälschlich bestehen lassen.
     for bbox in ([float("nan"), 19.0, 76.2], [19.0, float("inf"), 76.2], [0, 19.0, 76.2], [19.0, 19.0, -76.2]):
         bad = minimal_spec()
         bad["expected"]["bbox"] = bbox
@@ -52,13 +52,13 @@ def test_minimal_valid():
 
 
 def test_duplicate_ids_rejected():
-    # one element per group that reuses an id of another group (or of its own group)
+    # Je Gruppe ein Element, das eine ID aus einer anderen oder derselben Gruppe wiederverwendet.
     clashes = [
-        ("views", {"id": "d1", "kind": "top", "scale": "1:1"}),  # view vs dimension
-        ("dimensions", minimal_spec()["dimensions"][0]),  # dimension vs dimension
-        ("features", {"id": "v1", "type": "other", "dim_ids": []}),  # feature vs view
-        ("notes", {"id": "f1", "text": "R1", "source": None}),  # note vs feature
-        ("review", review_item("d2")),  # review item vs dimension
+        ("views", {"id": "d1", "kind": "top", "scale": "1:1"}),  # Ansicht und Maß
+        ("dimensions", minimal_spec()["dimensions"][0]),  # Maß und Maß
+        ("features", {"id": "v1", "type": "other", "dim_ids": []}),  # Konstruktionsmerkmal und Ansicht
+        ("notes", {"id": "f1", "text": "R1", "source": None}),  # Hinweis und Konstruktionsmerkmal
+        ("review", review_item("d2")),  # Prüfeintrag und Maß
     ]
     for group, element in clashes:
         spec = minimal_spec()
@@ -82,7 +82,7 @@ def test_unknown_ref_rejected():
     spec = minimal_spec()
     spec["notes"] = [{"id": "n1", "text": "Radien R1", "source": {"view": "v9", "cell": None}}]
     reject(spec, "v9")
-    # a review ref may name a dimension, a feature or a note, but not a view or another review item
+    # `refs` darf auf ein Maß, Konstruktionsmerkmal oder einen Hinweis verweisen, aber nicht auf eine Ansicht oder einen anderen Prüfeintrag.
     spec = minimal_spec()
     spec["notes"] = [{"id": "n1", "text": "Radien R1", "source": {"view": "v1", "cell": None}}]
     spec["review"] = [review_item(refs=("d1", "f1", "n1"), issue="ambiguous")]
@@ -96,14 +96,14 @@ def test_unknown_ref_rejected():
 def test_low_confidence_requires_review():
     spec = minimal_spec()
     spec["dimensions"][0]["confidence"] = 0.7
-    reject(spec, r"Maß 'd1': `confidence` 0\.7 < 0\.8; ein Prüfeintrag")  # names the real cause
+    reject(spec, r"Maß 'd1': `confidence` 0\.7 < 0\.8; ein Prüfeintrag")  # nennt die tatsächliche Ursache
     spec["review"] = [review_item()]
     PartSpec.model_validate(spec)
-    # the threshold is strictly below 0.8
+    # Die Schwelle liegt strikt unter 0,8.
     spec["dimensions"][0]["confidence"] = 0.8
     spec["review"] = []
     PartSpec.model_validate(spec)
-    spec["review"] = [review_item()]  # reviewed, so only the 0..1 range can reject these
+    spec["review"] = [review_item()]  # Ein Prüfvermerk liegt vor; diese Fälle scheitern daher nur bei einem Wert außerhalb von 0 bis 1.
     for confidence in (-0.1, 1.1):
         spec["dimensions"][0]["confidence"] = confidence
         reject(spec, "confidence")
@@ -111,19 +111,19 @@ def test_low_confidence_requires_review():
 
 def test_assumed_requires_basis_and_review():
     spec = minimal_spec()
-    # printed nowhere, so the text is empty and is not compared with the value
+    # Nirgends abgedruckt: Der Text bleibt leer und wird nicht mit dem Wert verglichen.
     spec["dimensions"].append({"id": "d3", "kind": "length", "value": 20.0, "text": "",
                                "source": None, "confidence": 0.9, "assumed": True})
-    reject(spec, "d3")  # neither basis nor review
+    reject(spec, "d3")  # Weder Begründungsgrundlage noch Prüfeintrag
     spec["review"] = [review_item(refs=("d3",), issue="missing")]
-    reject(spec, "d3")  # review but no basis
+    reject(spec, "d3")  # Prüfeintrag ohne Begründungsgrundlage
     spec["dimensions"][2]["assumption_basis"] = "  "
-    reject(spec, "d3")  # blank basis
-    spec["dimensions"][2]["assumption_basis"] = "width equals the 20 mm bore pitch"
+    reject(spec, "d3")  # leere Begründungsgrundlage
+    spec["dimensions"][2]["assumption_basis"] = "Breite entspricht dem Lochabstand von 20 mm"
     PartSpec.model_validate(spec)
     spec["review"] = []
-    reject(spec, r"Maß 'd3': `assumed=true`; ein Prüfeintrag")  # basis but no review, confidence is fine
-    # review entries need a real assumption and reason
+    reject(spec, r"Maß 'd3': `assumed=true`; ein Prüfeintrag")  # Begründungsgrundlage vorhanden, aber kein Prüfeintrag; die Sicherheit reicht aus.
+    # Prüfeinträge benötigen eine konkrete Annahme und Begründung.
     for field in ("assumption", "reason"):
         spec["review"] = [review_item(refs=("d3",), issue="missing", **{field: " "})]
         reject(spec, "r1")
@@ -131,13 +131,13 @@ def test_assumed_requires_basis_and_review():
 
 def test_text_value_mismatch_rejected():
     spec = minimal_spec()
-    spec["dimensions"][1]["value"] = 762.0  # "76,2" read as 762
+    spec["dimensions"][1]["value"] = 762.0  # „76,2“ wird als 762 gelesen.
     reject(spec, "d2")
     for text, value in [("76,2", 76.0), ("Ø", 6.0), ("", 6.0), ("2x Ø6,6", 66.0), ("M8", 6.8)]:
         spec = minimal_spec()
         spec["dimensions"][1].update(text=text, value=value)
         reject(spec, "d2")
-    # every printed form must match one of its numbers
+    # Jede gedruckte Schreibweise muss einer der Zahlen entsprechen.
     for text, value in [("76,2", 76.2), ("76.2", 76.2), ("2x Ø6,6", 6.6), ("2x Ø6,6", 2.0),
                         ("Ø6 h10", 6.0), ("31 -0,1", 31.0), ("M8", 8.0), ("45°", 45.0)]:
         spec = minimal_spec()
@@ -159,7 +159,7 @@ def test_bad_cell_rejected():
         spec = minimal_spec()
         spec["dimensions"][0]["source"]["cell"] = cell
         reject(spec, "cell")
-    for cell in (None, "A1", "F8"):  # None: drawings without a grid
+    for cell in (None, "A1", "F8"):  # `None`: Zeichnungen ohne Raster
         spec = minimal_spec()
         spec["dimensions"][0]["source"]["cell"] = cell
         PartSpec.model_validate(spec)
@@ -170,7 +170,7 @@ def test_umlaut_name_ok():
         spec = minimal_spec()
         spec["name"] = name
         assert PartSpec.model_validate(spec).name == name
-    for name in ("", "a/b", "../x", "a b", "a.b", "Flansch\n"):  # the name becomes a folder name
+    for name in ("", "a/b", "../x", "a b", "a.b", "Flansch\n"):  # Der Name wird als Ordnername verwendet.
         spec = minimal_spec()
         spec["name"] = name
         reject(spec, "name")
@@ -183,7 +183,7 @@ def test_hole_feature_requires_expected_hole():
     hole = {"d": 19.0, "at": [0, 0, 0], "axis": [0, 0, 1], "dim_ids": ["d1"]}
     spec["expected"]["holes"] = [hole]
     PartSpec.model_validate(spec)
-    # a hole needs a positive diameter, finite coordinates and an axis direction
+    # Eine Bohrung benötigt einen positiven Durchmesser, endliche Koordinaten und eine Achsrichtung.
     for changes, match in [({"d": 0}, r"holes\.0\.d"), ({"d": -6.6}, r"holes\.0\.d"),
                            ({"at": [float("nan"), 0, 0]}, r"holes\.0\.at")]:
         spec["expected"]["holes"] = [{**hole, **changes}]
@@ -198,7 +198,7 @@ def test_tolerance_fields_validated():
         spec["dimensions"][1].update(changes)
         return spec
 
-    # "31 -0,1": an upper deviation of 0 is set, not missing
+    # „31 -0,1“: Die obere Abweichung 0 ist angegeben, nicht fehlend.
     PartSpec.model_validate(with_dim(tol_upper=0, tol_lower=-0.1))
     PartSpec.model_validate(with_dim(tol_upper=0.1, tol_lower=0))
     PartSpec.model_validate(with_dim(tol_upper=0.05, tol_lower=0.05))
