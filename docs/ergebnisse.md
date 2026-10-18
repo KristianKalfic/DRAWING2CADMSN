@@ -16,7 +16,7 @@ Letzter vollständiger Lauf vom 18.10.2026 mit Claude Sonnet: Jede Zeichnung wur
 | Übereinstimmung mit der Referenz im Volumen (höchstens 1 %) | 14 von 21 bewertbaren Teilen |
 | Prüfeinträge insgesamt, jeder im Modell markiert | 39 |
 | Dauer je Teil im Mittel | rund 3 Minuten |
-| Kosten je Teil im Mittel | rund 0,45 USD |
+| Kosten je Teil im Mittel | rund 0,49 USD |
 
 Erläuterungen:
 

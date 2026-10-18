@@ -21,7 +21,7 @@ Last full run with Claude Sonnet on 22 drawings (21 sample parts and one changed
 | Bounding box within 0.05 mm of the reference | 20 of 21 |
 | Volume within 1 % of the reference | 14 of 21 |
 | Full match with the reference (volume, bounding box, hole diameters) | 10 of 21 |
-| Duration / cost per part (mean) | about 3 minutes / about 0.45 USD |
+| Duration / cost per part (mean) | about 3 minutes / about 0.49 USD |
 
 "Server checks passed" means the model is consistent with the specification the language model captured. Whether that specification matches the drawing is measured separately against the reference models with `scripts/eval_refs.py`, which the server never sees. Method and per-part results: [docs/ergebnisse.md](docs/ergebnisse.md) (German).
 
