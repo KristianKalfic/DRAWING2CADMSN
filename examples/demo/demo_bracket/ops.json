@@ -1,0 +1,91 @@
+[
+  {
+    "op": "extrude",
+    "profile": {
+      "type": "rect",
+      "center": [
+        0,
+        0
+      ],
+      "w": 80,
+      "h": 50,
+      "corner_radius": 5
+    },
+    "plane": {
+      "name": "XY"
+    },
+    "distance": 10,
+    "refs": {
+      "profile.w": "d80",
+      "profile.h": "d50",
+      "profile.corner_radius": "r5",
+      "distance": "t10"
+    }
+  },
+  {
+    "op": "extrude",
+    "profile": {
+      "type": "circle",
+      "center": [
+        0,
+        0
+      ],
+      "d": 30
+    },
+    "plane": {
+      "name": "XY",
+      "offset": 10
+    },
+    "distance": 15,
+    "refs": {
+      "profile.d": "d30",
+      "plane.offset": "t10"
+    }
+  },
+  {
+    "op": "holes",
+    "plane": {
+      "name": "XY",
+      "offset": 25
+    },
+    "positions": [
+      [
+        0,
+        0
+      ]
+    ],
+    "d": 16,
+    "refs": {
+      "d": "d16"
+    }
+  },
+  {
+    "op": "holes",
+    "plane": {
+      "name": "XY",
+      "offset": 10
+    },
+    "positions": [
+      [
+        30,
+        15
+      ],
+      [
+        -30,
+        15
+      ],
+      [
+        30,
+        -15
+      ],
+      [
+        -30,
+        -15
+      ]
+    ],
+    "d": 6.6,
+    "refs": {
+      "d": "d66"
+    }
+  }
+]

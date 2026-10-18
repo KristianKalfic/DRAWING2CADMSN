@@ -7,13 +7,13 @@
 // ---------------------------------------------------------------------------
 // CadQuery ist Z-up, glTF ist Y-up: diese Kamerapositionen wurden am Demoteil kalibriert.
 const VIEWS = { front: "0deg 90deg auto", top: "0deg 0deg auto", side: "90deg 90deg auto", iso: "45deg 60deg auto" };
-const VIEW_BUTTONS = [["front", "Vorne"], ["top", "Oben"], ["side", "Seite"], ["iso", "Iso"]];
+const VIEW_BUTTONS = [["front", "Front"], ["top", "Top"], ["side", "Side"], ["iso", "Iso"]];
 const GLOW = [0.5, 0.12, 0]; // Emissionsfaktor der orangefarbenen Flächen, während eine Prüfzeile überfahren wird
 const DIMMED = 0.35; // Farbanteil, den die anderen Materialien solange behalten
 // Ränder des Blattrahmens als Anteile der dargestellten Seite, an der Demo-Zeichnung kalibriert.
 const FRAME = { l: 0.048, t: 0.034, r: 0.047, b: 0.034 };
 const MAX_UPLOAD = 20 * 1024 * 1024;
-const STAGES = [["read", "LESEN", "A"], ["describe", "BESCHREIBEN", "B"], ["build", "KONSTRUIEREN", "C"], ["check", "PRÜFEN", "D"], ["export", "EXPORTIEREN", "E"]];
+const STAGES = [["read", "READ", "A"], ["describe", "DESCRIBE", "B"], ["build", "BUILD", "C"], ["check", "CHECK", "D"], ["export", "EXPORT", "E"]];
 const STAGE_OF = {
   render_drawing: "read", read_drawing_text: "read", measure_drawing: "read",
   submit_spec: "describe", check_spec: "describe",
@@ -23,11 +23,18 @@ const STAGE_OF = {
 };
 const NEUTRAL_TOOLS = new Set(["get_state"]); // wird mitten im Aufbau gerufen, nur im Protokoll sichtbar
 const PHASE_STAGE = { read: "read", build: "build" };
-const TABS = [["review", "Prüfliste"], ["validation", "Prüfungen"], ["traceability", "Rückverfolgung"], ["benchmark", "Referenz"], ["files", "Dateien"]];
+const TABS = [
+  ["review", "Review list"], ["validation", "Checks"], ["tolerances", "Tolerances"],
+  ["traceability", "Traceability"], ["benchmark", "Reference"], ["files", "Files"],
+];
 const FILE_ORDER = ["STEP", "MID STEP", "GLB", "MD", "JSON"];
 // Anzeige der Prüfcodes aus review.json; der Serverwert bleibt, unbekannte Codes erscheinen unverändert.
 const ISSUE_LABEL = {
-  missing: "fehlt", ambiguous: "mehrdeutig", low_confidence: "unsicher", conflict: "Widerspruch", convention: "Konvention",
+  missing: "missing", ambiguous: "ambiguous", low_confidence: "low confidence", conflict: "conflict", convention: "convention",
+};
+
+const CHANGE_AREA = {
+  dimension: "Dimension", tolerance: "Tolerance", general_tolerance: "General tolerance", geometric: "Geometric tolerance", hole: "Hole", bbox: "Bounding box",
 };
 
 // ---------------------------------------------------------------------------
@@ -95,7 +102,7 @@ async function errorMessage(response) {
   } catch { /* kein JSON */ }
   return `${response.status} ${response.statusText}`.trim();
 }
-const friendly = (e) => (e instanceof TypeError ? "Der Server ist nicht erreichbar." : e.message);
+const friendly = (e) => (e instanceof TypeError ? "The server is not reachable." : e.message);
 async function getJson(url) {
   const response = await fetch(url);
   if (!response.ok) throw new Error(await errorMessage(response));
@@ -127,11 +134,13 @@ let panelToken = 0;
 // Teileliste
 // ---------------------------------------------------------------------------
 function partRow(part, index, focusName) {
-  const exported = part.all_ok === true;
+  // all_ok: null ohne Export, false nach einem Export mit einer nicht bestandenen Prüfung, true exportiert und geprüft
+  const exported = part.all_ok != null, checked = part.all_ok === true;
   const count = part.review_count ?? 0;
   const tags = [
-    (part.issues ?? []).includes("conflict") ? h("span", { class: "tag", title: "Die Prüfliste enthält einen Widerspruch" }, "MASSSTAB") : null,
-    exported ? null : h("span", { class: "tag tag-outline" }, "NICHT EXPORTIERT"),
+    part.scale_conflict ? h("span", { class: "tag", title: "The review list contains a conflict with the scale" }, "SCALE") : null,
+    exported ? null : h("span", { class: "tag tag-outline" }, "NOT EXPORTED"),
+    exported && !checked ? h("span", { class: "tag tag-outline", title: "Exported, but not every check passed" }, "CHECK FAILED") : null,
   ].filter(Boolean);
   return h("li", {
     class: "part", role: "option", "data-name": part.name, title: part.name,
@@ -139,8 +148,8 @@ function partRow(part, index, focusName) {
   },
     h("span", { class: "pos mono" }, String(index + 1).padStart(2, "0")),
     h("span", { class: "name" }, part.title || part.name),
-    count ? h("span", { class: "assumed", title: `${count} angenommen` }, icon("triangle", 12), String(count), sr(" angenommen")) : null,
-    exported ? h("span", { class: "ok" }, icon("check", 14), sr("Exportiert und geprüft")) : null,
+    count ? h("span", { class: "assumed", title: `${count} assumed` }, icon("triangle", 12), String(count), sr(" assumed")) : null,
+    checked ? h("span", { class: "ok" }, icon("check", 14), sr("Exported and checked")) : null,
     tags.length ? h("span", { class: "tags" }, tags) : null);
 }
 
@@ -153,7 +162,7 @@ function renderParts() {
   if (state.loadError) {
     list.replaceChildren();
     box.hidden = false;
-    box.replaceChildren(hatchBox("", "Die Teile konnten nicht geladen werden.", h("button", { type: "button", class: "btn btn-secondary", onclick: () => reload() }, "Erneut versuchen")));
+    box.replaceChildren(hatchBox("", "The parts could not be loaded.", h("button", { type: "button", class: "btn btn-secondary", onclick: () => reload() }, "Try again")));
     return;
   }
   if (!state.loaded) {
@@ -164,7 +173,7 @@ function renderParts() {
   list.replaceChildren(...state.parts.map((part, i) => partRow(part, i, focusName)));
   if (!state.parts.length) {
     box.hidden = false;
-    box.replaceChildren(plainBox("Noch keine Teile."));
+    box.replaceChildren(plainBox("No parts yet."));
   }
   if (hadFocus) $("li[tabindex='0']", list)?.focus();
 }
@@ -207,12 +216,14 @@ function initPartsList() {
 // ---------------------------------------------------------------------------
 // Schriftfeld
 // ---------------------------------------------------------------------------
+// Ein Widerspruch zum Maßstab: issue "conflict" und das Wort Maßstab oder scale (wie _is_scale_conflict im Server)
+const SCALE_WORDS = /ma(?:ß|ss)stab|scale/i;
 const printedScale = (entry, scale) =>
   [...`${entry.assumption} ${entry.reason}`.matchAll(/\d+:\d+/g)].map((m) => m[0]).find((s) => s !== scale);
 
 function scaleConflict(detail) {
   const rows = assumptionsOf(detail);
-  const at = rows.findIndex((a) => a.issue === "conflict" && /scale/i.test(`${a.assumption} ${a.reason}`));
+  const at = rows.findIndex((a) => a.issue === "conflict" && SCALE_WORDS.test(`${a.assumption} ${a.reason}`));
   return at < 0 ? null : { entry: rows[at], number: at + 1 };
 }
 
@@ -242,35 +253,37 @@ function setTitle(text, ok) {
 
 function renderTitleBlock(detail) {
   const spec = detail.spec ?? {};
-  const exported = detail.all_ok === true;
+  const exported = detail.all_ok != null, checked = detail.all_ok === true;
   const title = spec.title || detail.title || detail.name;
-  setTitle(title, exported);
+  setTitle(title, checked);
   document.title = `${title} - Drawing2CAD`;
   $("#tb-drawing").textContent = spec.drawing ? basename(spec.drawing) : "-";
   $("#tb-drawing").title = spec.drawing ?? "";
-  $("#tb-page").textContent = spec.drawing ? `Blatt ${spec.page ?? 1}` : "";
+  $("#tb-page").textContent = spec.drawing ? `Sheet ${spec.page ?? 1}` : "";
   const scale = $("#tb-scale");
   scale.replaceChildren(spec.scale ?? "-");
   const conflict = scaleConflict(detail);
   if (conflict) {
     const other = printedScale(conflict.entry, spec.scale);
-    if (other) scale.prepend(h("s", { class: "struck", title: "Maßstab aus der Zeichnung" }, other), " ");
+    if (other) scale.prepend(h("s", { class: "struck", title: "Scale printed on the drawing" }, other), " ");
     scale.append(" ", h("a", {
-      href: `#${enc(detail.name)}/review`, class: "delta-link", title: `Prüfpunkt ${conflict.number}: ${conflict.entry.assumption}`,
+      href: `#${enc(detail.name)}/review`, class: "delta-link", title: `Review item ${conflict.number}: ${conflict.entry.assumption}`,
       onclick: (e) => { e.preventDefault(); setTab("review"); flashRows([conflict.entry.id]); },
-    }, icon("triangle", 14), String(conflict.number), sr(` Prüfpunkt ${conflict.number}, Maßstabswiderspruch`)));
+    }, icon("triangle", 14), String(conflict.number), sr(` review item ${conflict.number}, scale conflict`)));
   }
-  $("#tb-tolerance").textContent = spec.general_tolerance || "nicht angegeben";
+  $("#tb-tolerance").textContent = spec.general_tolerance || "not specified";
   const status = $("#tb-status");
   if (!exported) {
-    status.replaceChildren(h("span", { class: "tag tag-outline tag-big" }, "NICHT EXPORTIERT"));
+    status.replaceChildren(h("span", { class: "tag tag-outline tag-big" }, "NOT EXPORTED"));
   } else {
     const rows = detail.review?.validation ?? [];
     const passed = rows.filter((r) => r.ok).length;
     const assumed = detail.review?.assumptions?.length ?? 0;
     status.replaceChildren(
-      h("span", { class: "assumed-line" }, `${assumed} ANGENOMMEN`),
-      h("span", { class: "ok-line" }, `${passed}/${rows.length} OK`, icon("check", 16)));
+      h("span", { class: "assumed-line" }, `${assumed} ASSUMED`),
+      checked
+        ? h("span", { class: "ok-line" }, `${passed}/${rows.length} OK`, icon("check", 16))
+        : h("span", { class: "fail" }, `${passed}/${rows.length} OK`, icon("cross", 14)));
   }
   restartDraw();
 }
@@ -283,12 +296,12 @@ function renderRunTitleBlock(run) {
   $("#tb-page").textContent = "";
   $("#tb-scale").textContent = "-";
   $("#tb-tolerance").textContent = "-";
-  $("#tb-status").replaceChildren(h("span", { class: "tag tag-outline tag-big" }, run.done ? (run.result?.ok ? "FERTIG" : "GESTOPPT") : "LÄUFT"));
+  $("#tb-status").replaceChildren(h("span", { class: "tag tag-outline tag-big" }, run.done ? (run.result?.ok ? "DONE" : "STOPPED") : "RUNNING"));
   restartDraw();
 }
 
 function renderEmptyTitleBlock() {
-  setTitle("Kein Teil", false);
+  setTitle("No part", false);
   $("#tb-drawing").textContent = "-";
   $("#tb-page").textContent = "";
   $("#tb-scale").textContent = "-";
@@ -374,22 +387,22 @@ function renderDrawing(detail) {
   Object.assign(drawing, { k: 1, x: 0, y: 0, cols: 8, iw: 1414, ih: 1000 });
   const spec = detail.spec;
   if (!spec || !spec.drawing) {
-    area.append(hatchBox("", "Für dieses Teil gibt es noch keine Spezifikation und daher keine Zeichnung."));
+    area.append(hatchBox("", "There is no specification for this part yet, and therefore no drawing."));
     return;
   }
   const title = spec.title || detail.name, page = spec.page ?? 1;
-  const img = h("img", { class: "paper-img", alt: `Zeichnung von ${title}, Blatt ${page}`, draggable: "false" });
+  const img = h("img", { class: "paper-img", alt: `Drawing of ${title}, sheet ${page}`, draggable: "false" });
   const paper = h("div", {
     class: "paper is-loading", tabindex: "0", role: "group",
-    "aria-label": "Zeichnung. Die Tasten Plus, Minus und Null zoomen.",
+    "aria-label": "Drawing. The keys plus, minus and zero zoom.",
   }, h("div", { class: "paper-inner" }, img));
   const zoomButton = (name, label, handler) => h("button", { type: "button", class: "icon-btn", "aria-label": label, title: label, onclick: handler }, icon(name, 16));
   const frame = h("div", { class: "frame" }, paper);
   area.append(h("div", { class: "sheet-area" }, frame),
     h("div", { class: "zoom", role: "group", "aria-label": "Zoom" },
-      zoomButton("plus", "Vergrößern", () => zoomAt(1.4)),
-      zoomButton("minus", "Verkleinern", () => zoomAt(1 / 1.4)),
-      zoomButton("reset", "Zoom zurücksetzen", () => { drawing.k = 1; drawing.x = drawing.y = 0; applyZoom(); })));
+      zoomButton("plus", "Zoom in", () => zoomAt(1.4)),
+      zoomButton("minus", "Zoom out", () => zoomAt(1 / 1.4)),
+      zoomButton("reset", "Reset zoom", () => { drawing.k = 1; drawing.x = drawing.y = 0; applyZoom(); })));
   buildRulers(frame);
   fitPaper();
 
@@ -402,7 +415,7 @@ function renderDrawing(detail) {
     fitPaper();
   });
   img.addEventListener("error", async () => {
-    let message = "Die Zeichnung konnte nicht dargestellt werden.";
+    let message = "The drawing could not be displayed.";
     try { message = await errorMessage(await fetch(img.src)); } catch { /* Hinweistext bleibt stehen */ }
     area.replaceChildren(hatchBox("", message));
   });
@@ -545,7 +558,7 @@ function initViewer() {
     viewer.jumpCameraToGoal();
     requestAnimationFrame(() => setView("iso"));
   });
-  viewer.addEventListener("error", () => reset3D("Das 3D-Modell konnte nicht geladen werden."));
+  viewer.addEventListener("error", () => reset3D("The 3D model could not be loaded."));
   viewer.addEventListener("camera-change", (e) => { if (e.detail?.source === "user-interaction") pressedView(null); });
   viewer.addEventListener("pointerdown", (e) => { view.down = { x: e.clientX, y: e.clientY }; });
   viewer.addEventListener("pointerup", (e) => {
@@ -556,7 +569,7 @@ function initViewer() {
 }
 
 /** Das 3D-Fenster ohne Modell: der Punkteboden und ein Satz (die Meldung kann den Grund nennen). */
-function reset3D(message = "Das 3D-Modell erscheint nach dem Export, mit Farben.") {
+function reset3D(message = "The 3D model appears after the export, with colours.") {
   removeHotspot();
   view.materials = [];
   view.glowing = false;
@@ -592,10 +605,10 @@ async function setup3D(detail, token) {
   viewer.hidden = false;
   $("#view-buttons").hidden = false;
   const assumed = detail.review?.assumptions?.length ?? 0;
-  viewer.alt = `3D-Modell von ${detail.spec?.title || detail.name}, ${assumed} ${assumed === 1 ? "Annahme" : "Annahmen"} orange markiert`;
+  viewer.alt = `3D model of ${detail.spec?.title || detail.name}, ${assumed} ${assumed === 1 ? "assumption" : "assumptions"} marked orange`;
   viewer.classList.add("is-pending"); // das bisherige Modell darf unter der Lademitteilung nicht sichtbar sein
   hint.hidden = false;
-  hint.textContent = "3D-Modell wird geladen …";
+  hint.textContent = "Loading 3D model …";
   const url = `/files/${enc(detail.name)}/${enc(glb)}`;
   if (viewer.src === url) { // dieselbe Datei erneut feuert kein load: erst leeren
     viewer.src = null;
@@ -628,11 +641,16 @@ function assumptionsOf(detail) {
 function tabList() {
   const detail = state.detail;
   const tabs = [];
-  if (state.run) tabs.push(["run", "Lauf", ""]);
+  if (state.run) tabs.push(["run", "Run", ""]);
+  if (detail?.runs?.length) tabs.push(["runs", "Runs", String(detail.runs.length)]);
   const rows = detail?.review?.validation ?? [];
+  const tol = detail?.review?.tolerances ?? [];
+  const tolChecked = tol.filter((t) => t.in_tolerance_nominal === true || t.in_tolerance_nominal === false);
   const counts = {
     review: detail ? String(assumptionsOf(detail).length) : "",
     validation: rows.length ? `${rows.filter((r) => r.ok).length}/${rows.length}` : "",
+    // ohne gebundene Werte ist nichts geprüft: dann steht dort die Zahl der tolerierten Maße
+    tolerances: tol.length ? (tolChecked.length ? `${tolChecked.filter((t) => t.in_tolerance_nominal === true).length}/${tolChecked.length}` : String(tol.length)) : "",
   };
   for (const [key, label] of TABS) tabs.push([key, label, counts[key] ?? ""]);
   return tabs;
@@ -698,7 +716,7 @@ function dimensionCell(refs, dims) {
     if (ref.text) return h("span", { class: "dim" }, ref.text);
     const dim = dims.get(ref.id);
     // Kein gedruckter Text: der Wert war angenommen, gezeichnet als Hilfsbemaßung in Klammern.
-    return dim ? h("span", { class: "dim dim-assumed", title: `Angenommener Wert von ${ref.id}` }, `(${num(dim.value)})`) : h("span", { class: "mono" }, ref.id);
+    return dim ? h("span", { class: "dim dim-assumed", title: `Assumed value of ${ref.id}` }, `(${num(dim.value)})`) : h("span", { class: "mono" }, ref.id);
   }).flatMap((node, i) => (i ? [" ", node] : [node]));
 }
 
@@ -708,27 +726,36 @@ function renderReview(detail) {
   const dims = new Map((detail.spec?.dimensions ?? []).map((d) => [d.id, d]));
   const parts = [];
   if (!rows.length) {
-    parts.push(plainBox("Keine Annahmen: Jeder Wert stammt aus der Zeichnung."));
+    parts.push(plainBox("No assumptions: every value comes from the drawing."));
   } else {
     const body = rows.map((a, i) => {
       const row = h("tr", { class: "assumed-row", tabindex: "0", "data-id": a.id },
-        h("td", { class: "col-delta", "data-label": "Pos." }, h("span", { class: "delta" }, icon("triangle", 12), String(i + 1))),
+        h("td", { class: "col-delta", "data-label": "No." }, h("span", { class: "delta" }, icon("triangle", 12), String(i + 1))),
         h("td", { class: "mono", "data-label": "ID" }, a.id),
-        h("td", { "data-label": "Maß" }, a.refs.length ? dimensionCell(a.refs, dims) : "-"),
-        h("td", { "data-label": "Befund" }, h("span", { class: "tag" }, ISSUE_LABEL[a.issue] ?? a.issue)),
-        h("td", { "data-label": "Annahme" }, a.assumption),
-        h("td", { "data-label": "Begründung" }, a.reason),
-        h("td", { class: "mono", "data-label": "Quelle" }, (a.sources ?? []).length ? a.sources.join(", ") : "-"),
-        h("td", { class: "mono", "data-label": "Flächen" }, a.marked_faces == null ? "-" : String(a.marked_faces)));
+        h("td", { "data-label": "Dimension" }, a.refs.length ? dimensionCell(a.refs, dims) : "-"),
+        h("td", { "data-label": "Finding" }, h("span", { class: "tag" }, ISSUE_LABEL[a.issue] ?? a.issue)),
+        h("td", { "data-label": "Assumption" }, a.assumption),
+        h("td", { "data-label": "Reason" }, a.reason),
+        h("td", { class: "mono", "data-label": "Source" }, (a.sources ?? []).length ? a.sources.join(", ") : "-"),
+        h("td", { class: "mono", "data-label": "Faces" }, a.marked_faces == null ? "-" : String(a.marked_faces)));
       linkRow(row, parseSources(a.sources));
       return row;
     });
-    parts.push(table(["Pos.", "ID", "Maß", "Befund", "Annahme", "Begründung", "Quelle", "Flächen"], body, "review"));
+    parts.push(table(["No.", "ID", "Dimension", "Finding", "Assumption", "Reason", "Source", "Faces"], body, "review"));
+  }
+  const changes = detail.review?.changes ?? [];
+  if (changes.length) {
+    parts.unshift(h("div", { class: "notes" }, h("h3", {}, "Changes from the previous version")),
+      table(["Feature", "Before", "After", "Change"], changes.map((c) => h("tr", {},
+        h("td", { "data-label": "Feature" }, `${CHANGE_AREA[c.area] ?? c.area} ${c.feature}`.trim()),
+        h("td", { class: "mono", "data-label": "Before" }, c.before),
+        h("td", { class: "mono", "data-label": "After" }, c.after),
+        h("td", { "data-label": "Change" }, h("span", { class: "tag" }, c.change)))), "changes"));
   }
   const notes = detail.review?.notes ?? detail.spec?.notes ?? [];
   if (notes.length) {
     parts.push(h("div", { class: "notes" },
-      h("h3", {}, "Zeichnungshinweise"),
+      h("h3", {}, "Drawing notes"),
       h("ul", {}, notes.map((n) => h("li", {}, h("span", { class: "mono" }, n.id), " ", n.text)))));
   }
   fill(panel, ...parts);
@@ -738,27 +765,116 @@ function renderValidation(detail) {
   const panel = $("#panel");
   const rows = detail.review?.validation;
   if (!rows) {
-    fill(panel, plainBox("Noch keine Prüfungen. Der letzte Export bestand nicht, oder das Teil wurde nie exportiert."));
+    fill(panel, plainBox("No checks yet. The last export did not pass, or the part was never exported."));
     return;
   }
   const passed = rows.filter((r) => r.ok).length;
   const status = (ok) => ok
-    ? h("span", { class: "ok" }, icon("check", 14), " ", sr("bestanden"))
-    : h("span", { class: "fail" }, icon("cross", 14), " FEHLER");
+    ? h("span", { class: "ok" }, icon("check", 14), " ", sr("passed"))
+    : h("span", { class: "fail" }, icon("cross", 14), " FAILED");
   fill(panel,
-    h("div", { class: "kpi" }, h("span", { class: "kpi-number" }, `${passed}/${rows.length}`), h("span", { class: "label" }, "bestandene Prüfungen")),
-    table(["Prüfung", "Soll", "Ist", "Ergebnis"], rows.map((r) => h("tr", {},
-      h("td", { class: "mono", "data-label": "Prüfung" }, r.check),
-      h("td", { class: "mono", "data-label": "Soll" }, r.expected),
-      h("td", { class: "mono", "data-label": "Ist" }, r.actual),
-      h("td", { "data-label": "Ergebnis" }, status(r.ok)))), "validation"));
+    h("div", { class: "kpi" }, h("span", { class: "kpi-number" }, `${passed}/${rows.length}`), h("span", { class: "label" }, "checks passed")),
+    table(["Check", "Expected", "Actual", "Result"], rows.map((r) => h("tr", {},
+      h("td", { class: "mono", "data-label": "Check" }, r.check),
+      h("td", { class: "mono", "data-label": "Expected" }, r.expected),
+      h("td", { class: "mono", "data-label": "Actual" }, r.actual),
+      h("td", { "data-label": "Result" }, status(r.ok)))), "validation"));
+}
+
+// ---------------------------------------------------------------------------
+// Toleranzen: Grenzen, Toleranzmitte und Einhaltung je toleriertem Maß
+// ---------------------------------------------------------------------------
+const TOL_SOURCE = { explicit: "on dimension", fit: "fit", general: "general tolerance" };
+const GD_KIND = {
+  flatness: "Flatness", straightness: "Straightness", roundness: "Roundness", cylindricity: "Cylindricity",
+  parallelism: "Parallelism", perpendicularity: "Perpendicularity", angularity: "Angularity",
+  concentricity: "Concentricity", symmetry: "Symmetry", circular_runout: "Circular runout", total_runout: "Total runout",
+  position: "Position", line_profile: "Line profile", surface_profile: "Surface profile",
+};
+
+/** Ein Abmaßpaar in einer Zeile: symmetrisch als ±, sonst oberes und unteres Abmaß. */
+function deviation(lower, upper) {
+  const signed = (value) => (typeof value === "number" && value > 0 ? `+${num(value)}` : num(value));
+  return lower === -upper ? `±${num(upper)}` : `${signed(upper)} / ${signed(lower)}`;
+}
+
+/** Das Urteil zu einem tolerierten Maß; null heißt nicht geprüft, weil kein Wert an das Maß gebunden ist. */
+function toleranceVerdict(ok, geometry = false) {
+  if (ok === true) {
+    return h("span", { class: "ok", title: geometry ? "from the measured body" : null }, icon("check", 14), " ", sr("within tolerance"));
+  }
+  if (ok === false) return h("span", { class: "fail" }, icon("cross", 12), " VIOLATED");
+  return h("span", { class: "muted" }, "not checked");
+}
+
+/** Wie viele Zeilen eines Urteilsfelds sind geprüft, wie viele davon eingehalten: Grundlage der Kennzahlen. */
+function toleranceTally(rows, field) {
+  const checked = rows.filter((t) => t[field] === true || t[field] === false);
+  return { ok: checked.filter((t) => t[field] === true).length, checked: checked.length, total: rows.length };
+}
+
+/** Die Form- und Lagetoleranzen der Prüfliste; ohne Rahmen steht nur die Art in der Zeichnung. */
+function geometricTable(rows) {
+  return [
+    h("h3", {}, "Geometric tolerances"),
+    table(["ID", "Type", "Value", "Datums", "Frame", "PMI in STEP"], rows.map((t) => h("tr", {},
+      h("td", { class: "mono", "data-label": "ID" }, t.id),
+      h("td", { "data-label": "Type" }, GD_KIND[t.kind] ?? t.kind),
+      h("td", { class: "mono", "data-label": "Value" }, num(t.value)),
+      h("td", { class: "mono", "data-label": "Datums" }, (t.datums ?? []).join(", ") || "-"),
+      h("td", { class: "mono", "data-label": "Frame" }, t.text),
+      h("td", { "data-label": "PMI in STEP" }, t.in_step ? "yes" : "no"))), "geometric"),
+  ];
+}
+
+function renderTolerances(detail) {
+  const panel = $("#panel");
+  const rows = detail.review?.tolerances;
+  if (!detail.review || rows == null) {
+    fill(panel, plainBox("No tolerance table yet. It is created with the export."));
+    return;
+  }
+  if (!rows.length) {
+    fill(panel, plainBox("No toleranced dimensions: no dimension carries limit deviations, a fit or a general tolerance."));
+    return;
+  }
+  const dims = new Map((detail.spec?.dimensions ?? []).map((d) => [d.id, d]));
+  const nominal = toleranceTally(rows, "in_tolerance_nominal");
+  const mid = toleranceTally(rows, "in_tolerance_mid");
+  const geo = detail.review.geometric_tolerances ?? [];
+  const midFile = (detail.files ?? []).find((f) => /_mid\.(step|stp)$/i.test(f));
+  const body = rows.map((t, i) => {
+    const row = h("tr", { tabindex: "0", "data-id": t.dim_id },
+      h("td", { class: "mono", "data-label": "No." }, String(i + 1).padStart(2, "0")),
+      h("td", { class: "mono", "data-label": "ID" }, t.dim_id),
+      h("td", { "data-label": "Dimension" }, t.text ? h("span", { class: "dim" }, t.text) : "-"),
+      h("td", { class: "mono", "data-label": "Nominal" }, num(t.nominal)),
+      h("td", { class: "mono", "data-label": "Deviations" }, deviation(t.lower, t.upper)),
+      h("td", { class: "mono", "data-label": "Midpoint" }, num(t.mid)),
+      h("td", { class: "mono", "data-label": "Source" }, TOL_SOURCE[t.source] ?? t.source),
+      h("td", { "data-label": "Nominal result" }, toleranceVerdict(t.in_tolerance_nominal, t.geometry === true)),
+      h("td", { "data-label": "Midpoint result" }, toleranceVerdict(t.in_tolerance_mid)));
+    const source = dims.get(t.dim_id)?.source;
+    linkRow(row, source ? [{ view: source.view, cell: source.cell }] : []);
+    return row;
+  });
+  fill(panel,
+    h("div", { class: "kpi" },
+      h("span", { class: "kpi-number" }, `${nominal.ok}/${nominal.checked}`), h("span", { class: "label" }, "nominal within tolerance")),
+    h("div", { class: "kpi" },
+      h("span", { class: "kpi-number" }, `${mid.ok}/${mid.checked}`), h("span", { class: "label" }, "tolerance midpoint within tolerance")),
+    table(["No.", "ID", "Dimension", "Nominal", "Deviations", "Midpoint", "Source", "Nominal result", "Midpoint result"], body, "tolerances"),
+    h("p", { class: "muted notes" }, `${nominal.checked} of ${nominal.total} toleranced dimensions are checked; not checked means no value is bound to the dimension. The source is the specification on the dimension, a fit per ISO 286 or the general tolerance per ISO 2768.`),
+    geo.length ? h("div", { class: "notes" }, geometricTable(geo)) : null,
+    midFile ? h("p", { class: "muted notes" }, "Model at the tolerance midpoint: ",
+      h("a", { href: `/files/${enc(detail.name)}/${enc(midFile)}`, download: midFile }, midFile)) : null);
 }
 
 async function renderTraceability(detail) {
   const panel = $("#panel");
   const review = detail.review;
   if (!review) {
-    fill(panel, plainBox("Noch keine Rückverfolgung. Sie entsteht mit dem Export."));
+    fill(panel, plainBox("No traceability yet. It is created with the export."));
     return;
   }
   const token = ++panelToken;
@@ -770,9 +886,9 @@ async function renderTraceability(detail) {
   const opName = (i) => state.ops[i]?.op ?? "op";
   const line = (t, linked) => {
     const row = h("li", { class: `trace mono${linked ? "" : " unreferenced"}`, tabindex: "0" },
-      `Op. ${t.op_index + 1} `, h("span", { class: "opname" }, opName(t.op_index)), ` · ${t.path} = ${num(t.value)}`,
-      linked ? [h("span", { class: "back" }, icon("back", 14), sr(" aus")), ` ${t.dimension} `,
-        t.text ? h("span", { class: "dim" }, `"${t.text}"`) : h("span", { class: "dim dim-assumed" }, "(angenommen)")] : null);
+      `Op ${t.op_index + 1} `, h("span", { class: "opname" }, opName(t.op_index)), ` · ${t.path} = ${num(t.value)}`,
+      linked ? [h("span", { class: "back" }, icon("back", 14), sr(" from")), ` ${t.dimension} `,
+        t.text ? h("span", { class: "dim" }, `"${t.text}"`) : h("span", { class: "dim dim-assumed" }, "(assumed)")] : null);
     if (linked) {
       const source = dims.get(t.dimension)?.source;
       linkRow(row, source ? [{ view: source.view, cell: source.cell }] : []);
@@ -781,21 +897,21 @@ async function renderTraceability(detail) {
   };
   const traced = review.traceability ?? [], loose = review.unreferenced ?? [];
   fill(panel,
-    traced.length ? h("ul", { class: "trace-list" }, traced.map((t) => line(t, true))) : plainBox("Kein Wert geht auf ein Maß zurück."),
+    traced.length ? h("ul", { class: "trace-list" }, traced.map((t) => line(t, true))) : plainBox("No value traces back to a dimension."),
     h("div", { class: "loose" },
-      h("h3", {}, "Werte ohne Maßbezug"),
-      loose.length ? h("ul", { class: "trace-list" }, loose.map((t) => line(t, false))) : h("p", { class: "muted" }, "Keine.")));
+      h("h3", {}, "Values without a dimension"),
+      loose.length ? h("ul", { class: "trace-list" }, loose.map((t) => line(t, false))) : h("p", { class: "muted" }, "None.")));
 }
 
 function matchWord(row) {
   const raw = row.match ?? row.MATCH;
-  if (raw === "MATCH") return h("span", { class: "match match-yes" }, "TREFFER");
-  if (raw === "DIFF") return h("span", { class: "match match-diff" }, "ABWEICHUNG");
-  return h("span", { class: "match match-invalid" }, "Referenz ungültig");
+  if (raw === "MATCH") return h("span", { class: "match match-yes" }, "MATCH");
+  if (raw === "DIFF") return h("span", { class: "match match-diff" }, "DEVIATION");
+  return h("span", { class: "match match-invalid" }, "Reference invalid");
 }
 
 // Anzeige für die Benchmark-Marks; die Werte (MATCH, DIFF, …) bleiben Serverdaten.
-const KIND_LABEL = { yes: "Treffer", diff: "Abweichung", invalid: "Referenz ungültig", none: "keine Referenz" };
+const KIND_LABEL = { yes: "Match", diff: "Deviation", invalid: "Reference invalid", none: "no reference" };
 
 function benchmarkTally() {
   const rows = state.parts.filter((p) => p.eval).map((p) => p.eval);
@@ -813,9 +929,9 @@ function ruler() {
     return raw === "MATCH" ? "yes" : raw === "DIFF" ? "diff" : "invalid";
   };
   return h("div", { class: "ruler-bar" },
-    h("p", { class: "kpi-line" }, h("span", { class: "kpi-number" }, `${tally.matched}/${tally.total}`), h("span", { class: "label" }, "Treffer"),
-      tally.invalid ? h("span", { class: "muted" }, `${tally.invalid} mit ungültiger Referenz, nicht gezählt`) : null),
-    h("div", { class: "ticks", role: "group", "aria-label": "Teile auf dem Referenzlineal" },
+    h("p", { class: "kpi-line" }, h("span", { class: "kpi-number" }, `${tally.matched}/${tally.total}`), h("span", { class: "label" }, "Matches"),
+      tally.invalid ? h("span", { class: "muted" }, `${tally.invalid} with invalid reference, not counted`) : null),
+    h("div", { class: "ticks", role: "group", "aria-label": "Parts on the reference ruler" },
       state.parts.map((p) => h("button", {
         type: "button", class: `tick tick-${kind(p)}${p.name === state.name ? " is-current" : ""}`, title: `${p.title || p.name}: ${KIND_LABEL[kind(p)]}`,
         "aria-label": `${p.title || p.name}, ${KIND_LABEL[kind(p)]}`, onclick: () => go(p.name, "benchmark"),
@@ -827,7 +943,7 @@ function renderBenchmark(detail) {
   const row = detail.eval;
   const bar = ruler();
   if (!row) {
-    fill(panel, bar, plainBox("Keine Referenz für dieses Teil."));
+    fill(panel, bar, plainBox("No reference for this part."));
     return;
   }
   const sorted = (list) => (Array.isArray(list) ? list : []);
@@ -836,13 +952,13 @@ function renderBenchmark(detail) {
   fill(panel, bar,
     h("div", { class: "bench" },
       h("div", { class: "bench-head" }, matchWord(row),
-        h("div", { class: "kpi" }, h("span", { class: "kpi-number" }, unit(row.dv_pct, "%")), h("span", { class: "label" }, "Volumenabweichung")),
-        h("div", { class: "kpi" }, h("span", { class: "kpi-number" }, unit(row.dbbox_max_mm, "mm")), h("span", { class: "label" }, "größte Abweichung des Hüllquaders"))),
+        h("div", { class: "kpi" }, h("span", { class: "kpi-number" }, unit(row.dv_pct, "%")), h("span", { class: "label" }, "volume deviation")),
+        h("div", { class: "kpi" }, h("span", { class: "kpi-number" }, unit(row.dbbox_max_mm, "mm")), h("span", { class: "label" }, "largest bounding box deviation"))),
       h("div", { class: "bench-box" },
-        h("p", { class: "label" }, "Hüllquader, sortiert (eigen / Referenz)"),
+        h("p", { class: "label" }, "Bounding box, sorted (own / reference)"),
         [0, 1, 2].map((i) => h("p", { class: "mono" }, `${num(own[i], 3)}  /  ${num(ref[i], 3)}`)),
-        row.missing_d?.length ? h("p", { class: "mono" }, `fehlende Durchmesser: ${row.missing_d.join(", ")}`) : null,
-        row.extra_d?.length ? h("p", { class: "mono" }, `zusätzliche Durchmesser: ${row.extra_d.join(", ")}`) : null)));
+        row.missing_d?.length ? h("p", { class: "mono" }, `missing diameters: ${row.missing_d.join(", ")}`) : null,
+        row.extra_d?.length ? h("p", { class: "mono" }, `extra diameters: ${row.extra_d.join(", ")}`) : null)));
 }
 
 function fileKind(name) {
@@ -861,9 +977,46 @@ function renderFiles(detail) {
   const rows = files.map((f) => h("li", { class: "file" },
     h("span", { class: "kind" }, fileKind(f)),
     h("span", { class: "mono filename" }, f),
-    h("a", { class: "btn btn-link", href: `/files/${enc(detail.name)}/${enc(f)}`, download: f }, "Herunterladen", sr(` ${f}`))));
-  const blocked = hasStep ? null : hatchBox("GESTOPPT", "Keine STEP-Datei: Der Export läuft nur, wenn jede Prüfung besteht.");
-  fill(panel, blocked, files.length ? h("ul", { class: "files" }, rows) : plainBox("Keine Dateien."));
+    h("a", { class: "btn btn-link", href: `/files/${enc(detail.name)}/${enc(f)}`, download: f }, "Download", sr(` ${f}`))));
+  const blocked = hasStep ? null : hatchBox("STOPPED", "No STEP file: the export only runs if every check passes.");
+  const versions = detail.versions ?? [];
+  fill(panel, blocked, files.length ? h("ul", { class: "files" }, rows) : plainBox("No files."),
+    h("p", { class: "muted versions", title: versions.join(", ") }, `earlier versions: ${versions.length}`));
+}
+
+// Stored runs: the web app writes every run as a trace under results/<part>/runs/
+function localTime(iso) {
+  const date = new Date(iso);
+  return Number.isNaN(date.getTime()) ? "-" : date.toLocaleString("en-GB", { dateStyle: "short", timeStyle: "medium" });
+}
+
+function runOutcome(run) {
+  if (run.running) return h("span", { class: "muted" }, "running");
+  if (run.ok === true) return h("span", { class: "ok" }, icon("check", 14), sr("ok"));
+  if (run.ok === false) return h("span", { class: "fail" }, icon("cross", 12), " ", brief(run.reason || "stopped", 70));
+  return h("span", { class: "muted" }, "aborted");
+}
+
+function renderRuns(detail) {
+  const panel = $("#panel");
+  const runs = detail?.runs ?? [];
+  if (!runs.length) {
+    fill(panel, plainBox("No runs stored."));
+    return;
+  }
+  const rows = runs.map((run) => {
+    const open = () => openStoredRun(detail.name, run);
+    return h("tr", {
+      class: "run-row", tabindex: "0", onclick: open,
+      onkeydown: (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); open(); } },
+    },
+      h("td", { class: "mono", "data-label": "Started" }, run.started ? localTime(run.started) : "-"),
+      h("td", { "data-label": "Model" }, run.model || "Default"),
+      h("td", { "data-label": "Result" }, runOutcome(run)),
+      h("td", { class: "mono", "data-label": "Events" }, String(run.events)));
+  });
+  fill(panel, table(["Started", "Model", "Result", "Events"], rows, "runs"),
+    h("p", { class: "muted" }, "Click or Enter opens the run and replays its events."));
 }
 
 function renderPanel() {
@@ -872,11 +1025,11 @@ function renderPanel() {
   const detail = state.detail;
   if (state.tab === "run" && state.run) { renderRun(); return; }
   if (!detail) {
-    fill(panel, plainBox(state.run ? "Ein Teil auswählen, um die Details zu sehen." : "Ein Teil auswählen."));
+    fill(panel, plainBox(state.run ? "Select a part to see the details." : "Select a part."));
     return;
   }
   panelToken++;
-  ({ review: renderReview, validation: renderValidation, traceability: renderTraceability, benchmark: renderBenchmark, files: renderFiles }[state.tab] ?? renderReview)(detail);
+  ({ review: renderReview, validation: renderValidation, tolerances: renderTolerances, traceability: renderTraceability, benchmark: renderBenchmark, files: renderFiles, runs: renderRuns }[state.tab] ?? renderReview)(detail);
 }
 
 // ---------------------------------------------------------------------------
@@ -947,21 +1100,24 @@ function handleEvent(run, event, now = performance.now()) {
   refreshRun(run);
 }
 
+const LIMIT_LABELS = { budget: "Cost limit reached", time: "Time limit reached" }; // Feld `limit` des done-Ereignisses
+
 function finishRun(run, event, now = performance.now()) {
   if (run.done) return;
   run.done = true;
   run.es?.close(); // der Server beendet den Stream nach done; sonst würde das EventSource neu verbinden und alles wiederholen
   clearInterval(run.timer);
   const ok = event.ok === true;
-  run.result = { ok, reason: event.reason ? String(event.reason) : "" };
+  const limit = LIMIT_LABELS[event.limit];
+  run.result = { ok, reason: [limit, event.reason ? String(event.reason) : ""].filter(Boolean).join(": "), limit: event.limit ?? null };
   for (const seg of [...run.open.values()].flat()) { seg.dur = now - seg.start; seg.ok = false; }
   run.open.clear();
   if (!ok && run.current) run.stages[run.current].state = "failed";
   if (ok) for (const stage of Object.values(run.stages)) if (stage.state === "active") stage.state = "done";
-  run.log.push({ at: now - run.t0, kind: "DONE", label: ok ? "exportiert" : "gestoppt", summary: run.result.reason, detail: "" });
+  run.log.push({ at: now - run.t0, kind: "DONE", label: ok ? "exported" : "stopped", summary: run.result.reason, detail: "" });
   refreshRun(run);
   if (state.run === run && !state.name) renderRunTitleBlock(run);
-  afterRun(run);
+  if (!run.replay) afterRun(run); // ein wiederholter Lauf lädt nichts neu
 }
 
 function connectionLost(run) {
@@ -972,7 +1128,7 @@ function connectionLost(run) {
   const now = performance.now();
   for (const seg of [...run.open.values()].flat()) { seg.dur = now - seg.start; seg.ok = false; }
   run.open.clear();
-  run.log.push({ at: now - run.t0, kind: "LOST", label: "", summary: `Verbindung verloren bei ${clock(now - run.t0, false)}` });
+  run.log.push({ at: now - run.t0, kind: "LOST", label: "", summary: `Connection lost at ${clock(now - run.t0, false)}` });
   refreshRun(run);
 }
 
@@ -1020,23 +1176,23 @@ function chainView(run, now) {
       h("span", { class: "stage-head" },
         h("span", { class: "marker" }, icon("triangle", 12), letter),
         h("span", { class: "stage-name" }, label),
-        stage.state === "failed" ? sr(" gestoppt") : null),
+        stage.state === "failed" ? sr(" stopped") : null),
       h("div", { class: "segs" }, stage.segs.map((seg) => segView(seg, now, still))));
   });
   if (run.done) {
     const ok = run.result.ok;
     items.push(h("li", { class: `result ${ok ? "is-yes" : "is-no"}` },
-      ok ? h("p", { class: "result-word" }, "EXPORTIERT")
-        : hatchBox("GESTOPPT", run.result.reason || "Der Lauf endete ohne Export.")));
+      ok ? h("p", { class: "result-word" }, "EXPORTED")
+        : hatchBox("STOPPED", run.result.reason || "The run ended without an export.")));
   }
-  return h("ol", { class: "chain", "aria-label": "Laufphasen" }, items);
+  return h("ol", { class: "chain", "aria-label": "Run stages" }, items);
 }
 
 function logRow(entry) {
-  const detail = entry.detail ? h("details", {}, h("summary", {}, entry.kind === "CALL" ? "Argumente" : "Text"), h("pre", {}, entry.detail)) : null;
+  const detail = entry.detail ? h("details", {}, h("summary", {}, entry.kind === "CALL" ? "Arguments" : "Text"), h("pre", {}, entry.detail)) : null;
   return h("tr", { class: `log-${entry.kind.toLowerCase()}` },
     h("td", { class: "mono t" }, clock(entry.at)),
-    h("td", { class: "mono kind" }, entry.kind === "FAIL" ? h("span", { class: "fail" }, icon("cross", 12), " FEHLER") : entry.kind),
+    h("td", { class: "mono kind" }, entry.kind === "FAIL" ? h("span", { class: "fail" }, icon("cross", 12), " FAILED") : entry.kind),
     h("td", { class: "mono tool" }, entry.label),
     h("td", { class: "mono what" }, entry.dur != null ? `${(entry.dur / 1000).toFixed(1)} s  ` : "", entry.summary, detail));
 }
@@ -1047,7 +1203,7 @@ function renderRun() {
   fill(panel,
     h("div", { class: "run" },
       h("div", { id: "chain-host" }, chainView(run, performance.now())),
-      h("div", { class: "log", id: "log", role: "log", "aria-live": "polite", "aria-label": "Laufprotokoll" },
+      h("div", { class: "log", id: "log", role: "log", "aria-live": "polite", "aria-label": "Run log" },
         h("table", { class: "grid log-table" }, h("tbody", {}, run.log.map(logRow))))));
   const log = $("#log");
   log.addEventListener("scroll", () => { run.stick = log.scrollTop + log.clientHeight >= log.scrollHeight - 8; });
@@ -1086,8 +1242,35 @@ function startRun(id, part, fileName) {
   if (!reducedMotion()) run.timer = setInterval(() => refreshRun(run), 250);
 }
 
+/** Einen gespeicherten Lauf laden und seine Ereignisse mit den aufgezeichneten Zeitabständen erneut abspielen. */
+async function openStoredRun(name, entry) {
+  let data;
+  try {
+    data = await getJson(`/api/parts/${enc(name)}/runs/${enc(entry.id)}`);
+  } catch (error) {
+    showNotice(`The run could not be loaded: ${friendly(error)}`);
+    return;
+  }
+  const run = newRun(entry.id, entry.part || name, basename(entry.pdf));
+  run.replay = true;
+  const still = reducedMotion();
+  const started = performance.now();
+  run.t0 = started;
+  const events = data.events ?? [];
+  const offset = (event) => { const at = Number(event?.at); return Number.isFinite(at) && at > 0 ? at * 1000 : 0; };
+  for (const event of events) {
+    if (still) handleEvent(run, event, started + offset(event));
+    else setTimeout(() => handleEvent(run, event, started + offset(event)), offset(event));
+  }
+  // Ein Lauf ohne Abschlussereignis gilt nach dem letzten Ereignis als abgebrochen.
+  setTimeout(() => connectionLost(run), still ? 0 : offset(events[events.length - 1]) + 50);
+  if (!still) run.timer = setInterval(() => refreshRun(run), 250);
+  state.run = run;
+  setTab("run");
+}
+
 function renderRunStage(run) {
-  $("#drawing").replaceChildren(hatchBox("", `Die Zeichnung von ${run.part} erscheint hier, sobald der Agent die Spezifikation eingereicht hat.`));
+  $("#drawing").replaceChildren(hatchBox("", `The drawing of ${run.part} appears here as soon as the agent has submitted the specification.`));
   reset3D();
 }
 
@@ -1113,20 +1296,64 @@ function showNotice(text) {
 }
 
 function showServerError(status, message) {
-  if (status === 503) { showNotice(`${message} Aufgenommene Teile bleiben aufrufbar.`); return; }
-  if (status === 0) { showNotice(message); return; } // gar keine Antwort
+  if (status === 503) { showNotice(`${message} Stored parts remain available.`); return; }
+  if (status === 0 || status === 403 || status === 409 || status === 429) { showNotice(message); return; } // keine Antwort, fremde Seite, Teil belegt, zu viele Läufe
 
-  const target = /part name/i.test(message) ? "part" : /\bmodel\b/i.test(message) ? "model" : "file";
+  const target = /part name|revision/i.test(message) ? "part" : /\bmodel\b|language model/i.test(message) ? "model" : "file";
   fieldError(target, message);
   $(`#${target}`).focus();
 }
 
+const NO_MODEL = "No language model available: start Ollama (`OLLAMA_CONTEXT_LENGTH=64000 ollama serve`), sign in to Claude Code or set `.env`. Without a model, `python -m d2c.demo` shows the flow.";
+const NAME_CHARS = /[^\p{L}\p{N}_-]+/gu; // Unicode-Buchstaben wie im Server und im HTML-Muster
+const NAME_OK = /^[\p{L}\p{N}_-]+$/u;
+const MAX_NAME = 64;
+
+/** Teilname aus dem Dateinamen; ohne brauchbare Zeichen ein Name aus der Uhrzeit. */
+function nameFromFile(fileName) {
+  const name = fileName.normalize("NFC").replace(/\.[^.]+$/, "").replace(NAME_CHARS, "_").replace(/^_+|_+$/g, "").slice(0, MAX_NAME);
+  if (name) return name;
+  const now = new Date(), two = (n) => String(n).padStart(2, "0");
+  return `drawing-${now.getFullYear()}${two(now.getMonth() + 1)}${two(now.getDate())}-${two(now.getHours())}${two(now.getMinutes())}`;
+}
+
+/** Ob die Modellauswahl eine wählbare Eintragung hat (sonst würde der Lauf ohne Modell scheitern). */
+const hasModel = () => $("#model").dataset.unknown === "1" || (Boolean($("#model").value) && !$("#model").selectedOptions[0]?.disabled);
+
+function showNoModel() {
+  fieldError("model", NO_MODEL);
+  announce(NO_MODEL);
+}
+
+/** Die Revisionsoption gilt nur für ein Teil, das es schon gibt (ein Ergebnis mit Spezifikation und Vorgängen). */
+function syncRevise() {
+  const name = $("#part").value.normalize("NFC").trim().toLowerCase();
+  const exists = state.parts.some((p) => p.name.toLowerCase() === name);
+  $("#revise").disabled = !exists;
+  if (!exists) $("#revise").checked = false;
+}
+
 function initUpload() {
   const form = $("#upload"), file = $("#file"), part = $("#part");
-  file.addEventListener("change", () => {
+  part.addEventListener("input", syncRevise);
+  let suggested = ""; // der zuletzt vorgeschlagene Teilname: ein von Hand geänderter Name wird nicht überschrieben
+  file.addEventListener("change", async () => {
     fieldError("file", "");
     const chosen = file.files[0];
-    if (chosen && !part.value) part.value = chosen.name.replace(/\.[^.]+$/, "").replace(/[^\w-]+/g, "_").replace(/^_+|_+$/g, "");
+    $("#file-name").textContent = chosen?.name ?? "No file chosen";
+    if (!chosen) return;
+    if (!part.value || part.value === suggested) part.value = suggested = nameFromFile(chosen.name);
+    syncRevise();
+    if ($("#manual").checked) return; // "nur hochladen": Name und Modell anpassen, dann STEP erstellen
+    const name = part.value.normalize("NFC").trim();
+    if (!$("#revise").checked && state.parts.some((p) => p.name.toLowerCase() === name.toLowerCase())) {
+      // Das alte Ergebnis wandert als frühere Version zur Seite; ein Lauf soll aber nicht ungefragt dorthin führen.
+      showNotice(`The part ${name} already exists. Choose another name or click Create STEP: the existing result is kept as an earlier version.`);
+      return;
+    }
+    if (!NAME_OK.test(name) || name.length > MAX_NAME) return;
+    await modelsReady;
+    if (hasModel()) form.requestSubmit(); else showNoModel();
   });
   for (const type of ["dragenter", "dragover"]) form.addEventListener(type, (e) => { e.preventDefault(); form.classList.add("is-over"); });
   for (const type of ["dragleave", "drop"]) form.addEventListener(type, (e) => { e.preventDefault(); form.classList.remove("is-over"); });
@@ -1137,34 +1364,39 @@ function initUpload() {
   });
   $("#new-run").addEventListener("click", () => { file.focus(); file.scrollIntoView({ block: "nearest" }); });
 
-  form.addEventListener("submit", async (e) => {
-    e.preventDefault();
+  let starting = false; // zwischen Abschicken und Antwort ist kein zweiter Start möglich
+  async function submitRun() {
+    if (starting) return;
     clearErrors();
     const chosen = file.files[0];
-    const name = part.value.trim();
-    if (!chosen) { fieldError("file", "Bitte eine Zeichnungsdatei wählen (PDF, PNG oder JPG)."); file.focus(); return; }
-    if (chosen.size > MAX_UPLOAD) { fieldError("file", "Die Datei ist größer als 20 MB."); file.focus(); return; }
-    if (!/^[\w-]+$/.test(name)) { fieldError("part", "Nur Buchstaben, Ziffern, '_' und '-' verwenden."); part.focus(); return; }
-    if (state.run && !state.run.done && !state.run.lost) { showNotice("Ein Lauf läuft noch."); return; }
+    const name = part.value.normalize("NFC").trim();
+    if (!chosen) { fieldError("file", "Please choose a drawing file (PDF, PNG or JPG)."); file.focus(); return; }
+    if (chosen.size > MAX_UPLOAD) { fieldError("file", "The file is larger than 20 MB."); file.focus(); return; }
+    if (!NAME_OK.test(name) || name.length > MAX_NAME) { fieldError("part", `Use only letters, digits, '_' and '-' (at most ${MAX_NAME} characters).`); part.focus(); return; }
+    if (state.run && !state.run.done && !state.run.lost) { showNotice("A run is still in progress."); return; }
     const body = new FormData();
     body.append("pdf", chosen);
     body.append("part", name);
     if ($("#model").value.trim()) body.append("model", $("#model").value.trim());
+    if ($("#revise").checked) body.append("revise", "true");
     const button = $("#start");
+    starting = true;
     button.disabled = true;
     try {
       const response = await fetch("/api/runs", { method: "POST", body });
       if (!response.ok) { showServerError(response.status, await errorMessage(response)); return; }
       const { run_id: id } = await response.json();
-      file.value = "";
-      part.value = "";
+      button.textContent = "Restart"; // die Zeichnung bleibt gewählt: ein weiterer Klick startet denselben Teil erneut
+      announce(`Analysis started: ${name}`);
       startRun(id, name, chosen.name);
     } catch (error) {
       showServerError(0, friendly(error));
     } finally {
+      starting = false;
       button.disabled = false;
     }
-  });
+  }
+  form.addEventListener("submit", (e) => { e.preventDefault(); submitRun(); });
 }
 
 // ---------------------------------------------------------------------------
@@ -1178,7 +1410,8 @@ function go(name, tab) {
 async function openPart(name, tab) {
   const token = ++openToken;
   state.name = name;
-  state.tab = tab && (tab === "run" ? state.run : TABS.some(([k]) => k === tab)) ? tab : "review";
+  const known = tab === "run" ? state.run : tab === "runs" ? true : TABS.some(([k]) => k === tab);
+  state.tab = tab && known ? tab : "review";
   markActiveRow();
   $("#main").classList.add("is-loading");
   let detail;
@@ -1190,7 +1423,7 @@ async function openPart(name, tab) {
     state.detail = null;
     renderEmptyTitleBlock();
     reset3D();
-    $("#drawing").replaceChildren(hatchBox("", `${name} konnte nicht geladen werden: ${friendly(error)}`, h("button", { type: "button", class: "btn btn-secondary", onclick: () => openPart(name, tab) }, "Erneut versuchen")));
+    $("#drawing").replaceChildren(hatchBox("", `${name} could not be loaded: ${friendly(error)}`, h("button", { type: "button", class: "btn btn-secondary", onclick: () => openPart(name, tab) }, "Try again")));
     renderTabs();
     renderPanel();
     return;
@@ -1203,7 +1436,7 @@ async function openPart(name, tab) {
   renderDrawing(detail);
   renderTabs();
   renderPanel();
-  announce(`Geöffnet: ${detail.spec?.title || name}`);
+  announce(`Opened: ${detail.spec?.title || name}`);
   setup3D(detail, token);
   showStepLink(detail); // after setup3D, which clears the link when it finds no model
 }
@@ -1221,7 +1454,7 @@ function showEmpty() {
   state.name = null;
   state.detail = null;
   renderEmptyTitleBlock();
-  $("#drawing").replaceChildren(h("p", { class: "empty empty-sheet" }, "Noch keine Teile. Zeichnung links unten ablegen und STEP erstellen."));
+  $("#drawing").replaceChildren(h("p", { class: "empty empty-sheet" }, "No parts yet. Drop a drawing at the bottom left; the analysis starts automatically."));
   reset3D();
   renderTabs();
   $("#panel").replaceChildren();
@@ -1233,6 +1466,7 @@ async function loadParts() {
   state.loadError = null;
   try {
     state.parts = await getJson("/api/parts");
+    syncRevise();
     state.loaded = true;
   } catch (error) {
     state.loadError = friendly(error);
@@ -1242,8 +1476,18 @@ async function loadParts() {
   if (state.detail) renderTabs();
 }
 
+/** Läuft auf dem Server noch ein Lauf (Seite neu geladen, zweiter Tab), die Ansicht wieder an ihn hängen. */
+async function attachActiveRun() {
+  if (state.run) return;
+  try {
+    const active = (await getJson("/api/runs")).find((r) => r.status === "running");
+    if (active && !state.run) startRun(active.run_id, active.part, basename(active.pdf));
+  } catch { /* ohne die Liste bleibt es bei der Teileansicht */ }
+}
+
 async function reload() {
   await loadParts();
+  await attachActiveRun();
   route();
 }
 
@@ -1254,7 +1498,8 @@ document.fonts?.ready.then(fitTitle);
 initPartsList();
 initTabs();
 initViewer();
-/** Die Modellauswahl des Servers (Claude, ein konfigurierter Endpunkt, die lokalen Ollama-Modelle), gruppiert. */
+/** Die Modellauswahl des Servers (Claude, ein konfigurierter Endpunkt, die lokalen Ollama-Modelle), gruppiert.
+ *  Vorgewählt ist das zuletzt gewählte Modell, sonst das erste verfügbare; ohne wählbares Modell steht die Meldung da. */
 async function loadModels() {
   const select = $("#model");
   try {
@@ -1271,12 +1516,17 @@ async function loadModels() {
       option.disabled = Boolean(m.disabled);
       groups.get(m.group).append(option);
     }
-    const first = models.find((m) => !m.disabled);
-    if (first) select.value = first.value;
-  } catch { /* ohne die Liste wählt der Agent selbst sein Modell */ }
+    let last = "";
+    try { last = localStorage.getItem("d2c.model") || ""; } catch { /* ohne Speicher gilt das erste verfügbare Modell */ }
+    const usable = models.filter((m) => !m.disabled);
+    const pick = usable.find((m) => m.value === last) ?? usable[0];
+    if (pick) select.value = pick.value;
+    select.addEventListener("change", () => { try { localStorage.setItem("d2c.model", select.value); } catch { /* nur eine Annehmlichkeit */ } });
+  } catch { $("#model").dataset.unknown = "1"; /* ohne die Liste entscheidet der Server, ob ein Modell da ist */ }
+  if (!hasModel() && !$("#file").files.length) showNoModel();
 }
 
+const modelsReady = loadModels(); // der Auto-Start nach dem Ablegen wartet darauf
 initUpload();
-loadModels();
 renderParts();
 reload();

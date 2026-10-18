@@ -1,0 +1,35 @@
+{
+  "name": "demo_shaft",
+  "drawing": "shaft_drawing.pdf",
+  "page": 1,
+  "title": "D2C Demo Shaft",
+  "scale": "1:1",
+  "units": "mm",
+  "general_tolerance": "ISO 2768-m",
+  "views": [
+    {"id": "v_front", "kind": "front", "scale": "1:1", "note": "axis horizontal, z = 0 at the left end"}
+  ],
+  "dimensions": [
+    {"id": "ds1", "kind": "diameter", "value": 20, "text": "Ø20", "source": {"view": "v_front", "cell": null}, "confidence": 0.95},
+    {"id": "ds2", "kind": "diameter", "value": 30, "text": "Ø30", "source": {"view": "v_front", "cell": null}, "confidence": 0.95},
+    {"id": "ds3", "kind": "diameter", "value": 24, "text": "Ø24", "source": {"view": "v_front", "cell": null}, "confidence": 0.95},
+    {"id": "l1", "kind": "length", "value": 35, "text": "35", "source": {"view": "v_front", "cell": null}, "confidence": 0.95},
+    {"id": "l2", "kind": "length", "value": 45, "text": "45", "source": {"view": "v_front", "cell": null}, "confidence": 0.95},
+    {"id": "l3", "kind": "length", "value": 30, "text": "30", "source": {"view": "v_front", "cell": null}, "confidence": 0.95},
+    {"id": "lt", "kind": "length", "value": 110, "text": "110", "source": {"view": "v_front", "cell": null}, "confidence": 0.95},
+    {"id": "c2", "kind": "chamfer", "value": 2, "text": "2x45°", "source": {"view": "v_front", "cell": null}, "confidence": 0.95}
+  ],
+  "features": [
+    {"id": "f_shaft", "type": "revolve", "dim_ids": ["ds1", "ds2", "ds3", "l1", "l2", "l3", "lt"], "note": "steps from z = 0 upward"},
+    {"id": "f_chamfer", "type": "chamfer", "dim_ids": ["c2"], "note": "edge at the end at z = 110"}
+  ],
+  "notes": [
+    {"id": "n1", "text": "Material C45", "source": null},
+    {"id": "n2", "text": "Deburr all edges", "source": null}
+  ],
+  "expected": {
+    "bbox": [30, 30, 110],
+    "holes": []
+  },
+  "review": []
+}

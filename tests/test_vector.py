@@ -1,19 +1,16 @@
 """Vektormessung auf synthetischen Zeichnungsblättern mit PyMuPDF."""
 
 import math
-from pathlib import Path
 
 import pymupdf
 import pytest
+from helpers import DEMO_FRONT_VIEW, DEMO_PDF, DEMO_TOP_VIEW
 
-from d2c.vector import extract, suggest_scale, verify
-
-DEMO = Path(__file__).parent / "fixtures" / "demo_drawing.pdf"
-DEMO_FRONT_VIEW = (0.21, 0.202, 0.781, 0.333)  # Bereiche der Demo-Zeichnung als Seitenanteile
-DEMO_TOP_VIEW = (0.21, 0.404, 0.781, 0.69)
+from d2c.drawing import vector
+from d2c.drawing.vector import extract, suggest_scale, verify
 
 MM = 72 / 25.4  # PDF-Punkte je Millimeter
-EDGE = 1.417  # Strichbreite (pt) der sichtbaren Kanten in den BCT-Zeichnungen
+EDGE = 1.417  # Strichbreite (pt) der sichtbaren Kanten in typischen CAD-Zeichnungen
 THIN = 0.35  # Mittellinien und ähnliche Elemente
 SHEET_W, SHEET_H = 420, 297  # A3 quer, mm
 
@@ -53,7 +50,7 @@ def test_synthetic_circles_and_extent(tmp_path, scale):
     res = extract(_plate_pdf(tmp_path / "plate.pdf", scale), scale=scale)
     assert res["scale_used"] == scale
     assert res["extent_mm"] == pytest.approx([80, 50], abs=0.01)
-    assert res["extent_basis"] == "größte Kontur"
+    assert res["extent_basis"] == "largest contour"
     hole30, hole16 = res["circles"]  # größtes zuerst
     assert hole30["d_mm"] == pytest.approx(30, abs=0.01)
     assert hole16["d_mm"] == pytest.approx(16, abs=0.01)
@@ -85,6 +82,13 @@ def test_verify_claims(tmp_path):
     (none,) = verify(only_an_edge, ["d=16"])
     assert none["status"] == "no_candidates"
     assert none["measured_mm"] is None
+
+
+def test_verify_accepts_common_letters(tmp_path):
+    res = extract(_plate_pdf(tmp_path / "plate.pdf", 2), scale=2)
+    verdicts = verify(res, ["W=50", "B=80", "Ø=16", "D=30", "R=8"])
+    assert [v["status"] for v in verdicts] == ["ok"] * 5
+    assert verdicts[0]["claim"] == "W=50"
 
 
 @pytest.mark.parametrize("claim", ["x=3", "d19", "d=", "d=-1", ""])
@@ -142,9 +146,7 @@ def test_tessellated_circle_and_arc(tmp_path):
 
     def ring(cx, cy, r, start, end, steps):  # Eckpunkte eines Kreis-Polygons in mm → PDF-Punkt
         angles = [math.radians(start + (end - start) * i / steps) for i in range(steps + 1)]
-        return [
-            pymupdf.Point((cx + r * math.cos(a)) * MM, (cy + r * math.sin(a)) * MM) for a in angles
-        ]
+        return [pymupdf.Point((cx + r * math.cos(a)) * MM, (cy + r * math.sin(a)) * MM) for a in angles]
 
     def draw(page):
         page.draw_polyline(ring(100, 100, 12, 0, 360, 24), width=EDGE)
@@ -210,10 +212,38 @@ def test_suggest_scale_rejects_non_positive_value(tmp_path):
 
 def test_demo_front_view_thickness():
     """Die Plattendicke ist in der Demo-Zeichnung nicht bemaßt; die Vorderansicht zeigt sie im Maßstab 1:1."""
-    res = extract(DEMO, region=DEMO_FRONT_VIEW, scale=1)
+    res = extract(DEMO_PDF, region=DEMO_FRONT_VIEW, scale=1)
     assert [v["status"] for v in verify(res, ["L=10", "L=80", "L=25"])] == ["ok"] * 3
 
 
 def test_demo_top_view_circles():
-    diameters = sorted(c["d_mm"] for c in extract(DEMO, region=DEMO_TOP_VIEW, scale=1)["circles"])
+    diameters = sorted(c["d_mm"] for c in extract(DEMO_PDF, region=DEMO_TOP_VIEW, scale=1)["circles"])
     assert diameters == pytest.approx([6.6] * 4 + [16, 30], abs=0.01)
+
+
+def test_public_api():
+    """Das Paket stellt genau die von anderen Modulen genutzten Namen bereit."""
+    assert sorted(vector.__all__) == ["STANDARD_SCALES", "extract", "suggest_scale", "verify"]
+    assert all(callable(getattr(vector, n)) for n in ("extract", "verify", "suggest_scale"))
+    assert 1.0 in vector.STANDARD_SCALES
+
+
+def test_short_collinear_pieces_become_one_line(tmp_path):
+    angle = math.radians(11)
+
+    def draw(page):
+        # 20 Einzelstriche von 2,3 mm unter 11 Grad, jeder von Hand gezeichnet (wie eine Polylinie aus Kurzstücken)
+        pts = [(50 + i * 2.3 * math.cos(angle), 100 - i * 2.3 * math.sin(angle)) for i in range(21)]
+        for p, q in zip(pts, pts[1:]):
+            page.draw_line(pymupdf.Point(p[0] * MM, p[1] * MM), pymupdf.Point(q[0] * MM, q[1] * MM), width=EDGE)
+        page.draw_line(pymupdf.Point(50 * MM, 150 * MM), pymupdf.Point(150 * MM, 150 * MM), width=EDGE)  # Waagerechte
+        page.draw_line(pymupdf.Point(50 * MM, 160 * MM), pymupdf.Point(50 * MM, 190 * MM), width=EDGE)  # Senkrechte
+
+    lines = extract(_sheet(tmp_path / "lines.pdf", draw), scale=1)["lines"]
+    assert [round(line["length_mm"]) for line in lines] == [100, 46, 30]  # längste zuerst, je eine Gerade
+    angles = [line["angle_deg"] for line in lines]
+    assert angles == pytest.approx([0, 11, 90], abs=0.01)
+    slanted = lines[1]
+    assert (slanted["x1"] - slanted["x0"], abs(slanted["y1"] - slanted["y0"])) == pytest.approx(
+        (46 * math.cos(angle), 46 * math.sin(angle)), abs=0.01
+    )

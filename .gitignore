@@ -1,19 +1,24 @@
-# BCT-Beispieldaten und alle daraus abgeleiteten Dateien bleiben außerhalb von Git.
+# Zeichnungen, Referenzmodelle und Ergebnisse des Auftraggebers bleiben außerhalb von Git.
 OneDrive*/
 *.stp
 *.prt
-*.pptx
 /data/
 /drawings/
 /tables/
 /results/
-/tests/test_bct.py
+/tests/test_refdata.py
 out/
 .env
 __pycache__/
 *.pyc
 *.egg-info/
 .pytest_cache/
+.ruff_cache/
 .venv/
 .DS_Store
 *.zip
+.coverage
+htmlcov/
+result.json
+build/
+dist/

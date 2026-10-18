@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="de">
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -11,51 +11,57 @@
 </head>
 <body class="loading">
   <div class="sheet">
-    <aside class="bom" aria-label="Teile und Hochladen">
+    <aside class="bom" aria-label="Parts and upload">
       <div class="brand">
         <p class="wordmark" aria-label="Drawing2CAD">Drawing<span>2CAD</span></p>
-        <button type="button" id="new-run" class="btn btn-primary">Neuer Lauf</button>
+        <button type="button" id="new-run" class="btn btn-primary">New run</button>
       </div>
-      <h2 class="bom-head">Teile <span id="parts-count" class="count"></span></h2>
+      <h2 class="bom-head">Parts <span id="parts-count" class="count"></span></h2>
       <div class="bom-scroll">
-        <ul id="parts" role="listbox" aria-label="Teile"></ul>
+        <ul id="parts" role="listbox" aria-label="Parts"></ul>
         <div id="parts-state" class="box" hidden></div>
       </div>
       <form id="upload" class="dropzone" novalidate>
-        <p id="dz-title" class="dz-title">Zeichnung (PDF, PNG, JPG) hier ablegen</p>
-        <p class="dz-hint">Bis 20 MB</p>
-        <input type="file" id="file" name="pdf" accept=".pdf,.png,.jpg,.jpeg" aria-label="Zeichnungsdatei" aria-describedby="file-error">
+        <p id="dz-title" class="dz-title">Drop drawing (PDF, PNG, JPG) here</p>
+        <p class="dz-hint">Up to 20 MB</p>
+        <div class="file-pick">
+          <input type="file" id="file" name="pdf" class="sr-only" accept=".pdf,.png,.jpg,.jpeg" aria-label="Drawing file" aria-describedby="file-name file-error">
+          <label for="file" class="btn btn-outline">Choose file</label>
+          <span id="file-name" class="file-name">No file chosen</span>
+        </div>
         <p id="file-error" class="field-error" role="alert"></p>
-        <label for="part">Teilname</label>
+        <label for="part">Part name</label>
         <input type="text" id="part" name="part" pattern="(?:[\p{L}\p{N}_\-]|[AaOoUu]\u0308)+" autocomplete="off" spellcheck="false" aria-describedby="part-error">
         <p id="part-error" class="field-error" role="alert"></p>
-        <label for="model">Modell</label>
+        <label for="model">Model</label>
         <select id="model" name="model" aria-describedby="model-error">
-          <option value="">Standard des Agenten</option>
+          <option value="">Agent default</option>
         </select>
         <p id="model-error" class="field-error" role="alert"></p>
-        <button type="submit" id="start" class="btn btn-secondary">STEP erstellen</button>
+        <label class="check" for="manual" title="Do not start the run automatically; click Create STEP to start it"><input type="checkbox" id="manual" name="manual"> Upload only</label>
+        <label class="check" for="revise"><input type="checkbox" id="revise" name="revise" disabled> Update existing model (new revision)</label>
+        <button type="submit" id="start" class="btn btn-secondary">Create STEP</button>
         <p id="run-notice" class="notice" role="alert"></p>
       </form>
     </aside>
 
     <header class="titleblock" id="titleblock">
       <div class="cell cell-title">
-        <span class="label">Benennung</span>
+        <span class="label">Title</span>
         <h1 class="title" id="tb-title"></h1>
         <span class="bar" aria-hidden="true"></span>
       </div>
       <div class="cell">
-        <span class="label">Zeichnung</span>
+        <span class="label">Drawing</span>
         <span class="value mono-value" id="tb-drawing"></span>
         <span class="sub" id="tb-page"></span>
       </div>
       <div class="cell">
-        <span class="label">Maßstab</span>
+        <span class="label">Scale</span>
         <span class="value" id="tb-scale"></span>
       </div>
       <div class="cell">
-        <span class="label">Toleranz</span>
+        <span class="label">Tolerance</span>
         <span class="value" id="tb-tolerance"></span>
       </div>
       <div class="cell">
@@ -65,16 +71,16 @@
     </header>
 
     <main class="main" id="main">
-      <section class="drawing" id="drawing" aria-label="Zeichnung"></section>
-      <section class="view3d" id="view3d" aria-label="3D-Modell">
+      <section class="drawing" id="drawing" aria-label="Drawing"></section>
+      <section class="view3d" id="view3d" aria-label="3D model">
         <div class="floor" aria-hidden="true"></div>
         <model-viewer id="viewer" camera-controls disable-tap loading="eager" interaction-prompt="none" interpolation-decay="140" environment-image="neutral" tone-mapping="commerce" shadow-intensity="0" exposure="1" field-of-view="14deg" hidden></model-viewer>
-        <p class="view-label" aria-hidden="true">3D-Modell</p>
-        <p class="view-hint" id="view-hint">Das 3D-Modell erscheint nach dem Export, mit Farben.</p>
-        <div class="view-buttons" id="view-buttons" role="group" aria-label="Kameraansicht" hidden></div>
-        <a id="step-link" class="ghost step-link" hidden>STEP herunterladen</a>
+        <p class="view-label" aria-hidden="true">3D model</p>
+        <p class="view-hint" id="view-hint">The 3D model appears after the export, with colours.</p>
+        <div class="view-buttons" id="view-buttons" role="group" aria-label="Camera view" hidden></div>
+        <a id="step-link" class="ghost step-link" hidden>Download STEP</a>
       </section>
-      <div class="tabs" id="tabs" role="tablist" aria-label="Teiledetails"></div>
+      <div class="tabs" id="tabs" role="tablist" aria-label="Part details"></div>
       <div class="panel" id="panel" role="tabpanel" tabindex="-1"></div>
     </main>
   </div>
@@ -86,6 +92,6 @@
     </defs>
   </svg>
   <p id="announce" class="sr-only" aria-live="polite"></p>
-  <noscript><p class="noscript">Drawing2CAD braucht JavaScript, um die Ergebnisse zu zeigen.</p></noscript>
+  <noscript><p class="noscript">Drawing2CAD needs JavaScript to show the results.</p></noscript>
 </body>
 </html>

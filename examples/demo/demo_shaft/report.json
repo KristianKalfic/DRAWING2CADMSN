@@ -1,0 +1,215 @@
+{
+  "ok": true,
+  "error": null,
+  "solid": {
+    "valid": true,
+    "solids": 1,
+    "free_edges": 0,
+    "volume": 56233.46130170612,
+    "bbox": [
+      -15.0,
+      -15.0,
+      0.0,
+      15.0,
+      15.0,
+      110.0
+    ],
+    "ok": true,
+    "cyl_d": [
+      20.0,
+      24.0,
+      30.0
+    ],
+    "circle_d": [
+      20.0,
+      24.0,
+      30.0
+    ]
+  },
+  "dims": [
+    {
+      "check": "bbox_x",
+      "expected": 30.0,
+      "actual": 30.0,
+      "ok": true,
+      "dim_ids": []
+    },
+    {
+      "check": "bbox_y",
+      "expected": 30.0,
+      "actual": 30.0,
+      "ok": true,
+      "dim_ids": []
+    },
+    {
+      "check": "bbox_z",
+      "expected": 110.0,
+      "actual": 110.0,
+      "ok": true,
+      "dim_ids": []
+    }
+  ],
+  "dims_found": {
+    "found": [
+      {
+        "id": "ds1",
+        "text": "Ø20",
+        "value": 20.0,
+        "nearest": 20.0
+      },
+      {
+        "id": "ds2",
+        "text": "Ø30",
+        "value": 30.0,
+        "nearest": 30.0
+      },
+      {
+        "id": "ds3",
+        "text": "Ø24",
+        "value": 24.0,
+        "nearest": 24.0
+      },
+      {
+        "id": "l1",
+        "text": "35",
+        "value": 35.0,
+        "nearest": 35.0
+      },
+      {
+        "id": "l2",
+        "text": "45",
+        "value": 45.0,
+        "nearest": 45.0
+      },
+      {
+        "id": "l3",
+        "text": "30",
+        "value": 30.0,
+        "nearest": 30.0
+      },
+      {
+        "id": "lt",
+        "text": "110",
+        "value": 110.0,
+        "nearest": 110.0
+      }
+    ],
+    "missing": []
+  },
+  "build_notes": [
+    {
+      "op_index": 1,
+      "edges_selected": 1
+    }
+  ],
+  "roundtrip": {
+    "path": "demo_shaft.step",
+    "reimport_valid": true,
+    "solids": 1,
+    "volume_rel_diff": 2.5748291705788563e-14,
+    "marks": [],
+    "pmi": {
+      "written": 0,
+      "read_back": 0,
+      "assumed": [],
+      "missing": []
+    },
+    "ok": true
+  },
+  "compliance": [
+    {
+      "dim_id": "ds1",
+      "text": "Ø20",
+      "nominal": 20.0,
+      "lower": -0.2,
+      "upper": 0.2,
+      "source": "general",
+      "values": [
+        20.0
+      ],
+      "in_tolerance": true,
+      "geometry": false
+    },
+    {
+      "dim_id": "ds2",
+      "text": "Ø30",
+      "nominal": 30.0,
+      "lower": -0.2,
+      "upper": 0.2,
+      "source": "general",
+      "values": [
+        30.0
+      ],
+      "in_tolerance": true,
+      "geometry": false
+    },
+    {
+      "dim_id": "ds3",
+      "text": "Ø24",
+      "nominal": 24.0,
+      "lower": -0.2,
+      "upper": 0.2,
+      "source": "general",
+      "values": [
+        24.0
+      ],
+      "in_tolerance": true,
+      "geometry": false
+    },
+    {
+      "dim_id": "l1",
+      "text": "35",
+      "nominal": 35.0,
+      "lower": -0.3,
+      "upper": 0.3,
+      "source": "general",
+      "values": [
+        35.0
+      ],
+      "in_tolerance": true,
+      "geometry": false
+    },
+    {
+      "dim_id": "l2",
+      "text": "45",
+      "nominal": 45.0,
+      "lower": -0.3,
+      "upper": 0.3,
+      "source": "general",
+      "values": [
+        45.0
+      ],
+      "in_tolerance": true,
+      "geometry": false
+    },
+    {
+      "dim_id": "l3",
+      "text": "30",
+      "nominal": 30.0,
+      "lower": -0.2,
+      "upper": 0.2,
+      "source": "general",
+      "values": [
+        30.0
+      ],
+      "in_tolerance": true,
+      "geometry": false
+    },
+    {
+      "dim_id": "lt",
+      "text": "110",
+      "nominal": 110.0,
+      "lower": -0.3,
+      "upper": 0.3,
+      "source": "general",
+      "values": [
+        110.0
+      ],
+      "in_tolerance": true,
+      "geometry": true
+    }
+  ],
+  "shifts": [],
+  "skipped": [],
+  "warnings": []
+}

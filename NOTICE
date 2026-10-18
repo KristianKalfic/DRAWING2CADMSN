@@ -1,0 +1,36 @@
+Drawing2CAD
+Lizenz des Projekts: GNU Affero General Public License, Version 3 oder später (AGPL-3.0-or-later, Datei LICENSE).
+
+Das Projekt nutzt die folgenden Komponenten Dritter. Die Versionen stammen aus pyproject.toml und uv.lock.
+Die Texte der jeweiligen Lizenzen gehören zu den Paketen; nur die mitgelieferten Dateien (letzter Abschnitt) liegen im Repository.
+
+Python-Abhängigkeiten
+---------------------
+cadquery 2.8.0                    Apache-2.0
+cadquery-ocp 7.9.3.1.1            Apache-2.0 (Python-Anbindung an Open CASCADE)
+Open CASCADE Technology 7.9       LGPL-2.1 mit Ausnahme (OCCT, in cadquery-ocp enthalten)
+pymupdf 1.28.2                    AGPL-3.0 oder kommerzielle Lizenz von Artifex
+mcp 2.3.0                         MIT
+pydantic 2.14.1                   MIT
+claude-agent-sdk 0.2.168          MIT; die Nutzung des Claude-Dienstes unterliegt den Bedingungen von Anthropic
+starlette 1.8.0                   BSD-3-Clause (über mcp)
+uvicorn 0.54.0                    BSD-3-Clause (über mcp)
+
+Nur für Entwicklung und Tests
+-----------------------------
+pytest 8.4.2                      MIT
+ruff 0.17.1                       MIT
+
+Im Docker-Image zusätzlich
+--------------------------
+poppler-utils                     GPL-2.0-or-later, als eigener Prozess aufgerufen (pdftoppm, pdftotext, pdftohtml)
+
+Mitgeliefert unter d2c/web/static/vendor
+----------------------------------------
+model-viewer (Google)             Apache-2.0 (Datei model-viewer.LICENSE); das Bundle enthält three.js (MIT), Lit (BSD-3-Clause) und fflate (MIT)
+Inter Tight                       SIL Open Font License 1.1 (fonts/OFL-InterTight.txt)
+JetBrains Mono                    SIL Open Font License 1.1 (fonts/OFL-JetBrainsMono.txt)
+
+Hinweis zur AGPL: pymupdf wird im selben Prozess geladen (d2c/drawing/pages.py, d2c/drawing/vector/, d2c/web/app.py). Deshalb steht das Projekt
+unter der AGPL-3.0 oder später. Wer die Web-Oberfläche Dritten über ein Netz anbietet, muss diesen die Quellen anbieten (AGPL, Abschnitt 13).
+Eine Weitergabe ohne AGPL setzt entweder eine kommerzielle Lizenz von Artifex für pymupdf oder den Ersatz von pymupdf voraus.

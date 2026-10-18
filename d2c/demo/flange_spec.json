@@ -1,0 +1,45 @@
+{
+  "name": "demo_flange",
+  "drawing": "flange_drawing.pdf",
+  "page": 1,
+  "title": "D2C Demo Flange",
+  "scale": "1:1",
+  "units": "mm",
+  "general_tolerance": "ISO 2768-m",
+  "views": [
+    {"id": "v_top", "kind": "top", "scale": "1:1"},
+    {"id": "v_front", "kind": "front", "scale": "1:1"}
+  ],
+  "dimensions": [
+    {"id": "d60", "kind": "diameter", "value": 60, "text": "Ø60", "source": {"view": "v_top", "cell": null}, "confidence": 0.95},
+    {"id": "d12", "kind": "diameter", "value": 12, "text": "Ø12 H7", "source": {"view": "v_top", "cell": null}, "confidence": 0.95, "fit": "H7"},
+    {"id": "d55", "kind": "diameter", "value": 5.5, "text": "4x Ø5,5", "source": {"view": "v_top", "cell": null}, "confidence": 0.95},
+    {"id": "d44", "kind": "diameter", "value": 44, "text": "Ø44", "source": {"view": "v_top", "cell": null}, "confidence": 0.95},
+    {"id": "t8", "kind": "length", "value": 8, "text": "", "source": null, "confidence": 0.6, "assumed": true,
+     "assumption_basis": "Flange thickness not dimensioned; measured in the front view at scale 1:1"}
+  ],
+  "features": [
+    {"id": "f_disc", "type": "base", "dim_ids": ["d60", "t8"]},
+    {"id": "f_bore", "type": "hole", "dim_ids": ["d12"]},
+    {"id": "f_holes", "type": "hole", "dim_ids": ["d55", "d44"], "note": "four holes on the pitch circle, rotated by 45°"}
+  ],
+  "notes": [
+    {"id": "n1", "text": "Material S235JR", "source": null},
+    {"id": "n2", "text": "Deburr all edges", "source": null}
+  ],
+  "expected": {
+    "bbox": [60, 60, 8],
+    "holes": [
+      {"d": 12, "at": [0, 0, 0], "axis": [0, 0, 1], "dim_ids": ["d12"]},
+      {"d": 5.5, "at": [15.5563, 15.5563, 0], "axis": [0, 0, 1], "dim_ids": ["d55"]},
+      {"d": 5.5, "at": [-15.5563, 15.5563, 0], "axis": [0, 0, 1], "dim_ids": ["d55"]},
+      {"d": 5.5, "at": [-15.5563, -15.5563, 0], "axis": [0, 0, 1], "dim_ids": ["d55"]},
+      {"d": 5.5, "at": [15.5563, -15.5563, 0], "axis": [0, 0, 1], "dim_ids": ["d55"]}
+    ]
+  },
+  "review": [
+    {"id": "rv1", "refs": ["t8"], "issue": "missing", "assumption": "Flange thickness 8 mm",
+     "reason": "The flange thickness is not dimensioned; measured in the front view at scale 1:1",
+     "mark_near": [[27, 0, 0], [27, 0, 8]]}
+  ]
+}

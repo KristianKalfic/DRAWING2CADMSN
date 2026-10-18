@@ -1,0 +1,10 @@
+{
+  "schema": "AP242_MANAGED_MODEL_BASED_3D_ENGINEERING_MIM_LF",
+  "dimensions": [],
+  "geometric_tolerances": [],
+  "datums": [],
+  "colors": {
+    "#99abb0": 1
+  },
+  "layers": {}
+}

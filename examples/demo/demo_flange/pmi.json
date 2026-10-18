@@ -1,0 +1,83 @@
+{
+  "schema": "AP242_MANAGED_MODEL_BASED_3D_ENGINEERING_MIM_LF",
+  "dimensions": [
+    {
+      "type": "diameter",
+      "value": 12.0,
+      "tol_upper": null,
+      "tol_lower": null,
+      "fit": "H7",
+      "descriptions": [],
+      "faces": [
+        "cylinder d=12 at (0, 0, 4)"
+      ]
+    },
+    {
+      "type": "diameter",
+      "value": 5.5,
+      "tol_upper": null,
+      "tol_lower": null,
+      "fit": null,
+      "descriptions": [],
+      "faces": [
+        "cylinder d=5.5 at (15.556, 15.556, 4)"
+      ]
+    },
+    {
+      "type": "diameter",
+      "value": 5.5,
+      "tol_upper": null,
+      "tol_lower": null,
+      "fit": null,
+      "descriptions": [],
+      "faces": [
+        "cylinder d=5.5 at (-15.556, 15.556, 4)"
+      ]
+    },
+    {
+      "type": "diameter",
+      "value": 5.5,
+      "tol_upper": null,
+      "tol_lower": null,
+      "fit": null,
+      "descriptions": [],
+      "faces": [
+        "cylinder d=5.5 at (-15.556, -15.556, 4)"
+      ]
+    },
+    {
+      "type": "diameter",
+      "value": 5.5,
+      "tol_upper": null,
+      "tol_lower": null,
+      "fit": null,
+      "descriptions": [],
+      "faces": [
+        "cylinder d=5.5 at (15.556, -15.556, 4)"
+      ]
+    },
+    {
+      "type": "distance",
+      "value": 8.0,
+      "tol_upper": null,
+      "tol_lower": null,
+      "fit": null,
+      "descriptions": [
+        "ASSUMPTION: Flange thickness 8 mm - The flange thickness is not dimensioned; measured in the front view at scale 1:1 - please check"
+      ],
+      "faces": [
+        "plane z=0",
+        "plane z=8"
+      ]
+    }
+  ],
+  "geometric_tolerances": [],
+  "datums": [],
+  "colors": {
+    "#99abb0": 1,
+    "#ff8000": 2
+  },
+  "layers": {
+    "ASSUMED_CHECK": 2
+  }
+}

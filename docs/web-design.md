@@ -1,244 +1,137 @@
 # Web-Oberfläche: Gestaltung „Prüfblatt“
 
-Gestaltung der Web-Oberfläche (`d2c/web/static/`). Daten und Endpunkte: `docs/spec.md`, Abschnitt 12. Stand: Entwurf, `static/app.js` ist noch nicht gebaut. Das Feld `issues` in `/api/parts` und die Seitenwahl in `drawing.png` sind geplant.
+Gestaltung und Bedienung der Web-Oberfläche (`d2c/web/static/`: `index.html`, `style.css`, `app.js`). Daten und Endpunkte: `docs/spec.md`, Abschnitt 12.
 
 ## Idee
 
-Die Oberfläche ist ein **geprüftes Zeichenblatt**: oben ein Schriftfeld, links die Stückliste, in der Mitte die Zeichnung mit Rasterfeldern. Die Prüfliste ist als Änderungstabelle gestaltet. Jede Annahme erscheint darin als orange markierte Korrektur. Aus dem weißen Blatt öffnet sich ein dunkles Petrol-Fenster mit dem 3D-Modell. Die Farben stammen aus der BCT-Unternehmensmarke; das Cyan der Hackathon-Veranstaltung erscheint nur im 3D-Fenster.
+Die Oberfläche ist ein **geprüftes Zeichenblatt**: oben ein Schriftfeld, links die Stückliste mit dem Ablagebereich für neue Zeichnungen, in der Mitte die Zeichnung mit Rasterfeldern, daneben das 3D-Modell. Die Prüfliste ist als Änderungstabelle gestaltet; jede Annahme erscheint darin als orange markierte Zeile. Der Auftritt nutzt ein Rot als Akzent, Weiß und Petrol; ein Logo wird nicht verwendet.
 
-Das Leitprinzip des Entwurfs lautet: **Eine Kontur kennzeichnet einen unbestätigten Zustand (angenommen, nicht exportiert, abweichend oder blockiert); eine Füllung kennzeichnet einen gelesenen und geprüften Zustand.** Der Teilname bleibt als Kontur stehen, solange `all_ok` nicht `true` ist, und wird danach gefüllt dargestellt. Angenommene Maße erscheinen als orange Hilfsmaße in Klammern, gelesene Maße als gewöhnliche Maße.
+Leitprinzip: **Eine Kontur kennzeichnet einen unbestätigten Zustand (angenommen, nicht exportiert, abweichend, gesperrt); eine Füllung kennzeichnet einen gelesenen und geprüften Zustand.** Der Teilname bleibt als Kontur stehen, solange `all_ok` nicht `true` ist, und wird danach gefüllt dargestellt. Angenommene Maße erscheinen als orange Hilfsmaße in Klammern, gelesene Maße als gewöhnliche Maße.
 
-Warum diese Richtung:
-
-- Die Jury besteht aus CAD- und PLM-Ingenieuren. Ein Schriftfeld nach ISO 7200, Hilfsmaße nach ISO 129-1 und Schnittschraffur erkennen sie sofort. Eine generische Übersicht sieht für sie aus wie jede andere.
-- BCT verkauft selbst „BCT 3D-Raster“, ein Produkt, das Rasterzeichnungen in NX überführt. Dessen Produktseite zeigt eine CAD-Zeichnung unter einem dunklen Petrol-Verlauf. Das 3D-Fenster zitiert genau dieses Motiv.
-- Helles Papier funktioniert auf jedem Beamer. Dunkle Flächen verlieren dort ihre Abstufungen.
-- `drawing.png` ist schwarz auf weiß. Ein dunkles Blatt würde die Brücke Zeichnung → Modell zerstören.
-
-## BCT-Marke (Quelle: bct-technology.com und BCTs Hackathon-Folien, geprüft)
-
-- Primärfarbe BCT-Rot `#DB0027`, Aktivfarbe `#9D0521`. Weiß dominiert, Hellgrau-Bänder `#F2F5F8`, Anthrazit `#272727`, Text `#222`.
-- Sekundär Petrol: Schaltfläche `#046C83`, Verlauf `#14A8C5` bis `#004959`.
-- Schrift Inter Tight. Überschriften 700 mit enger Laufweite, Schaltflächen mit 3 px Radius und `letter-spacing: 1px`.
-- Markenzeichen: In einer dunklen Überschrift ist **ein Wortteil rot** („Gemeinsam **MEHR**wert schaffen“). Dazu ein kurzer roter Strich (145 px) als Trenner.
-- Das Cyan/Schwarz der Folie (`#00EBFD`, „BLACK FOREST“ als Konturversalien) ist die Veranstaltungsmarke, nicht BCT.
-- **Das BCT-Logo wird nicht verwendet** (keine Freigabe).
+Hell auf Weiß statt dunkel: Die Zeichnung (`drawing.png`) ist schwarz auf weiß, ein dunkles Blatt würde die Brücke von der Zeichnung zum Modell zerstören. Nur das 3D-Fenster hat einen dunklen Petrol-Verlauf.
 
 ## 1. Farben
 
-In `style.css` als Variablen. Die Kontrastwerte sind nach WCAG 2.x gerechnet und nachgeprüft. Text braucht mindestens 4,5:1, Grafik und Bedienelemente mindestens 3:1.
+Als Variablen in `style.css`. Die Kontrastwerte sind nach WCAG 2.x gerechnet: Text mindestens 4,5:1, Grafik und Bedienelemente mindestens 3:1.
 
-```css
-:root {
-  --paper: #ffffff;       /* Blatt */
-  --band: #f2f5f8;        /* Stückliste, Reiterleiste */
-  --ink: #222222;         /* Text: 15,9 auf paper, 14,5 auf band */
-  --ink-2: #55606b;       /* Beschriftungen, Nebentext, Rahmen von Feldern und Ablagebereich: 6,4 auf paper, 5,9 auf band */
-  --frame: #272727;       /* Rahmen- und Schriftfeldlinien, 1,5 px */
-  --hair: #c9d2db;        /* nur Zeilentrenner und Deko, nie Grenze eines Bedienelements (1,5) */
-  --bct: #db0027;         /* Marke: Weiß darauf 5,2 */
-  --bct-press: #9d0521;   /* Aktivzustand der primären Schaltfläche: 8,5 */
-  --petrol: #046c83;      /* Sekundäre Schaltflächen, Verknüpfungen, Fokus auf hellen Flächen, hervorgehobene Zellen: 6,0 auf paper */
-  --view-top: #004959;    /* 3D-Fenster, Verlauf oben; Weiß darauf 10,0 */
-  --view-bottom: #00404f; /* 3D-Fenster, Verlauf unten; Weiß darauf 11,4 */
-  --cyan: #00ebfd;        /* Veranstaltungsfarbe, NUR im 3D-Fenster: 6,8 auf view-top */
-  --assume: #ff8000;      /* Annahme = Farbe im STEP/GLB. Nur als Fläche oder im 3D-Fenster, nie Text auf Weiß (2,5) */
-  --assume-ink: #a64b00;  /* oranger Text auf Weiß: 5,8 */
-  --assume-line: #cc6300; /* orange Linien auf Weiß: 3,9 */
-  --assume-tint: #fff1e5; /* Zeilenhintergrund einer Annahme; assume-ink darauf 5,2 */
-  --ok: #3fae58;          /* ok und Gewinde als Fläche; ink darauf 5,6 */
-  --ok-ink: #1e7a34;      /* ok als Text: 5,4 */
-}
-```
+| Variable | Wert | Verwendung |
+| --- | --- | --- |
+| `--paper` | `#ffffff` | Blatt |
+| `--band` | `#f2f5f8` | Stückliste, Reiterleiste |
+| `--ink` | `#222222` | Text |
+| `--ink-2` | `#55606b` | Beschriftungen, Nebentext, Rahmen von Feldern |
+| `--frame` | `#272727` | Rahmen- und Schriftfeldlinien, 1,5 px |
+| `--hair` | `#c9d2db` | nur Zeilentrenner, nie Grenze eines Bedienelements |
+| `--accent` | `#db0027` | Akzent, siehe Regel 1 |
+| `--petrol` | `#046c83` | sekundäre Schaltflächen, Verknüpfungen, Fokus auf hellen Flächen |
+| `--view-top`, `--view-bottom` | `#004959`, `#00404f` | Verlauf des 3D-Fensters |
+| `--cyan` | `#00ebfd` | nur das Punktraster im 3D-Fenster |
+| `--assume` | `#ff8000` | Annahme als Fläche, entspricht der Farbe im STEP und GLB; nie als Text auf Weiß |
+| `--assume-ink`, `--assume-line`, `--assume-tint` | `#a64b00`, `#cc6300`, `#fff1e5` | oranger Text, orange Linien, Zeilenhintergrund einer Annahme |
+| `--ok`, `--ok-ink` | `#3fae58`, `#1e7a34` | bestanden als Fläche und als Text |
 
-Regeln für die drei warmen Farben (die wichtigsten Regeln der Datei):
+Regeln:
 
-1. **BCT-Rot kodiert nie einen Zustand.** Es steht nur an drei Stellen: im Wortteil „2CAD“ der Wortmarke, im 145-px-Strich unter dem Teilenamen und in der **einen** primären Schaltfläche „Zeichnung hinzufügen“ im Schriftfeld. Dazu der 3-px-Balken der aktiven Zeile in der Stückliste (Navigation, keine Daten).
+1. **Das Akzentrot kodiert nie einen Zustand.** Es steht nur im Wortteil „2CAD“ der Wortmarke, im 145-px-Strich unter dem Teilnamen, in der einen primären Schaltfläche „New run“ und als 3-px-Balken der aktiven Zeile in der Stückliste.
 2. **Orange heißt immer „angenommen statt gelesen“**, in der Oberfläche wie im Modell.
-3. **Ein Fehler ist nicht rot**, sondern ein Kasten mit 45°-Schnittschraffur als Rand (`repeating-linear-gradient(45deg, var(--ink) 0 1.5px, transparent 1.5px 7px)`). „FEHLER“ oder „GESPERRT“ steht auf einem weißen Feld in der Mitte, nie direkt auf der Schraffur. Unter `@media (forced-colors: active)` ersetzt ein 2-px-Rahmen die Schraffur.
-4. Kein Zustand hängt nur an der Farbe. Jeder hat zusätzlich eine Form (Kontur, Fläche, Schraffur) und ein Wort.
+3. **Ein Fehler ist nicht rot**, sondern ein Kasten mit 45°-Schnittschraffur als Rand. Ein Wort wie „STOPPED“ steht auf einem weißen Feld in der Mitte; Fehlerkästen ohne Wort tragen nur den Text. Unter `forced-colors: active` ersetzt ein 2-px-Rahmen die Schraffur.
+4. Kein Zustand hängt nur an der Farbe: jeder hat zusätzlich eine Form (Kontur, Fläche, Schraffur) und ein Wort.
 
-Fokus: `outline: 2px solid var(--petrol); outline-offset: 2px` auf hellen Flächen. Im 3D-Fenster und auf `--frame`-Flächen (aktiver Reiter) Weiß, denn Petrol erreicht dort nur 1,7 und 2,5.
+Fokus: `outline: 2px solid var(--petrol)` auf hellen Flächen, auf dunklen Flächen (3D-Fenster, aktiver Reiter) Weiß.
 
 ## 2. Schrift
 
-Beide Schriften stehen unter der OFL. Fertige woff2-Dateien mit Latin-Subset gibt es bei Fontsource. Einmalig beim Bauen holen (alle liefern 200) und unter `d2c/web/static/vendor/fonts/` ablegen. Zur Laufzeit lädt nichts aus dem Netz.
+Inter Tight für Text, JetBrains Mono für IDs, Pfade, Operationen, Protokoll und Dateinamen; beide unter der SIL Open Font License, als woff2 in `d2c/web/static/vendor/fonts/` mit ihren Lizenztexten. Zur Laufzeit lädt nichts aus dem Netz; fehlen die Dateien, greifen Ersatzschriften (`font-display: swap`).
 
-```
-cd d2c/web/static/vendor/fonts
-curl -L -o InterTight-wght.woff2        "https://cdn.jsdelivr.net/fontsource/fonts/inter-tight:vf@latest/latin-wght-normal.woff2"
-curl -L -o InterTight-wght-italic.woff2 "https://cdn.jsdelivr.net/fontsource/fonts/inter-tight:vf@latest/latin-wght-italic.woff2"
-curl -L -o JetBrainsMono-wght.woff2     "https://cdn.jsdelivr.net/fontsource/fonts/jetbrains-mono:vf@latest/latin-wght-normal.woff2"
-curl -L -o OFL-InterTight.txt    https://raw.githubusercontent.com/google/fonts/main/ofl/intertight/OFL.txt
-curl -L -o OFL-JetBrainsMono.txt https://raw.githubusercontent.com/google/fonts/main/ofl/jetbrainsmono/OFL.txt
-```
-
-- Inter Tight (BCT-Hausschrift): Schriftreihenfolge `"Inter Tight", "Helvetica Neue", Arial, sans-serif`. `@font-face` mit `font-weight: 100 900`.
-- JetBrains Mono für IDs, Pfade, Operationen, Protokoll und Dateinamen: Schriftreihenfolge `"JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace`.
-- `font-display: swap`. Fehlen die Dateien, sieht die Seite mit den Ersatzschriften immer noch ordentlich aus.
-- **Symbole △, ✓, ✕ und Pfeile sind nicht im Latin-Subset.** Sie kommen als kleine Inline-SVGs (`aria-hidden="true"`, das Wort daneben trägt die Bedeutung). Ø, ×, ± und ° sind im Subset.
-
-Skala (px, Zeilenhöhe, Gewicht):
-
-- Teilename im Schriftfeld: 48, 1.05, 800, Versalien, `letter-spacing: -0.01em`. Kontur über `-webkit-text-stroke: 1.5px var(--ink); color: transparent`, gefüllt bei `all_ok === true`. Kontur nur ab 32 px, darunter wird sie unsauber; kleinere Zustände werden als Kennzeichnungen dargestellt.
-- Kennzahl (Vergleich, Prüfergebnisse-Kopf): 56, 1, 700, `tabular-nums`.
-- H2: 28, 1.15, 600. Schriftfeld-Wert: 18, 1.2, 600.
-- Fließtext: 15, 1.45, 400, höchstens 70ch.
-- Beschriftungen und Reiter: 12, 1.2, 700, Versalien, `letter-spacing: 1px`.
-- **Maßtext**: Inter Tight *Italic* 500, 14 px, `tabular-nums`. Die Kursive zitiert die Normschrift nach ISO 3098 B. Gilt für jeden Maßwert im Blatt.
-- Monoschrift: 13, 1.5.
+- Teilname im Schriftfeld: groß, 800, Versalien; als Kontur (`-webkit-text-stroke`), solange `all_ok` nicht `true` ist.
+- Beschriftungen und Reiter: 12 px, 700, Versalien. Maßtexte: Inter Tight kursiv 500 mit Tabellenziffern (nach ISO 3098 B).
+- Symbole (△, ✓, ✕, Pfeile) sind Inline-SVGs mit `aria-hidden`; das Wort daneben trägt die Bedeutung.
 
 ## 3. Layout
 
-Bei 1440 × 900 ist alles ohne Scrollen der Seite sichtbar. Es scrollen nur die Teileliste in der Stückliste und die Reiterfläche, der Ablagebereich bleibt unten fest. Zeilen des Hauptbereichs: `grid-template-rows: 1fr 44px minmax(150px, 30vh)`, die Bühne bekommt den Rest. Eine feste Bühnenhöhe lässt bei Teilen mit wenigen Prüfeinträgen eine große leere Fläche (im Entwurf geprüft).
+Bei 1440 × 900 ist alles ohne Scrollen der Seite sichtbar. Es scrollen nur die Teileliste und die Reiterfläche.
 
 ```
-+--------------+-----------------------------+-----------+-----------+-----------+-------------+
-| DRAWING2CAD  | BEZEICHNUNG                 | ZEICHNUNG | MASSSTAB  | TOLERANZ  | STATUS      |  88 px
-| ("2CAD" rot) | PLATTE 80X50 (48, Kontur)   | plate.pdf | 1:1  △1  | ISO 2768-m| 1 ANNAHME   |  Schriftfeld
-| [ Zeichnung hinzufügen ] | ===== (145 px BCT-Rot) | Seite 1   |           |           | 14/14 BESTANDEN |
-+--------------+---1-----2-----3-----4-----5-----6---+-----------------------------------------+
-| TEILE 21     A  drawing.png auf Weiß               A |  3D-FENSTER  Petrol-Verlauf             |
-| Stückliste    |                        +---+       |  Cyan-Punktraster als Boden             |  Rest
-| 01 Halter△2 B                          |C4 |      B |  model-viewer, orange Flächen           |
-| 02 Welle  ✓  |                         +---+       |  [VORNE] [OBEN] [SEITE] [ISO] rv1         |
-| 03 Platte △1 C                                    C |                                         |
-| (scrollt)    +---1-----2-----3-----4-----5-----6---+-----------------------------------------+
-| 264 px       | PRÜFVERMERKE 1 . PRÜFERGEBNISSE 14/14 . RÜCKVERFOLGBARKEIT . VERGLEICH . DATEIEN | 44 px |
-| Band-Grau    | △  ID   MASS  PROBLEM  ANNAHME  QUELLE  FLÄCHEN                                |
-| ------------ | 1  rv1  (10)  fehlt    Dicke 10 mm  vorne C4 1                                |  max. 30vh, scrollt
-| Ablagebereich unten fest |                                                                    |
-+--------------+--------------------------------------------------------------------------------+
++--------------+-----------------------------+-----------+-----------+-----------+
+| DRAWING2CAD  | TITLE                       | DRAWING   | SCALE     | TOLERANCE | STATUS
+| [New run]    | Teilname (Kontur / gefüllt) | Datei     | 1:1  △1   | ISO 2768  | Annahmen, Prüfungen
++--------------+-----------------------------+-----------+-----------+-----------+
+| PARTS        |  Zeichnung mit Rasterleiste |  3D-Fenster (Petrol-Verlauf)      |
+| Stückliste   |  A-F / 1-8, Zoom             |  model-viewer, Ansichten, STEP-Link
+| Ablagebereich+-----------------------------+-----------------------------------+
+|              | Reiter: Review list, Checks, Tolerances, Traceability, Reference, Files       |
+|              | Tabelle (scrollt, höchstens 30 vh)                                            |
++--------------+-------------------------------------------------------------------------------+
 ```
 
-- Spalten: Stückliste 264 px, Zeichnung und 3D-Fenster teilen den Rest 1 : 1.
-- Rasterleiste A-F (Zeilen) und 1-8 (Spalten) nur am Zeichnungspanel, 16 px breit, Ziffern in `--ink-2`. Bei A4-Zeichnungen 1-4. Sie hat eine Bedeutung (S1), keine Deko.
-- 1920 × 1080: Stückliste 300 px, Zeichnung zu 3D 1 : 1,2.
-- Unter 1024 px: Zeichnung und 3D untereinander (3D zuerst), Stückliste wird eine horizontale Scroll-Leiste über der Bühne.
-- Unter 768 px: Das Schriftfeld klappt auf 2 × 3 Zellen um, Reiter lassen sich horizontal verschieben, Tabellenzeilen werden zu Blöcken mit Beschriftung über dem Wert. Kein Demo-Ziel, aber bedienbar, ohne horizontales Scrollen der Seite.
-- Linien: Schriftfeld und Panelgrenzen 1,5 px `--frame`. Tabellen nur mit Zeilentrennern in `--hair`, keine Kästen um jede Zelle. Eckenradius 0, nur Buttons 3 px wie bei BCT.
+- Spalten: Stückliste 264 px (ab 1920 px Breite 300 px), Zeichnung und 3D-Fenster teilen den Rest.
+- Die Rasterleiste A-F (Zeilen) und 1-8 (Spalten) steht am Zeichnungspanel; bei A4-Zeichnungen 1-4. Sie hat eine Bedeutung: Quellen in der Prüfliste nennen Ansicht und Rasterfeld.
+- Unter 1024 px stehen Zeichnung und 3D-Fenster untereinander. Unter 768 px klappt das Schriftfeld auf drei Spalten um, Tabellenzeilen werden zu Blöcken. Die Seite scrollt nie horizontal.
+- Linien: Schriftfeld und Panelgrenzen 1,5 px `--frame`, Tabellen nur mit Zeilentrennern, Eckenradius 0 (Schaltflächen 3 px).
 
 ## 4. Komponenten
 
-**Drei Zustände eines Teils.** `Session.export` schreibt `review.json` nur bei Erfolg und löscht es bei einem Fehlschlag. Der Ergebnisordner enthält daher entweder ein erfolgreich exportiertes und geprüftes Teil oder ein noch nicht exportiertes Teil:
+**Drei Zustände eines Teils.** `export_step` schreibt Ergebnisdateien und `review.json` nur bei Erfolg; ein Fehlschlag lässt das letzte gute Ergebnis stehen:
 
-- `all_ok === true`: exportiert und geprüft. Titel gefüllt, ✓.
-- `all_ok === null`: nicht exportiert (`spec.json` und `ops.json` vorhanden, kein STEP). Titel als Kontur, Statusmarkierung „NICHT EXPORTIERT“ (Konturrahmen), keine Prüfergebnisse.
-- Ein fehlgeschlagener Export ist nur während des **laufenden Vorgangs** sichtbar (S3, `tool_result` mit `ok: false` und `done` mit `reason`). Nach dem Neuladen ist das Teil „nicht exportiert“.
+- `all_ok === true`: exportiert und geprüft. Titel gefüllt, Häkchen.
+- `all_ok === false`: exportiert, aber eine Prüfung nicht bestanden (etwa ein angenommenes Maß ohne PMI). Titel als Kontur, Kennzeichnung „CHECK FAILED“, im Schriftfeld „m/k OK“ mit Kreuz.
+- `all_ok === null`: nicht exportiert (`spec.json` und `ops.json` vorhanden, noch nie ein erfolgreicher Export, kein STEP). Titel als Kontur, Kennzeichnung „NOT EXPORTED“, keine Prüfergebnisse.
+- Ein fehlgeschlagener Export ist nur während des laufenden Vorgangs sichtbar (`tool_result` mit `ok: false`, `done` mit `reason`); nach dem Neuladen zeigt die Oberfläche wieder das letzte gute Ergebnis, oder „NOT EXPORTED“, falls es keines gibt.
 
-Komponenten:
+Bausteine:
 
-- **Schriftfeld (Kopf):** echtes Zellraster mit den Zellen BEZEICHNUNG, ZEICHNUNG (Dateiname, „Seite N“ aus `spec.page`), MASSSTAB (`spec.scale`), TOLERANZ (`general_tolerance`, sonst „nicht angegeben“), STATUS (Zahl der Annahmen und „14/14 BESTANDEN“, bei „nicht exportiert“ nur die Statusmarkierung). Beschriftungen 12 px in Versalien in `--ink-2`, Werte 18/600. Links die Wortmarke „Drawing**2CAD**“ in Inter Tight 800 („2CAD“ in BCT-Rot) und darunter die primäre Schaltfläche „Zeichnung hinzufügen“ (Weiß auf BCT-Rot, Aktivzustand `--bct-press`, gedrückt `translateY(1px)`). Sie startet nichts, sondern setzt den Fokus auf den Ablagebereich.
-- **Stückliste:** Positionsnummer in Monoschrift, Name, rechts △ mit Zahl der Annahmen (`review_count`) in `--assume-ink` (fehlt bei 0), dazu eine Kennzeichnung in Monoschrift mit der Aufschrift „MASSSTAB“, wenn `issues` (Feld in `/api/parts`) `"conflict"` enthält; angezeigt wird „Konflikt“. Dazu der Status ✓ oder „NICHT EXPORTIERT“. Aktive Zeile mit 3-px-Balken in BCT-Rot links. Bedienmuster: `<ul role="listbox">` mit `role="option"`, `aria-selected`, wechselndem `tabindex` sowie ↑/↓ und Enter. Kopf „TEILE 21“.
-- **Zeichnung:** `<img alt="Zeichnung: <title>, Seite N">` auf Weiß in der Rasterleiste; der Prüfreiter ist die Textalternative zu den Maßen. Vergrößerung (Kür): Schaltflächen +, − und „Zurücksetzen“ unten rechts, Tasten +, − und 0 bei Fokus auf dem Bild, zusätzlich Mausrad am Zeiger.
-- **3D-Fenster:** `<model-viewer camera-controls>` auf `linear-gradient(var(--view-top), var(--view-bottom))`, darunter ein Cyan-Punktraster als Boden (`radial-gradient(var(--cyan) 1px, transparent 1.2px)`, `background-size: 16px 16px`, 25 % Deckkraft, nur untere Hälfte über eine Maske). Unten links die Ansichts-Schaltflächen VORNE, OBEN, SEITE, ISO als transparente Schaltflächen (weiße Haarlinie, weißer Text, `aria-pressed`). Das GLB stellt Gewinde weiterhin grün dar. `alt` nennt Teilename und Zahl der Annahmen. **Ohne GLB** (bei „nicht exportiert“) zeigt das Fenster das Punktraster und den Satz „Das 3D-Modell erscheint nach dem Export mit Farben.“
-- **Reiter:** `role="tablist"`, Schaltflächen mit `role="tab"`, `aria-selected`, `aria-controls`, wechselndem `tabindex` und ←/→, Inhalt in `role="tabpanel"` mit `aria-labelledby`. Der aktive Reiter erscheint als `--frame`-Kasten mit weißem Text. Reihenfolge: Prüfvermerke, Prüfergebnisse, Rückverfolgbarkeit, Referenzvergleich, Dateien. Während eines Laufs steht vorne ein Reiter „Lauf“ (S3).
-- **Prüfliste (Änderungstabelle):** Spalten △ (laufende Nummer), ID (Monoschrift), MASS (Texte aus `refs[].text`; ein leerer Text heißt unbemaßt, dann der angenommene Wert als oranges Hilfsmaß in Klammern), PROBLEM (`missing` → „fehlt“, `ambiguous` → „mehrdeutig“, `low_confidence` → „geringe Sicherheit“, `conflict` → „Konflikt“, `convention` → „Konvention“; die technischen Schlüssel bleiben erhalten), ANNAHME, GRUND, QUELLE (`sources`, Zeichenfolgen `"<view-id>/<cell>"`, `-` für kein Raster), FLÄCHEN (`marked_faces`, `null` als „-“). Jede Zeile mit `--assume-tint` und 4-px-Kante `--assume-line` links sowie `tabindex="0"`, damit das Leuchten (S2) auch per Tastatur ausgelöst wird. `notes` erscheint darunter als graue Liste „Zeichnungshinweise“.
-- **Prüfergebnisse:** oben die Kennzahl „14/14“ (Zahl der bestandenen `validation`-Zeilen). Darunter die Spalten PRÜFUNG, SOLL, IST (Monoschrift) und ✓. Bei „nicht exportiert“: „Noch keine Prüfergebnisse. Der letzte Export ist fehlgeschlagen oder das Teil wurde noch nie exportiert.“
-- **Rückverfolgbarkeit:** `ops.json` per `/files/<teil>/ops.json` nachladen, denn `/api/parts/{name}` liefert es nicht. Beispielzeile in Monoschrift: `Schritt 2 · Bohrungen · d = 8 ← d1 "Ø8"`. Die Schrittnummer ergibt sich aus `op_index + 1`; der technische Wert `holes` aus `ops[op_index].op` wird als „Bohrungen“ angezeigt. Danach folgen `path`, `value`, `dimension` und `text`. Darunter steht der Block „Werte ohne Maßbezug“ (`unreferenced`) mit gestrichelter Kante in `--assume-line`, denn diese Werte sind nicht durch ein Maß belegt.
-- **Referenzvergleich:** S5. Ohne `eval`: „Für dieses Teil gibt es keine Referenz.“
-- **Dateien:** eine Zeile pro Datei aus `files`: Typ-Kürzel groß (STEP, MID STEP, GLB, MD, JSON), Dateiname in Monoschrift, Link mit `download`. Bei „nicht exportiert“ statt der STEP-Zeile ein Schraffur-Kasten „GESPERRT“ mit „Keine STEP-Datei: Der Export erfolgt nur, wenn alle Prüfungen bestanden sind.“ (das Prinzip „kein Export bei Rot“ wird sichtbar).
-- **Hochladen (Ablagebereich, unten fest in der Stückliste):** Rahmen 1,5 px gestrichelt in `--ink-2`, Text „Zeichnung hier ablegen (PDF, PNG, JPG)“. Beim Ziehen einer Datei über die Fläche (`dragover`) wird sie mit `--band` hinterlegt. Darin eine sichtbare, fokussierbare `<input type="file" accept=".pdf,.png,.jpg,.jpeg">`; Ziehen ist nur ein zweiter Weg. Felder Teilname (`pattern="(?:[\p{L}\p{N}_\-]|[AaOoUu]\u0308)+"`) und Modell (optional). Das Muster erlaubt Umlaute, auch in zerlegter Unicode-Schreibweise, sowie weitere Buchstaben, Zahlen, Unterstrich und Bindestrich; der Server normalisiert den Namen auf NFC und validiert ihn weiterhin streng. Beschriftungen stehen über den Feldern, Feldrahmen 1 px `--ink-2`. Absenden mit der Petrol-Schaltfläche „Lauf starten“. Fehlermeldungen erscheinen unter dem jeweiligen Feld (`role="alert"`, `aria-describedby`). Bei 400 und 413 wird die Servermeldung angezeigt. Bei 503 erscheint sie wörtlich als Hinweis mit Petrol-Kante, ergänzt um „Bereits erfasste Teile bleiben weiterhin abrufbar.“
+- **Schriftfeld:** Zellen „TITLE“, „DRAWING“ (Datei, „Sheet N“), „SCALE“ (`spec.scale`), „TOLERANCE“ (`general_tolerance`, ohne Angabe „not specified“), „STATUS“ („n ASSUMED“ und „m/k OK“ mit Häkchen, bei einer nicht bestandenen Prüfung mit Kreuz; ohne Export „NOT EXPORTED“, während eines Laufs „RUNNING“, danach „DONE“ oder „STOPPED“). „New run“ setzt nur den Fokus auf die Dateiauswahl im Ablagebereich. Enthält die Prüfliste einen Widerspruch, dessen Text einen Maßstab nennt, steht neben dem Maßstab ein Dreieck mit der Nummer des Eintrags (Link auf die Zeile); der gedruckte zweite Maßstab erscheint durchgestrichen (Titel „Scale printed on the drawing“).
+- **Stückliste:** Positionsnummer, Name, Zahl der Annahmen (`review_count`, Dreieck in `--assume-ink`), Status (Häkchen, „CHECK FAILED“ oder „NOT EXPORTED“), Kennzeichnung „SCALE“, wenn `scale_conflict` in `/api/parts` `true` ist (die Prüfliste enthält einen Widerspruch zum Maßstab). `<ul role="listbox">` mit Pfeiltasten und Enter.
+- **Zeichnung:** `<img>` mit Textalternative auf Weiß in der Rasterleiste. Zoom mit den Symbolschaltflächen „Zoom in“, „Zoom out“ und „Reset zoom“, den Tasten +, − und 0 und dem Mausrad. Bewegt man den Zeiger über eine Zeile mit Quelle oder fokussiert sie, bekommt das Rasterfeld einen Rahmen und das 3D-Fenster dreht in die zugehörige Ansicht.
+- **3D-Fenster:** `<model-viewer camera-controls>` auf Petrol-Verlauf mit Cyan-Punktraster als Boden. Ansichten „FRONT“, „TOP“, „SIDE“ und „ISO“ (im Quelltext „Front“, „Top“, „Side“, „Iso“); beim Wechsel des Teils startet die Kamera vorn und dreht auf ISO. Gewinde sind grün. Ohne GLB steht dort „The 3D model appears after the export, with colours.“, beim Laden „Loading 3D model …“. Der Link „Download STEP“ lädt die STEP-Datei.
+- **Reiter:** `role="tablist"` mit Pfeiltasten. Reihenfolge: „Run“ (nur während eines Laufs), „Runs“ (nur bei gespeicherten Protokollen), „Review list“, „Checks“, „Tolerances“, „Traceability“, „Reference“, „Files“. Die sechs letzten Reiter stehen immer da.
+- **Prüfliste** (Reiter „Review list“): Spalten „No.“, „ID“, „Dimension“ (gedruckter Text; ein leerer Text heißt unbemaßt, dann der angenommene Wert als oranges Hilfsmaß in Klammern), „Finding“ („missing“, „ambiguous“, „low confidence“, „conflict“, „convention“), „Assumption“, „Reason“, „Source“ (`<Ansicht>/<Feld>`), „Faces“ (Zahl der markierten Flächen im STEP). Jede Zeile hat `--assume-tint`, eine orange Kante und `tabindex="0"`. Ohne Annahmen steht dort „No assumptions: every value comes from the drawing.“ Zeichnungshinweise stehen darunter unter „Drawing notes“.
+- **Prüfungen** (Reiter „Checks“): Kennzahl „n/m“ mit der Beschriftung „checks passed“, darunter die Spalten „Check“, „Expected“, „Actual“ und „Result“ (Häkchen oder „FAILED“). Ohne Prüfergebnisse (nie exportiert oder der letzte Export bestand nicht): „No checks yet. The last export did not pass, or the part was never exported.“
+- **Toleranzen** (Reiter „Tolerances“): Kennzahlen „n/m“ mit den Beschriftungen „nominal within tolerance“ und „tolerance midpoint within tolerance“, darunter je toleriertem Maß die Spalten „No.“, „ID“, „Dimension“ (gedruckter Text), „Nominal“, „Deviations“ (symmetrisch als ±, sonst oberes und unteres Abmaß), „Midpoint“, „Source“ („on dimension“, „fit“, „general tolerance“) und die beiden Urteile „Nominal result“ und „Midpoint result“ (Häkchen, „VIOLATED“, „not checked“; ein Urteil aus dem gemessenen Körper trägt den Titel „from the measured body“, „not checked“ heißt, kein Wert ist an das Maß gebunden). Zeilen mit Quelle im Feld `source` leuchten wie die Prüfliste die Rasterfelder der Zeichnung an; eine Zeile unter der Tabelle nennt, wie viele der tolerierten Maße geprüft sind („n of m toleranced dimensions are checked; …“). Darunter stehen, wenn die Zeichnung Rahmen nennt, unter „Geometric tolerances“ die Form- und Lagetoleranzen mit den Spalten „ID“, „Type“, „Value“, „Datums“, „Frame“ und „PMI in STEP“ („yes“ oder „no“). Gab es einen Export auf der Toleranzmitte, steht unter der Tabelle „Model at the tolerance midpoint:“ mit dem Link auf `<teil>_mid.step`. Ohne `review.json` steht dort „No tolerance table yet. It is created with the export.“, ohne tolerierte Maße „No toleranced dimensions: no dimension carries limit deviations, a fit or a general tolerance.“
+- **Rückverfolgung** (Reiter „Traceability“): je gebundenem Wert Operation, Parameter, Wert, Maß-ID und gedruckter Text (bei einem angenommenen Wert „(assumed)“), z. B. `Op 2 add_holes · d = 8 ← d1 "Ø8"`; darunter „Values without a dimension“ mit gestrichelter Kante („None.“, wenn es keine gibt). Ohne `review.json` steht dort „No traceability yet. It is created with the export.“
+- **Referenz** (Reiter „Reference“): Daten aus `results/EVAL.json`. Status „MATCH“, „DEVIATION“ oder „Reference invalid“, „volume deviation“, „largest bounding box deviation“, „Bounding box, sorted (own / reference)“ für die sortierten Hüllquader beider Modelle und ein Lineal mit einem Teilstrich je Teil und der Kennzahl „n/m“ unter „Matches“. Gezählt wird nur aus den vorhandenen Zeilen. Ohne Zeile: „No reference for this part.“
+- **Dateien** (Reiter „Files“): eine Zeile je Datei (STEP, MID STEP, GLB, MD, JSON) mit „Download“, darunter „earlier versions: n“. Fehlt das STEP, steht dort ein Kasten „STOPPED“ mit dem Text „No STEP file: the export only runs if every check passes.“
+- **Ablagebereich:** Datei per Ziehen oder über die Schaltfläche „Choose file“ mit dem Dateinamen daneben („No file chosen“; die native Dateiauswahl ist nur für Screenreader und Tastatur da, weil sie die Sprache des Browsers trägt) (PDF, PNG, JPG bis 20 MB), Teilname (Buchstaben, Ziffern, `_`, `-`; Umlaute auch zerlegt, der Server normalisiert auf NFC), Modell (aus `/api/models`) und die Schaltfläche „Create STEP“ (nach einem Start „Restart“). Die Felder heißen „Part name“ und „Model“ (Vorgabe „Agent default“), dazu die Optionen „Upload only“ und „Update existing model (new revision)“; der Hinweis im Ablagebereich lautet „Drop drawing (PDF, PNG, JPG) here“ und „Up to 20 MB“. Fehler stehen unter dem Feld (`role="alert"`); bei 400 und 413 die Meldung des Servers.
 
-## 5. Prägende Momente
+## 5. Orangefaden: Fläche und Prüfeintrag in beide Richtungen
 
-Jeder Moment hat eine Stufe: **T1** zuerst, dann **T2**, **Kür** zuletzt.
+Aktiv, wenn `files` das GLB und `marks.json` enthält und `marks.json` nicht leer ist.
 
-**S0 Gezeichnet, dann gefüllt (T1, 15 min).** Beim Öffnen eines Teils zeichnen sich die Linien des Schriftfelds per `clip-path` oder `scaleX` in 480 ms. Der Teilename erscheint als Kontur und füllt sich, wenn `all_ok === true`. Bei „nicht exportiert“ bleibt er als Kontur mit Kennzeichnung stehen.
+- *3D → Liste:* Klick ins Modell (`materialFromPoint`) auf eine orange Fläche öffnet die Prüfliste; die Zeilen der IDs aus `marks.json` scrollen ins Bild und blitzen einmal auf. An der Klickstelle steht ein Hotspot mit den IDs.
+- *Liste → 3D:* Zeiger oder Tastaturfokus auf einer Prüfzeile lässt das orange Material leuchten (`setEmissiveFactor`), die übrigen Materialien werden gedimmt.
+- Das orange Material wird über die Farbe in `marks.json` gefunden (Toleranz ±2 je Kanal nach Umrechnung von linear nach sRGB).
+- Grenze: Alle orangen Flächen teilen ein Material. Ein Klick unterscheidet die Prüfeinträge nicht, er markiert alle IDs aus `marks.json`.
 
-**S2 Orangefaden: Fläche und Prüfeintrag in beide Richtungen (T2, 45 min, das Kernstück der Demo).** Dafür werden GLB und `marks.json` benötigt. Die Funktion wird nur aktiviert, wenn `files` die GLB und `marks.json` enthält und `marks.json` nicht `{}` ist.
+## 6. Lauf: Kettenmaß und Protokoll
 
-- *3D → Liste:* Klick ins Modell → `viewer.materialFromPoint(x, y)`. Ist es das orange Material, öffnet sich der Reiter „Prüfvermerke“, die Zeilen der IDs aus `marks.json` scrollen ins Bild und blitzen einmal auf. Klick auf leeren Hintergrund (`null`) tut nichts.
-- *Liste → 3D:* Bewegt man den Mauszeiger über eine Prüfzeile oder setzt dort den Tastaturfokus, leuchtet das orange Material über `material.setEmissiveFactor([0.5, 0.12, 0])` (mit `[1, 0.4, 0]` wird es im Entwurf blass-pfirsich); alle anderen Materialien werden über `pbrMetallicRoughness.setBaseColorFactor` auf 35 % gedimmt. Beim Verlassen die gemerkten Ausgangswerte zurücksetzen.
-- Hotspot (Kür): An der Klickstelle setzt `viewer.positionAndNormalFromPoint(x, y)` einen Hotspot mit der orangen Kennzeichnung „rv1“ (mehrere IDs mit Komma). Es gibt immer nur einen: die alte Schaltfläche vor dem Erzeugen einer neuen entfernen (`slot="hotspot-mark"`).
-- Material finden: Für jedes Material in `viewer.model.materials` den `baseColorFactor` von linear nach sRGB wandeln und mit den Schlüsseln in `marks.json` vergleichen, **mit Toleranz ±2 je Kanal**, nicht über exakte Hex-Strings. Der Exporter speichert Orange als `[1, 0.214, 0]`, das ergibt rechnerisch genau 127,5 im grünen Kanal.
+- Über dem Protokoll steht eine Kette mit fünf Abschnitten: READ, DESCRIBE, BUILD, CHECK, EXPORT (interne Kennungen `read`, `describe`, `build`, `check`, `export`). Jedes `tool_call` öffnet im Abschnitt seiner Stufe ein Maßsegment, `tool_result` schließt es mit Pfeil und Dauer. Die Ereignisse tragen keinen Zeitstempel; das Frontend misst selbst.
+- Zuordnung: `render_drawing`, `read_drawing_text`, `measure_drawing` → READ; `submit_spec`, `check_spec` → DESCRIBE; `extrude`, `revolve`, `add_holes`, `edge_finish`, `run_script`, `edit_op`, `delete_op`, `move_op` → BUILD; `export_step` → EXPORT, dabei leuchtet CHECK. `get_state` und unbekannte Werkzeuge gehören zur zuletzt aktiven Stufe.
+- Ein `tool_result` mit `ok: false` mitten im Bauen ist normal; das Segment bekommt einen schraffierten Rand, die Stufe erst, wenn der Lauf mit `done.ok === false` endet.
+- Darunter das Textprotokoll (`role="log"`, `aria-live="polite"`): Zeit seit Start, Werkzeug, Kurzfassung; Argumente und Ergebnis klappen auf.
+- Bei `done` schließt die Oberfläche den Event-Strom sofort, sonst würde `EventSource` neu verbinden und alle Ereignisse wiederholen. Das Ergebnis erscheint groß in der Kette („EXPORTED“ oder „STOPPED“ mit Grund); danach lädt die Stückliste einmal neu und öffnet das Teil. Bricht der Strom vor `done` ab, steht „Connection lost at mm:ss“.
+- **Gespeicherte Läufe:** Der Reiter „Runs“ listet die Protokolle aus `results/<teil>/runs/` (Spalten „Started“, „Model“, „Result“, „Events“; ein laufender Lauf zeigt „running“, ohne Abschlusszeile „aborted“). Ein Klick spielt den Lauf über dieselbe Ansicht mit den aufgezeichneten Zeitabständen ab.
 
-```js
-const toSrgb = (c) => (c <= 0.0031308 ? 12.92 * c : 1.055 * c ** (1 / 2.4) - 0.055) * 255;
-const sameColor = (factor, hex) =>
-  [1, 3, 5].every((i, k) => Math.abs(toSrgb(factor[k]) - parseInt(hex.slice(i, i + 2), 16)) <= 2);
-```
+## 7. Bewegung
 
-- Geprüft mit dem vendorten model-viewer und einem echten GLB aus `write_glb`: Das GLB hat die Materialien `mat_0` (Körper) und `mat_1` (orange), dazu ein grünes bei Gewinden. `materialFromPoint` trifft `mat_1` auf den orangen Flächen, `setEmissiveFactor` lässt sie sichtbar aufleuchten.
-- Grenze: Alle orangen Flächen teilen **ein** Material. Der Klick unterscheidet rv1 nicht von rv2, er markiert alle IDs aus `marks.json`. Das ist für die Demo in Ordnung. Genauer geht es mit einem eigenen Orange-Ton im Export je Prüfeintrags-ID (z. B. `#ff8000`, `#ff8001`); das Frontend braucht dafür keine Änderung.
+- Zeiten: 480 ms (Linien zeichnen, Schriftfeld), 1200 ms (Puls). Animiert werden nur `transform`, `opacity` und `clip-path`; keine Endlosschleifen, kein Auto-Rotate.
+- `prefers-reduced-motion: reduce`: Linien erscheinen fertig, Segmente in Endlänge, die Kamera springt, statt des Leuchtens bleibt die Fläche orange und der Rest gedimmt, das Scrollen ist nicht animiert.
 
-**S3 Kettenmaß-Protokoll: Echtzeitlauf als Kettenbemaßung (T2, 50 min). Ohne Agent mit einem Test-Agenten prüfen.**
+## 8. Zustände und Texte
 
-- Über dem Protokoll läuft eine horizontale Kettenbemaßung mit fünf Abschnitten: LESEN, BESCHREIBEN, MODELLIEREN, PRÜFEN, EXPORTIEREN. Die internen Stufenkennungen READ, DESCRIBE, BUILD, CHECK und EXPORT bleiben erhalten. Die Abschnitte sind durch Schnittkennzeichen getrennt (Inline-SVG-Dreieck plus Buchstabe A bis E).
-- Jedes `tool_call` öffnet im Abschnitt seiner Stufe ein Maßsegment. Der Werkzeugname steht kursiv als Maßtext darüber, das Segment wächst entsprechend `flex-grow` mit der Laufzeit. `tool_result` schließt es mit einem Maßpfeil (SVG-`marker`) und der Dauer „1,8 s“. Die Ereignisse haben weder ID noch Zeitstempel: Das Frontend misst die Zeit selbst (`performance.now()` beim Empfang) und ordnet `tool_call` und `tool_result` je Werkzeugname in einer Warteschlange einander zu.
-- Zuordnung der Werkzeuge zu den internen Stufen in `app.js`:
-  - READ (Anzeige: LESEN): `render_drawing`, `read_drawing_text`, `measure_drawing`
-  - DESCRIBE (Anzeige: BESCHREIBEN): `submit_spec`, `check_spec`
-  - BUILD (Anzeige: MODELLIEREN): `extrude`, `revolve`, `add_holes`, `edge_finish`, `run_script`, `edit_op`, `delete_op`, `move_op`
-  - EXPORT (Anzeige: EXPORTIEREN): `export_step`
-  - stufenneutral: `get_state` (der Agent ruft es mitten im Bauen auf), es erscheint nur im Protokoll
-  - unbekannte Werkzeuge gehen in die zuletzt aktive Stufe
-  - PRÜFEN leuchtet, sobald `export_step` aufgerufen wird (die Prüfungen laufen beim Export), und bekommt Schraffur, wenn dessen Ergebnis `ok: false` ist
-- Ein `tool_result` mit `ok: false` mitten im Bauen ist normal (das Modell korrigiert sich). Das Segment bekommt einen schraffierten Rand, die **Stufe** wird erst schraffiert, wenn der Lauf mit `done.ok === false` endet und dies die letzte aktive Stufe war.
-- Darunter das Textprotokoll als Änderungstabelle in Monoschrift, `role="log" aria-live="polite"`: Zeit seit Start, Werkzeug und kurze Zusammenfassung. Die Argumente (`args`) und das Ergebnis (`text`) lassen sich in `<details>` aufklappen. Das Protokoll scrollt mit, sofern der Nutzer nicht nach oben gescrollt ist.
-- **`done` beendet den Stream: sofort `eventSource.close()`.** Der Server schließt die Verbindung nach `done`, und `EventSource` würde sich sonst neu verbinden und alle Ereignisse ab dem ersten noch einmal schicken (doppelte Zeilen, zweites `done`). `onerror` gilt nur als „Verbindung unterbrochen“, wenn noch kein `done` kam.
-- `done` setzt das Ergebnis groß in die Kette: „EXPORTIERT“ gefüllt oder „GESPERRT“ als Kontur im Schraffur-Kasten, dazu `reason`. Danach lädt die Stückliste einmal neu und öffnet das neue Teil.
-- Ereignisse defensiv lesen: Felder nach `spec.md` 5.7, unbekannte Typen und fehlende Felder als einfache Mono-Zeile.
+- Leer: „No parts yet. Drop a drawing at the bottom left; the analysis starts automatically.“ (in der Stückliste „No parts yet.“)
+- API nicht erreichbar: Schraffur-Kasten „The parts could not be loaded.“ mit „Try again“; der Rest bleibt bedienbar.
+- Keine Emojis, keine Gedankenstriche in Oberflächentexten, keine festen Zahlen: Kennzahlen kommen aus den Ergebnissen.
 
-**S4 Prüfvermerk: Maßstabskonflikt (T2 das △, Kür das Durchstreichen, 10 + 15 min).**
+## 9. Bewusst nicht
 
-- T2: Hat das offene Teil einen Prüfeintrag mit `issue == "conflict"`, dessen `assumption` oder `reason` „Maßstab“ oder „Massstab“ enthält (bei älteren englischen Texten auch „scale“), steht in der MASSSTAB-Zelle neben `spec.scale` ein Änderungsdreieck △ mit der Nummer des Eintrags in `--assume-ink`. Es verlinkt auf die Prüfzeile. In der Stückliste kennzeichnet „MASSSTAB“ alle Teile mit einem Konflikt (Feld `issues`), damit sind Teile mit falschem Maßstab schnell zu erkennen. Die Kennzeichnung bedeutet „hat einen Konflikt“; ob es ein Maßstabskonflikt ist, zeigt erst das offene Teil.
-- Kür: Findet das Frontend im Prüftext einen zweiten Maßstab der Form `\d+:\d+` (den gedruckten), steht er durchgestrichen mit einer Linie in `--assume-line` vor `spec.scale`. Sonst bleibt es beim △.
+- Kein Logo, kein Glas, kein Glow, keine Schatten, keine Pillen. Der einzige Verlauf ist das 3D-Fenster.
+- Kein Cyan außerhalb des 3D-Fensters, kein Akzentrot auf Daten, kein Dunkelmodus-Schalter.
+- Keine Icon-Bibliothek, kein Framework, kein zusätzlicher Erstellungsschritt, kein CDN zur Laufzeit; einzige JS-Bibliothek ist `model-viewer`.
 
-**S5 Passungsfeld: Referenzvergleich (T1 Zahl, Kür Lineal, 15 + 25 min).**
+## 10. Sichtprüfung
 
-- T1: Im Reiter „Referenzvergleich“ `match` als Status anzeigen („ÜBEREINSTIMMUNG“ gefüllt in `--ok`, „ABWEICHUNG“ als Kontur, „Referenz ungültig“ grau gestrichelt), dazu `dv_pct` und `dbbox_max_mm` als Kennzahlen und die sortierte BBox des eigenen Teils und der Referenz als drei Monoschrift-Zeilen.
-- Kür: ein Lineal mit einem Teilstrich je Teil aus `/api/parts` und die Kennzahl „x/y ÜBEREINSTIMMUNGEN“, nur aus den echten `eval`-Zeilen gezählt; Teile mit dem technischen Status `reference invalid` zählen nicht mit und werden daneben als „Referenz ungültig“ angezeigt. Ein Klick auf einen Strich öffnet das Teil. **Keine Zahl fest eintragen.**
-
-**S1 Bezugslinie: Maß → Rasterfeld → Ansicht (Kür, 40 min).**
-
-- Bewegt man den Mauszeiger über eine Prüf- oder Rückverfolgbarkeitszeile oder setzt dort den Tastaturfokus, erhält das Rasterfeld (z. B. C4) auf der Zeichnung ein 2-px-Petrol-Rechteck; die Kamera dreht in die Ansicht dieses Maßes.
-- Woher Ansicht und Feld kommen:
-  - Prüfzeile: `sources` ist eine Liste von Zeichenfolgen `"<view-id>/<cell>"`, per `split("/")` zerlegen; `cell` ist `-` ohne Raster. Querverweise auf Konstruktionsmerkmale oder Hinweise haben keine Quelle.
-  - Zeile zur Rückverfolgbarkeit: `spec.dimensions.find((d) => d.id === row.dimension).source` mit `view` und `cell` (beide können `null` sein).
-  - Ansicht: `spec.views.find((v) => v.id === view).kind`. Bei mehreren Zellen alle markieren, die Kamera auf die erste ausrichten.
-- Ansichten in einem Objekt, das man am Demo-Teil kalibriert (CadQuery ist Z-oben, glTF Y-oben):
-  `const VIEWS = { front: "0deg 90deg auto", top: "0deg 0deg auto", side: "90deg 90deg auto", iso: "45deg 60deg auto" };` mit `viewer.fieldOfView = "12deg"` für eine fast orthografische Ansicht. `section`, `detail` und unbekannte Arten bewegen die Kamera nicht. Die Ansichtsknöpfe nutzen dasselbe Objekt.
-- Die Zelle wird aus dem Bildrahmen geteilt durch 6 × 8 berechnet (A4: 6 × 4). Der Rahmen der PNG ist nicht das Blatt, deshalb Ränder als Konstante in Prozent kalibrieren. Ohne Zelle nur die Kamera.
-- Optional eine SVG-Bezugslinie in `--petrol` von der Zeile zur Zelle (kein Cyan, sie läuft über das Blatt). Das ist der erste Kandidat zum Streichen.
-
-## 6. Bewegung
-
-- Zeitwerte: `--dur-press: 120ms`, `--dur-ui: 240ms`, `--dur-draw: 480ms` (BCT nutzt 0,4 bis 0,5 s), `--dur-pulse: 1200ms`.
-- Kurven: `--ease-out: cubic-bezier(.2, .8, .2, 1)` für UI, `--ease-draw: cubic-bezier(.65, 0, .35, 1)` für Linien. model-viewer `interpolation-decay="140"` (eine Zeitkonstante, keine feste Dauer; die Fahrt dauert damit etwa eine halbe Sekunde).
-- Animiert werden nur `transform`, `opacity` und `clip-path`. Keine Endlosschleifen, kein Auto-Rotate.
-- Beim Wechsel des Teils startet die Kamera in der Vorderansicht und dreht auf ISO, so hebt sich das Modell aus der Zeichnung.
-- `prefers-reduced-motion: reduce`: Linien erscheinen fertig, Segmente in Endlänge, die Kamera springt (`viewer.jumpCameraToGoal()`), statt des Leuchtens bleibt die Fläche orange und der Rest gedimmt, `scrollIntoView` mit `behavior: "auto"`.
-
-## 7. Zustände und Anzeigetexte
-
-- Leer: Blatt mit leerem Schriftfeld und Rahmen, mittig „Noch keine Teile. Demo ausführen oder Zeichnung ablegen.“, Fokus springt zum Ablagebereich.
-- Laden: Konstruktionslinien als Skelett, gestrichelte Schriftfeld-Zellen, statt des Bildes Hilfslinien. Kein Ladeindikator.
-- API nicht erreichbar: Schraffur-Kasten im betroffenen Bereich, „Teile konnten nicht geladen werden.“ und „Erneut versuchen“. Der Rest bleibt bedienbar.
-- SSE bricht vor `done` ab: Protokollzeile „Verbindung unterbrochen bei 00:41“, das offene Segment bekommt einen schraffierten Rand.
-- Keine Emojis, keine Gedankenstriche in UI-Texten, keine erfundenen Zahlen.
-
-## 8. Bewusst nicht
-
-- Kein BCT-Logo, kein Glas, kein Glow, kein Verlaufstext, keine Schatten, keine Pillen. Der einzige Verlauf ist das 3D-Fenster (BCT-Motiv).
-- Kein Cyan außerhalb des 3D-Fensters, kein BCT-Rot auf Daten, kein Dunkelmodus-Schalter.
-- Keine Icon-Bibliothek: Zeichnungssymbole als Inline-SVG.
-- Kein Framework, kein zusätzlicher Erstellungsschritt, kein CDN zur Laufzeit, keine weitere JS-Bibliothek außer `model-viewer`.
-
-## 9. Priorität
-
-- **T1:** Layout mit Schriftfeld, Stückliste, Zeichnung, 3D-Fenster, Reiter, Zustände, S0, S5 als Zahl.
-- **T2:** Ablagebereich, S3, S2 ohne Hotspot, S4 als △.
-- **Kür:** Hotspot, S4 Durchstreichen, S5 Lineal, S1, Zoom.
-
-Nie streichen: S2 im Kern, die Kette in S3 mit `close()` bei `done`, die Orange-Semantik, die Exportsperre, Tastatur, Kontrast, reduzierte Bewegung.
-
-## 10. Sichtabnahme
-
-- 1440 × 900 und 1920 × 1080 im Chrome, dazu einmal mit 768 px Breite.
-- Einmal am Beamer oder mit Helligkeit auf Maximum: Schriftfeldlinien, Hilfsmaße und Schraffur bleiben erkennbar.
-- Nur mit Tastatur: Stückliste, Reiter, Prüfzeile (löst das Leuchten aus), Dateiauswahl des Ablagebereichs und Download. Fokus überall sichtbar, auch im 3D-Fenster.
-- `prefers-reduced-motion` und `forced-colors` in den DevTools einschalten und durchklicken.
-- Ein Echtzeitlauf mit Test-Agent: keine doppelten Protokollzeilen, genau ein Neuladen der Stückliste nach `done`.
+- 1440 × 900 und 1920 × 1080 in Chrome, dazu 768 px Breite.
+- Nur mit Tastatur: Stückliste, Reiter, Prüfzeile (löst das Leuchten aus), Dateiauswahl, Download. Fokus überall sichtbar.
+- `prefers-reduced-motion` und `forced-colors` in den DevTools einschalten.
+- Ein Lauf mit Test-Agent: keine doppelten Protokollzeilen, genau ein Neuladen der Stückliste nach `done`.
 - Konsole ohne Fehler, Netzwerk ohne externe Anfragen.
-- Bildschirmfoto `docs/img/web-ui.png` mit dem Demo-Teil und einer fokussierten Prüfzeile, sodass die orange Fläche leuchtet.

@@ -6,7 +6,25 @@ permissions:
   contents: read
 
 jobs:
+  lint:
+    timeout-minutes: 10
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.3.0
+        with:
+          version: "0.12.1"  # pinned version: the format of uv export must not change between runs
+      - name: Ruff check
+        run: uvx ruff@0.17.1 check .
+      - name: Ruff format
+        run: uvx ruff@0.17.1 format --check
+      - name: Check requirements.lock against uv.lock
+        run: |
+          uv lock --check
+          uv export --frozen --extra dev --no-emit-project --no-hashes | diff - requirements.lock
+
   test:
+    timeout-minutes: 40
     strategy:
       fail-fast: false
       matrix:
@@ -14,9 +32,11 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v7
-      - name: Build the image
+      - name: Build image
         run: docker build -t d2c .
-      - name: Run the tests
+      - name: Run tests
         run: docker run --rm --network none d2c pytest -q
-      - name: Run the demo
+      - name: Run demo
         run: docker run --rm --network none d2c python -m d2c.demo
+      - name: Rebuild example result and compare with examples/demo
+        run: docker run --rm --network none d2c python scripts/check_example.py

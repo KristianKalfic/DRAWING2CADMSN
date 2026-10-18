@@ -1,13 +1,15 @@
-# The MCP server builds the models and has no way out: it sits on an internal network that only the web app joins.
-# The web app serves the results, takes uploads and starts agent runs.
-# LLM settings go into an optional .env next to this file (see .env.example); without it the app starts anyway
-# and an upload answers with a hint instead of starting a run.
+# The MCP server builds the models and has no way out: it sits in an internal network that only the web app joins.
+# The web app serves the results, accepts uploads and starts agent runs.
+# The language model settings live in an optional .env next to this file (see .env.example); without it
+# the app still starts, and answers an upload with a notice instead of a run.
 services:
   mcp:
     build: .
     image: d2c:latest
     command: python -m d2c.server --http 0.0.0.0:8765
     networks: [sandbox]
+    read_only: true
+    tmpfs: [/tmp]
     volumes:
       - ./drawings:/data:ro
       - ./tables:/tables:ro
@@ -16,11 +18,13 @@ services:
   app:
     build: .
     image: d2c:latest
-    command: python -m d2c.web --port 8080
+    command: python -m d2c.web --host 0.0.0.0 --port 8080
     depends_on: [mcp]
     networks: [sandbox, default]
+    read_only: true
+    tmpfs: [/tmp]
     ports:
-      - "8080:8080"
+      - "127.0.0.1:8080:8080" # local machine only; for network access put a reverse proxy with authentication in front
     environment:
       D2C_MCP_URL: http://mcp:8765/mcp
       D2C_OLLAMA_URL: ${D2C_OLLAMA_URL:-http://host.docker.internal:11434}
@@ -28,7 +32,7 @@ services:
       - path: .env
         required: false
     extra_hosts:
-      - "host.docker.internal:host-gateway" # an Ollama on the host
+      - "host.docker.internal:host-gateway" # access to Ollama on the host
     volumes:
       - ./results:/app/results
       - ./drawings:/data # writable: uploads land in uploads/

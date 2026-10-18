@@ -2,7 +2,7 @@
 
 Die Referenz eines Teils ist die eine *.stp ohne _PMI im Ordner von D2C_REF_DATA (Standard /app/data), den die
 erste Pfadkomponente der Zeichnung in seiner spec.json nennt. Eine Zeile zeigt die Volumenabweichung in Prozent,
-die größte Abweichung der sortierten Begrenzungsboxkanten in mm, die Zylinderdurchmesser (gerundet auf
+die größte Abweichung der sortierten Begrenzungsboxkanten in mm, die Bohrungsdurchmesser (konkave Zylinder, gerundet auf
 0,01 mm), die dem Modell fehlen und die es zu viel hat, und MATCH, wenn das Volumen innerhalb von 1,0 %,
 jede Kante innerhalb von 0,05 mm und die Durchmesser gleich sind. Eine Referenz, die kein gültiger Festkörper
 ist oder fehlt oder nicht lesbar ist, gibt "reference invalid" statt dessen.
@@ -22,8 +22,8 @@ from pathlib import Path
 
 import cadquery as cq
 
-from d2c.checks import metrics
-from d2c.session import results_root
+from d2c.cad.checks import _cylinders, metrics
+from d2c.config import results_root
 from d2c.spec import PartSpec
 
 VOLUME_TOL_PCT = 1.0  # größte Volumenabweichung eines MATCH, in Prozent des Referenzvolumens
@@ -45,10 +45,10 @@ def find_reference(drawing: str) -> Path:
     # Beide Seiten als NFC: macOS-Mounts listen Umlaute zerlegt, eine Spezifikation hält sie zusammengesetzt.
     folders = [p for p in ref_root().iterdir() if p.is_dir() and unicodedata.normalize("NFC", p.name) == first]
     if not folders:
-        raise ValueError(f"no reference folder {first!r} in {ref_root()}")
+        raise ValueError(f"No reference folder {first!r} in {ref_root()}")
     steps = [p for p in folders[0].iterdir() if p.suffix.lower() == ".stp" and not p.stem.endswith("_PMI")]
     if len(steps) != 1:
-        raise ValueError(f"{len(steps)} files *.stp without _PMI in {folders[0]}, need exactly one")
+        raise ValueError(f"{len(steps)} *.stp files without _PMI in {folders[0]}, exactly one is required")
     return steps[0]
 
 
@@ -60,9 +60,12 @@ def measure(path: Path, part: str) -> dict:
     try:
         shape = cq.Compound.makeCompound(cq.importers.importStep(str(path)).vals())
         found = metrics(shape)
+        # Nur Bohrungen (konkave Zylinder): Außenrundungen und Zapfen weichen zwischen Modell und Referenz um Bruchteile
+        # eines Millimeters ab, ohne dass eine Bohrung fehlt; ihre Form prüfen Volumen und Begrenzungsbox.
+        found["bore_diameters"] = sorted({round(2 * c.Radius(), 2) for c, concave, _ in _cylinders(shape) if concave})
         valid = shape.isValid() and bool(shape.Solids()) and found["volume"] > 0
     except Exception as e:  # OpenCascade wirft bei einer beschädigten oder leeren Datei mehr als ValueError
-        print(f"{part}: cannot read {path} ({type(e).__name__}: {e})", file=sys.stderr)
+        print(f"{part}: {path} not readable ({type(e).__name__}: {e})", file=sys.stderr)
         return {}
     return found | {"valid": valid}
 
@@ -75,8 +78,8 @@ def compare(part: str, mine: dict, ref: dict) -> dict:
         if ref["volume"] > 0:
             dv_pct = abs(mine["volume"] - ref["volume"]) / ref["volume"] * 100
         dbbox = max(abs(a - b) for a, b in zip(mine["bbox_sorted"], ref["bbox_sorted"]))
-        missing = sorted(set(ref["cyl_diameters"]) - set(mine["cyl_diameters"]))
-        extra = sorted(set(mine["cyl_diameters"]) - set(ref["cyl_diameters"]))
+        missing = sorted(set(ref["bore_diameters"]) - set(mine["bore_diameters"]))
+        extra = sorted(set(mine["bore_diameters"]) - set(ref["bore_diameters"]))
     ref_valid = ref.get("valid", False)
     if not ref_valid:
         match = "reference invalid"
@@ -85,9 +88,17 @@ def compare(part: str, mine: dict, ref: dict) -> dict:
     else:
         match = "DIFF"
     return {
-        "part": part, "dv_pct": dv_pct, "dbbox_max_mm": dbbox, "missing_d": missing, "extra_d": extra,
-        "match": match, "volume": mine.get("volume"), "bbox_sorted": mine.get("bbox_sorted"),
-        "ref_volume": ref.get("volume"), "ref_bbox_sorted": ref.get("bbox_sorted"), "ref_valid": ref_valid,
+        "part": part,
+        "dv_pct": dv_pct,
+        "dbbox_max_mm": dbbox,
+        "missing_d": missing,
+        "extra_d": extra,
+        "match": match,
+        "volume": mine.get("volume"),
+        "bbox_sorted": mine.get("bbox_sorted"),
+        "ref_volume": ref.get("volume"),
+        "ref_bbox_sorted": ref.get("bbox_sorted"),
+        "ref_valid": ref_valid,
     }
 
 

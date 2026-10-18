@@ -5,24 +5,45 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "d2c"
 version = "0.1.0"
-description = "MCP-Server zur Umwandlung technischer 2D-Zeichnungen in geprüfte STEP-Modelle"
+license = "AGPL-3.0-or-later"
+license-files = ["LICENSE"]
+description = "MCP server that converts technical 2D drawings into validated STEP models"
 requires-python = ">=3.12,<3.13"
 dependencies = ["cadquery==2.8.0", "claude-agent-sdk==0.2.168", "mcp==2.3.0", "pydantic>=2,<3", "pymupdf==1.28.2"]
 
 [project.optional-dependencies]
-dev = ["pytest==8.*"]
+dev = ["pytest==8.*", "ruff==0.17.1"]
 
-# Only d2c and its subpackages: the repo root also holds data/, docs/, run/ ... and
-# flat-layout auto-discovery would count them as top-level packages. A fixed list would break
-# the Docker dependency layer, which installs against an empty d2c package.
+# Nur d2c und seine Unterpakete: Die Repo-Wurzel enthält auch docs/, scripts/ und tests/, und die automatische
+# Paketsuche des flachen Layouts würde sie als Top-Level-Pakete zählen. Eine feste Liste würde die Docker-Schicht
+# der Abhängigkeiten brechen, die gegen ein leeres Paket d2c installiert.
 [tool.setuptools.packages.find]
 include = ["d2c*"]
 
-# The patterns do not descend into subfolders, so every static folder is listed.
+# Die Muster steigen nicht in Unterordner ab, daher ist jeder Ordner mit statischen Dateien einzeln aufgeführt.
 [tool.setuptools.package-data]
-d2c = ["instructions.md"]
+"d2c.server" = ["instructions.md"]
+"d2c.demo" = ["*.json", "*.pdf", "tables/*.xml"]
 "d2c.web" = ["static/*", "static/vendor/*", "static/vendor/fonts/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-markers = ["bct: benötigt die BCT-Beispieldaten unter /app/data"]
+markers = [
+    "refdata: benötigt Referenzdaten unter /app/data",
+    "export_gate: der erste Export mit einem Gate-Befund wird abgelehnt (sonst exportiert conftest ein zweites Mal)",
+]
+# Kein .pytest_cache: im schreibgeschützten Container gäbe das eine PytestCacheWarning.
+addopts = "-p no:cacheprovider"
+
+# Lint und Format: `uv run ruff check` und `uv run ruff format --check`.
+[tool.ruff]
+line-length = 140
+target-version = "py312"
+extend-exclude = ["d2c/web/static"]
+
+[tool.ruff.lint]
+# Fehler, Warnungen, Importreihenfolge und Bugbear-Regeln.
+select = ["E", "F", "W", "I", "B"]
+# Lange Kommentare und Meldungstexte bleiben stehen; der Formatierer bricht Code um.
+# B905 (zip ohne strict=) verlangt Änderungen an vielen Aufrufstellen ohne Fehlerwirkung: die Längen sind dort gleich.
+ignore = ["E501", "B905"]

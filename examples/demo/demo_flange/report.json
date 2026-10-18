@@ -1,0 +1,324 @@
+{
+  "ok": true,
+  "error": null,
+  "solid": {
+    "valid": true,
+    "solids": 1,
+    "free_edges": 0,
+    "volume": 20954.422999443927,
+    "bbox": [
+      -30.0,
+      -30.0,
+      0.0,
+      30.0,
+      30.0,
+      8.0
+    ],
+    "ok": true,
+    "cyl_d": [
+      5.5,
+      12.0,
+      60.0
+    ],
+    "circle_d": [
+      5.5,
+      12.0,
+      60.0
+    ]
+  },
+  "dims": [
+    {
+      "check": "bbox_x",
+      "expected": 60.0,
+      "actual": 60.0,
+      "ok": true,
+      "dim_ids": []
+    },
+    {
+      "check": "bbox_y",
+      "expected": 60.0,
+      "actual": 60.0,
+      "ok": true,
+      "dim_ids": []
+    },
+    {
+      "check": "bbox_z",
+      "expected": 8.0,
+      "actual": 8.0,
+      "ok": true,
+      "dim_ids": []
+    },
+    {
+      "check": "hole",
+      "expected": {
+        "d": 12.0,
+        "at": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "axis": [
+          0.0,
+          0.0,
+          1.0
+        ]
+      },
+      "actual": {
+        "d": 12.0,
+        "dist": 0.0,
+        "concave": true
+      },
+      "ok": true,
+      "through": true,
+      "entry": true,
+      "dim_ids": [
+        "d12"
+      ]
+    },
+    {
+      "check": "hole",
+      "expected": {
+        "d": 5.5,
+        "at": [
+          15.5563,
+          15.5563,
+          0.0
+        ],
+        "axis": [
+          0.0,
+          0.0,
+          1.0
+        ]
+      },
+      "actual": {
+        "d": 5.5,
+        "dist": 6.955965542046045e-05,
+        "concave": true
+      },
+      "ok": true,
+      "through": true,
+      "entry": true,
+      "dim_ids": [
+        "d55"
+      ]
+    },
+    {
+      "check": "hole",
+      "expected": {
+        "d": 5.5,
+        "at": [
+          -15.5563,
+          15.5563,
+          0.0
+        ],
+        "axis": [
+          0.0,
+          0.0,
+          1.0
+        ]
+      },
+      "actual": {
+        "d": 5.5,
+        "dist": 6.955965542046043e-05,
+        "concave": true
+      },
+      "ok": true,
+      "through": true,
+      "entry": true,
+      "dim_ids": [
+        "d55"
+      ]
+    },
+    {
+      "check": "hole",
+      "expected": {
+        "d": 5.5,
+        "at": [
+          -15.5563,
+          -15.5563,
+          0.0
+        ],
+        "axis": [
+          0.0,
+          0.0,
+          1.0
+        ]
+      },
+      "actual": {
+        "d": 5.5,
+        "dist": 6.955965542171651e-05,
+        "concave": true
+      },
+      "ok": true,
+      "through": true,
+      "entry": true,
+      "dim_ids": [
+        "d55"
+      ]
+    },
+    {
+      "check": "hole",
+      "expected": {
+        "d": 5.5,
+        "at": [
+          15.5563,
+          -15.5563,
+          0.0
+        ],
+        "axis": [
+          0.0,
+          0.0,
+          1.0
+        ]
+      },
+      "actual": {
+        "d": 5.5,
+        "dist": 6.955965542046045e-05,
+        "concave": true
+      },
+      "ok": true,
+      "through": true,
+      "entry": true,
+      "dim_ids": [
+        "d55"
+      ]
+    }
+  ],
+  "dims_found": {
+    "found": [
+      {
+        "id": "d60",
+        "text": "Ø60",
+        "value": 60.0,
+        "nearest": 60.0
+      },
+      {
+        "id": "d12",
+        "text": "Ø12 H7",
+        "value": 12.0,
+        "nearest": 12.0
+      },
+      {
+        "id": "d55",
+        "text": "4x Ø5,5",
+        "value": 5.5,
+        "nearest": 5.5
+      },
+      {
+        "id": "d44",
+        "text": "Ø44",
+        "value": 44.0,
+        "nearest": 43.999999473618274
+      }
+    ],
+    "missing": []
+  },
+  "build_notes": [
+    {
+      "op_index": 1,
+      "drilled_d": 12.0,
+      "holes": 1
+    },
+    {
+      "op_index": 2,
+      "drilled_d": 5.5,
+      "holes": 4
+    }
+  ],
+  "roundtrip": {
+    "path": "demo_flange.step",
+    "reimport_valid": true,
+    "solids": 1,
+    "volume_rel_diff": 3.87158965915206e-14,
+    "marks": [
+      {
+        "id": "rv1",
+        "faces": 2
+      }
+    ],
+    "pmi": {
+      "written": 6,
+      "read_back": 6,
+      "assumed": [
+        "t8"
+      ],
+      "missing": []
+    },
+    "ok": true
+  },
+  "compliance": [
+    {
+      "dim_id": "d60",
+      "text": "Ø60",
+      "nominal": 60.0,
+      "lower": -0.3,
+      "upper": 0.3,
+      "source": "general",
+      "values": [
+        60.0
+      ],
+      "in_tolerance": true,
+      "geometry": false
+    },
+    {
+      "dim_id": "d12",
+      "text": "Ø12 H7",
+      "nominal": 12.0,
+      "lower": 0.0,
+      "upper": 0.018,
+      "source": "fit",
+      "values": [
+        12.0,
+        12.0
+      ],
+      "in_tolerance": true,
+      "geometry": false
+    },
+    {
+      "dim_id": "d55",
+      "text": "4x Ø5,5",
+      "nominal": 5.5,
+      "lower": -0.1,
+      "upper": 0.1,
+      "source": "general",
+      "values": [
+        5.5,
+        5.5,
+        5.5,
+        5.5,
+        5.5
+      ],
+      "in_tolerance": true,
+      "geometry": false
+    },
+    {
+      "dim_id": "d44",
+      "text": "Ø44",
+      "nominal": 44.0,
+      "lower": -0.3,
+      "upper": 0.3,
+      "source": "general",
+      "values": [
+        44.0
+      ],
+      "in_tolerance": true,
+      "geometry": false
+    },
+    {
+      "dim_id": "t8",
+      "text": "",
+      "nominal": 8.0,
+      "lower": -0.2,
+      "upper": 0.2,
+      "source": "general",
+      "values": [
+        8.0
+      ],
+      "in_tolerance": true,
+      "geometry": false
+    }
+  ],
+  "shifts": [],
+  "skipped": [],
+  "warnings": []
+}

@@ -8,8 +8,9 @@ from OCP.BRepBuilderAPI import BRepBuilderAPI_MakeFace
 from OCP.Geom import Geom_CylindricalSurface, Geom_RectangularTrimmedSurface
 from OCP.gp import gp_Ax3
 
-from d2c import export
-from d2c.checks import dimension_check, metrics, solid_check, step_roundtrip
+from d2c.cad import export
+from d2c.cad.checks import circle_diameters, dimension_candidates, dimension_check, dims_found, metrics, position_distances, solid_check
+from d2c.cad.export import step_roundtrip
 from d2c.spec import Expected, ExpectedHole
 
 PLATE = (40.0, 30.0, 10.0)  # um den Ursprung zentriert
@@ -103,6 +104,8 @@ def test_hole_found_by_diameter_and_position():
         "expected": {"d": 5.0, "at": (10.0, 5.0, 0.0), "axis": (0.0, 0.0, 1.0)},
         "actual": {"d": pytest.approx(5.0), "dist": pytest.approx(0.0, abs=1e-9), "concave": True},
         "ok": True,
+        "through": True,
+        "entry": True,
         "dim_ids": ["d2"],
     }
     # Jeder Punkt auf der Achse, beide Richtungen und jede Achslänge bezeichnen dieselbe Bohrung.
@@ -196,8 +199,8 @@ def test_marked_faces_colored(tmp_path):
     assert result["marks"] == [{"id": "rv1", "faces": 1}]
     assert result["ok"] is True
     text = path.read_text()
-    assert text.count("COLOUR_RGB") >= 2  # steel body and the orange face
-    assert "ADVANCED_FACE('PRUEFEN rv1'" in text
+    assert text.count("COLOUR_RGB") >= 2  # Stahlkörper und die orange Fläche
+    assert "ADVANCED_FACE('CHECK rv1'" in text
     assert "AP242_MANAGED_MODEL_BASED_3D_ENGINEERING_MIM_LF" in text
     back = cq.importers.importStep(str(path)).val()
     assert back.isValid()
@@ -250,10 +253,158 @@ def test_metrics_cyl_diameters():
 def test_cylinder_on_trimmed_surface():
     """STEP-Leser setzen Zylinder auf abgeschnittene Flächen. Eine solche Fläche hat keinen Punkt an den Parametern (0,5, 0,5)."""
     surface = Geom_RectangularTrimmedSurface(Geom_CylindricalSurface(gp_Ax3(), 5.0), 2.0, 3.0, 2.0, 4.0)
-    outside = cq.Face(BRepBuilderAPI_MakeFace(surface, 1e-7).Face())  # its normals point away from the Z axis
-    inside = cq.Face(outside.wrapped.Reversed())  # its normals point to the axis, like those of a hole
+    outside = cq.Face(BRepBuilderAPI_MakeFace(surface, 1e-7).Face())  # ihre Normalen weisen von der Z-Achse weg
+    inside = cq.Face(outside.wrapped.Reversed())  # ihre Normalen weisen zur Achse, wie bei einer Bohrung
     assert metrics(outside)["cyl_diameters"] == [10.0]
     hole = ExpectedHole(d=10, at=(0, 0, 0), axis=(0, 0, 1), dim_ids=[])
     for face, concave in ((outside, False), (inside, True)):
         entry = dimension_check(cq.Workplane().add(face), Expected(bbox=(1, 1, 1), holes=[hole]))[-1]
         assert (entry["ok"], entry["actual"]["concave"]) == (concave, concave)
+
+
+def drilled(*cuts: cq.Solid) -> cq.Workplane:
+    """Die Platte mit den gegebenen Zylindern herausgeschnitten."""
+    return cq.Workplane().box(*PLATE).cut(cq.Workplane(obj=cq.Compound.makeCompound(list(cuts))))
+
+
+def test_through_hole_runs_through():
+    through = hole_entry(plate_with_hole())
+    assert (through["through"], through["entry"], through["ok"]) == (True, True, True)
+    bore = cq.Workplane().box(*PLATE).faces(">Z").workplane().pushPoints([(10, 5)]).cboreHole(5, 8, 3)
+    assert hole_entry(bore, d=5.0)["through"] is True
+
+
+def test_blind_hole_is_not_through_but_has_an_entry():
+    """Ein Sackloch hat einen Eintritt, aber der Strahl trifft den Lochgrund: ok, nicht durchgehend."""
+    blind = drilled(cq.Solid.makeCylinder(2.5, 6, cq.Vector(10, 5, 0)))  # von unten, 6 von 10 mm tief
+    entry = hole_entry(blind)
+    assert (entry["through"], entry["entry"], entry["ok"]) == (False, True, True)
+
+
+def test_hole_closed_by_a_web_is_not_through():
+    """Ein Steg quer in der Bohrung: beide Hälften sind offen, aber die Achse trifft den Steg."""
+    web = cq.Workplane().box(*PLATE).faces(">Z").workplane().pushPoints([(10, 5)]).hole(5)
+    web = web.union(cq.Workplane().box(10, 10, 2).translate((10, 5, 0)))
+    entry = hole_entry(web)
+    assert (entry["through"], entry["entry"], entry["ok"]) == (False, True, True)
+
+
+def test_closed_cavity_has_no_entry():
+    """Ein Hohlraum im Inneren hat die Fläche einer Bohrung, aber keinen Zugang von außen: nicht ok."""
+    cavity = drilled(cq.Solid.makeCylinder(2.5, 4, cq.Vector(10, 5, -2)))
+    entry = hole_entry(cavity)
+    assert (entry["through"], entry["entry"], entry["ok"]) == (False, False, False)
+    assert entry["actual"]["d"] == pytest.approx(5.0)
+
+
+def test_hole_not_found_has_no_through_verdict():
+    entry = hole_entry(plate_with_hole(), d=6.0)
+    assert (entry["through"], entry["entry"], entry["ok"]) == (None, None, False)
+
+
+def printed(dim_id: str, kind: str, value: float, **more) -> dict:
+    return {"id": dim_id, "kind": kind, "value": value, "text": f"{value:g}", "assumed": False} | more
+
+
+def test_dims_found_finds_sizes_in_the_body():
+    """Maße der Platte mit Bohrung: Hüllquader, Bohrungs-Ø und -radius, Abstand der Bohrungsachse zur Plattenkante."""
+    wp = plate_with_hole()
+    dims = [
+        printed("w", "length", 40),
+        printed("t", "length", 10),
+        printed("d", "diameter", 5),
+        printed("r", "radius", 2.5),
+        printed("e", "length", 10.04),
+    ]  # 10 mm von der Kante x=20
+    result = dims_found(wp.val(), dims)
+    assert [m["id"] for m in result["found"]] == ["w", "t", "d", "r", "e"]
+    assert result["missing"] == []
+    assert result["found"][0]["nearest"] == pytest.approx(40)
+
+
+def test_dims_found_reports_a_wrong_dimension_as_missing():
+    dims = [printed("ok", "length", 40), printed("falsch", "length", 68.5), printed("knapp", "length", 40.06)]
+    result = dims_found(plate_with_hole().val(), dims)
+    assert [m["id"] for m in result["found"]] == ["ok"]
+    assert result["missing"] == [{"id": "falsch", "text": "68.5", "value": 68.5}, {"id": "knapp", "text": "40.06", "value": 40.06}]
+
+
+def test_dims_found_skips_assumed_angle_and_count_dimensions():
+    dims = [
+        printed("a", "length", 99, assumed=True),
+        printed("w", "angle", 50),
+        printed("n", "count", 4),
+        printed("c", "chamfer", 1.5),
+        printed("t", "thread", 8),
+    ]
+    assert dims_found(plate_with_hole().val(), dims) == {"found": [], "missing": []}
+
+
+def test_dim_candidates_cover_distances_between_features():
+    """Ebenen und Zylinderachsen: Abstand paralleler Ebenen, paralleler Achsen und einer Achse von einer Ebene."""
+    plate = cq.Workplane().box(40, 30, 10).faces(">Z").workplane().pushPoints([(-12, 0), (12, 0)]).hole(4)
+    found = set(dimension_candidates(plate.val()).round(6))
+    assert {40.0, 30.0, 10.0, 24.0, 8.0, 2.0, 4.0}.issubset(found)  # 8 = 20 - 12: Achse zu Plattenkante x=-20
+    assert 0.0 not in found
+
+
+def test_dims_found_finds_the_distance_of_a_hole_from_the_edge():
+    """Lagemaß: Bohrungsmitte 38 mm von der Unterkante. Ein anderer Abstand bleibt unbelegt."""
+    plate = cq.Workplane().box(100, 60, 10).faces(">Z").workplane().pushPoints([(12, 8)]).hole(6)  # Kante y=-30: 38; Kante x=-50: 62
+    dims = [printed("lage", "length", 38), printed("rand", "length", 62), printed("falsch", "length", 37)]
+    result = dims_found(plate.val(), dims)
+    assert [m["id"] for m in result["found"]] == ["lage", "rand"]
+    assert [m["id"] for m in result["missing"]] == ["falsch"]
+
+
+def test_dims_found_finds_distances_between_holes_along_the_main_directions():
+    """Zwei Bohrungen mit Versatz in beiden Richtungen: Abstand in X und in Y sowie der direkte Abstand."""
+    plate = cq.Workplane().box(200, 100, 10).faces(">Z").workplane().pushPoints([(-40, 10), (40, 25)]).hole(6)
+    dims = [printed("dx", "length", 80), printed("dy", "length", 15), printed("direkt", "length", 81.394), printed("falsch", "length", 70)]
+    result = dims_found(plate.val(), dims)
+    assert [m["id"] for m in result["found"]] == ["dx", "dy", "direkt"]
+    assert [m["id"] for m in result["missing"]] == ["falsch"]
+
+
+def test_position_distances_cover_the_end_arcs_of_a_slot():
+    """Langloch: Die Endbögen sind Zylinder, ihr Mittenabstand ist das Lagemaß des Langlochs."""
+    plate = cq.Workplane().box(80, 40, 10).faces(">Z").workplane().slot2D(42, 8).cutThruAll()
+    found = set(position_distances(plate.val()).round(6))
+    assert {34.0, 20.0, 23.0}.issubset(found)  # 34 = 42 - 8; 20: Achse zu Kante y=±20; 23: Bogenmitte x=17 zu Kante x=-40
+
+
+def test_position_distances_pair_only_parallel_axes():
+    """Eine Querbohrung bildet mit der Bohrung in Z kein Paar; es bleiben nur Abstände von Achse zu Ebene."""
+    plate = cq.Workplane().box(60, 40, 30).faces(">Z").workplane().hole(4)
+    cross = cq.Workplane("YZ").center(5, 0).circle(1.5).extrude(100, both=True)  # Achse in X bei y=5, z=0
+    found = position_distances(plate.cut(cross).val())
+    assert set(found.round(6)) == {15.0, 20.0, 25.0, 30.0}
+
+
+def test_dims_found_stays_fast_with_many_faces():
+    """Ein Teil mit über 300 Flächen: die Maßsuche braucht deutlich weniger als 2 s."""
+    import time
+
+    pts = [(x * 11 - 140, y * 15 - 90) for x in range(27) for y in range(12)]
+    wp = cq.Workplane().box(300, 200, 20).faces(">Z").workplane().pushPoints(pts).hole(6)
+    assert len(wp.val().Faces()) > 300
+    started = time.monotonic()
+    result = dims_found(wp.val(), [printed("l", "length", 300), printed("x", "length", 77.7)])
+    assert time.monotonic() - started < 2
+    assert [m["id"] for m in result["missing"]] == ["x"]
+
+
+def test_dims_found_drops_hole_pairs_above_the_axis_limit():
+    """Grenze: Mit mehr als MAX_AXES Achsen entfallen die Achspaare, der Abstand von Achse zu Plattenkante bleibt."""
+    pts = [(x * 11 - 140, y * 15 - 90) for x in range(27) for y in range(12)]
+    wp = cq.Workplane().box(300, 200, 20).faces(">Z").workplane().pushPoints(pts).hole(6)
+    result = dims_found(wp.val(), [printed("kante", "length", 10), printed("teilung", "length", 77)])  # Kante x=-150 zu Achse -140; 7 · 11
+    assert [m["id"] for m in result["found"]] == ["kante"]
+    assert [m["id"] for m in result["missing"]] == ["teilung"]
+
+
+def test_circle_diameters_cover_cylinders_cone_rims_and_arcs():
+    """Platte mit Bohrung Ø5, Kegelsenkung Ø9 und einer Eckrundung R3 (Bogen Ø6); gesucht sind die Gegenstücke gemessener Kreise."""
+    wp = plate_with_hole(5).faces(">Z").workplane().pushPoints([(-10, 5)]).cskHole(4, 9, 90).edges("|Z and (>X and >Y)").fillet(3)
+    assert circle_diameters(wp.val()) == [4.0, 5.0, 6.0, 9.0]
+    assert circle_diameters(cq.Workplane().box(10, 10, 10).val()) == []

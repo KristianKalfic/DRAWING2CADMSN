@@ -1,14 +1,16 @@
 """Operationsmodelle und der Aufbau mit CadQuery; Sollwerte sind von Hand berechnet."""
+
 import math
 
 import pytest
+from helpers import OPS
 from OCP.BRepAdaptor import BRepAdaptor_Surface
 from OCP.GeomAbs import GeomAbs_Cylinder
-from pydantic import TypeAdapter
+from pydantic import ValidationError
 
-from d2c.ops import BuildError, ExtrudeOp, HolesOp, Op, RectProfile, SketchPlane, build, get_path, set_path
+from d2c.cad.ops import BuildError, ExtrudeOp, HolesOp, RectProfile, SketchPlane, build
+from d2c.oppath import get_path, set_path
 
-OPS = TypeAdapter(list[Op])
 REL = 1e-6
 
 
@@ -17,8 +19,7 @@ def rect(w, h, center=(0, 0), **kw):
 
 
 def extrude(profile, distance, plane="XY", offset=0.0, **kw):
-    return {"op": "extrude", "profile": profile, "plane": {"name": plane, "offset": offset},
-            "distance": distance, **kw}
+    return {"op": "extrude", "profile": profile, "plane": {"name": plane, "offset": offset}, "distance": distance, **kw}
 
 
 def holes(offset, positions, d, plane="XY", **kw):
@@ -98,6 +99,15 @@ def test_revolve_cylinder_volume():
     assert quarter.Volume() == pytest.approx(math.pi * 100 * 5 / 4, rel=REL)
 
 
+def test_revolve_steps_build_a_stepped_shaft():
+    shape, _ = run({"op": "revolve", "steps": [[20, 5], [10, 30]], "refs": {"steps.1.0": "d10"}})
+    assert shape.Volume() == pytest.approx(math.pi * (100 * 5 + 25 * 30), rel=REL)
+    bb = shape.BoundingBox()
+    assert (bb.xmin, bb.xmax, bb.zmin, bb.zmax) == pytest.approx((-10, 10, 0, 35))
+    with pytest.raises(ValidationError):
+        OPS.validate_python([{"op": "revolve", "steps": [[20, 5]], "points": [(0, 0), (1, 0), (1, 1)]}])
+
+
 def test_revolve_negative_r_rejected():
     with pytest.raises(ValueError, match=">= 0"):
         OPS.validate_python([{"op": "revolve", "points": [(-1, 0), (10, 0), (10, 5)]}])
@@ -105,7 +115,7 @@ def test_revolve_negative_r_rejected():
     path = {"type": "path", "start": (0, 0), "segments": lines}
     with pytest.raises(ValueError, match=">= 0"):
         OPS.validate_python([{"op": "revolve", "profile": path}])
-    with pytest.raises(ValueError, match="genau eines"):
+    with pytest.raises(ValueError, match="exactly one"):
         OPS.validate_python([{"op": "revolve"}])
 
 
@@ -124,15 +134,22 @@ def test_holes_blind_depth():
     assert [round(p[0], 6) for p, _, _ in sorted(cylinders(shape))] == [-5, 5]
 
 
-def test_holes_tapped_m5_uses_4_2():
+def test_holes_tapped_m5_uses_tap_drill_by_default():
+    """Wie die Bohrungsfeatures der meisten CAD-Systeme: ein Innengewinde ist die Kernlochbohrung (M5: 4,2)."""
     shape, notes = run(block(), holes(10, [(0, 0)], 5, kind="tapped", thread="M5"))
     assert note(notes, 1)["drilled_d"] == 4.2
     assert [r for _, _, r in cylinders(shape)] == pytest.approx([2.1])
-    assert shape.Volume() == pytest.approx(4000 - math.pi * 2.1 ** 2 * 10, rel=REL)
+    assert shape.Volume() == pytest.approx(4000 - math.pi * 2.1**2 * 10, rel=1e-4)
+
+
+def test_holes_tapped_core_diameter_is_opt_in():
+    shape, notes = run(block(), holes(10, [(0, 0)], 5, kind="tapped", thread="M5", thread_core="minor"))
+    assert note(notes, 1)["drilled_d"] == pytest.approx(4.134, abs=1e-4)
+    assert [r for _, _, r in cylinders(shape)] == pytest.approx([2.067], abs=1e-4)
 
 
 def test_holes_tapped_wrong_nominal_rejected():
-    with pytest.raises(ValueError, match="Nenndurchmesser"):
+    with pytest.raises(ValueError, match="nominal diameter"):
         OPS.validate_python([holes(10, [(0, 0)], 6, kind="tapped", thread="M5")])
     with pytest.raises(ValueError, match="thread"):
         OPS.validate_python([holes(10, [(0, 0)], 5, kind="tapped")])
@@ -165,20 +182,22 @@ def test_holes_cbore_and_csk_volume_less_than_plain():
     assert cbore.Volume() < plain.Volume() and csk.Volume() < plain.Volume()
     assert cbore.Volume() == pytest.approx(plain.Volume() - math.pi * (25 - 6.25) * 4, rel=REL)
     # 90°-Kegelsenkung: Kegelhöhe (9 − 5) / 2 = 2 zwischen den Radien 4,5 und 2,5.
-    cone = math.pi * 2 / 3 * (4.5 ** 2 + 4.5 * 2.5 + 2.5 ** 2)
+    cone = math.pi * 2 / 3 * (4.5**2 + 4.5 * 2.5 + 2.5**2)
     assert csk.Volume() == pytest.approx(4000 - cone - math.pi * 6.25 * 8, rel=REL)
     # 60°-Kegelsenkung: Kegelhöhe 2 / tan(30°); die 5-mm-Bohrung setzt sich darunter fort.
     height = 2 / math.tan(math.radians(30))
     steep, _ = run(block(), holes(10, [(0, 0)], 5, kind="csk", csk_d=9, csk_angle=60))
-    cone = math.pi * height / 3 * (4.5 ** 2 + 4.5 * 2.5 + 2.5 ** 2)
+    cone = math.pi * height / 3 * (4.5**2 + 4.5 * 2.5 + 2.5**2)
     assert steep.Volume() == pytest.approx(4000 - cone - math.pi * 6.25 * (10 - height), rel=REL)
     with pytest.raises(ValueError, match="cbore_d"):
         OPS.validate_python([holes(10, [(0, 0)], 5, kind="cbore")])
     with pytest.raises(ValueError, match="csk_d"):
         OPS.validate_python([holes(10, [(0, 0)], 5, kind="csk", csk_d=4)])
-    with pytest.raises(ValueError, match="sind nur bei"):  # Ein vergessenes `kind` darf nicht stillschweigend eine einfache Bohrung ergeben.
+    with pytest.raises(
+        ValueError, match="allowed only with"
+    ):  # Ein vergessenes `kind` darf nicht stillschweigend eine einfache Bohrung ergeben.
         OPS.validate_python([holes(10, [(0, 0)], 5, cbore_d=10, cbore_depth=4)])
-    with pytest.raises(ValueError, match="flacher"):
+    with pytest.raises(ValueError, match="shallower"):
         OPS.validate_python([holes(10, [(0, 0)], 5, depth=3, kind="cbore", cbore_d=10, cbore_depth=4)])
 
 
@@ -199,7 +218,7 @@ def test_slot_cut_volume():
 
 def test_path_profile_with_arc():
     r, t = 10, 3
-    expected = math.pi * r ** 2 / 2 * t
+    expected = math.pi * r**2 / 2 * t
     through_middle = {"kind": "arc3", "via": (0, r), "to": (r, 0)}
     clockwise = {"kind": "radius_arc", "to": (r, 0), "r": r}  # Bei r > 0 verläuft die Drehung im Uhrzeigersinn über die Oberseite.
     for arc in (through_middle, clockwise):
@@ -217,10 +236,55 @@ def test_path_profile_with_arc():
         run(extrude({"type": "path", "start": (-r, 0), "segments": [too_small]}, t))
 
 
+def test_arc3_with_printed_radius_is_exact():
+    r, c = 35.0, (60.0, 20.0)
+
+    def at(deg):
+        return c[0] + r * math.cos(math.radians(deg)), c[1] + r * math.sin(math.radians(deg))
+
+    start, end = at(200), at(300)
+    # Der gerundete via-Punkt (zwei Stellen) liegt nicht exakt auf dem Kreis
+    via = tuple(round(x, 2) for x in at(250))
+    plain = {"kind": "arc3", "via": via, "to": end}
+    pinned = {**plain, "r": r}
+    path = {"type": "path", "start": start, "segments": [pinned, {"kind": "line", "to": start}]}
+    shape, _ = run(extrude(path, 5, refs={"profile.segments.0.r": "d1"}))
+    assert [rad for _, _, rad in cylinders(shape)] == pytest.approx([r], abs=1e-9)
+    # Ohne r bleibt der Radius vom Rundungsfehler des via-Punkts abhängig
+    path["segments"][0] = plain
+    off = [rad for _, _, rad in cylinders(run(extrude(path, 5))[0])]
+    assert off != pytest.approx([r], abs=1e-9)
+    # Bogen über 180 Grad: via auf der langen Seite
+    long = {"kind": "arc3", "via": tuple(round(x, 2) for x in at(20)), "to": end, "r": r}
+    path["segments"][0] = long
+    assert [rad for _, _, rad in cylinders(run(extrude(path, 5))[0])] == pytest.approx([r], abs=1e-9)
+    # r passt nicht zu den Punkten
+    path["segments"][0] = {**pinned, "r": 30}
+    with pytest.raises(BuildError, match="does not fit r=30"):
+        run(extrude(path, 5))
+    path["segments"][0] = {**pinned, "r": 10}
+    with pytest.raises(BuildError, match="too small"):
+        run(extrude(path, 5))
+
+
+def test_edge_finish_on_plane_selects_all_edges_in_plane():
+    top = edge_finish("fillet", 1, [], on_plane={"name": "XY", "offset": 10})
+    del top["near"]
+    shape, notes = run(block(), top)  # 20 x 20 x 10: vier Kanten der Oberseite
+    assert note(notes, 1)["edges_selected"] == 4
+    mids = [(0, 10, 10), (0, -10, 10), (10, 0, 10), (-10, 0, 10)]
+    same, _ = run(block(), edge_finish("fillet", 1, mids))
+    assert shape.Volume() == pytest.approx(same.Volume(), rel=REL) and shape.Volume() < 4000
+    with pytest.raises(ValueError, match="exactly one"):
+        OPS.validate_python([block(), edge_finish("fillet", 1, [(10, 0, 5)], on_plane={"name": "XY", "offset": 10})])
+    with pytest.raises(BuildError, match="No edge lies in the plane"):
+        run(block(), {**top, "on_plane": {"name": "XY", "offset": 4}})
+
+
 def test_fillet_no_edge_errors():
-    with pytest.raises(BuildError, match="Keine Kante liegt innerhalb"):
+    with pytest.raises(BuildError, match="No edge lies within"):
         run(block(), edge_finish("fillet", 1, [(100, 100, 100)]))
-    with pytest.raises(BuildError, match="Keine Kante liegt innerhalb"):
+    with pytest.raises(BuildError, match="No edge lies within"):
         run(block(), edge_finish("fillet", 1, [(0, 0, 5)], tol=0.5))  # im Quader, 10 mm von jeder Kante entfernt
 
 
@@ -235,7 +299,7 @@ def test_fillet_reports_edge_count():
     # Eine Ecke berührt drei Kanten; zwei nahe Punkte auf derselben Kante zählen sie nur einmal.
     assert note(run(block(), edge_finish("fillet", 1, [(10, -10, 10)]))[1], 1)["edges_selected"] == 3
     assert note(run(block(), edge_finish("fillet", 1, [(0, -10, 10), (1, -10, 10)]))[1], 1)["edges_selected"] == 1
-    with pytest.raises(BuildError, match="op 1 .*zu groß"):
+    with pytest.raises(BuildError, match="op 1 .*too large"):
         run(block(), edge_finish("fillet", 15, [(0, -10, 10)]))  # größer als der Quader
 
 
@@ -252,33 +316,35 @@ def test_holes_requires_positions():
     with pytest.raises(ValueError, match="positions"):
         HolesOp(op="holes", plane=plane, d=5)
     polar = {"center": (0, 0), "pitch_d": 20, "count": 3}
-    with pytest.raises(ValueError, match="genau eines"):
+    with pytest.raises(ValueError, match="exactly one"):
         HolesOp(op="holes", plane=plane, d=5, positions=[(0, 0)], polar=polar)
     assert HolesOp(op="holes", plane=plane, d=5, polar=polar).polar.count == 3
 
 
 def test_path_fillets_corner():
     t = 4
-    square = {"type": "path", "start": (0, 0), "segments": [{"kind": "line", "to": (20, 0)},
-                                                             {"kind": "line", "to": (20, 20)},
-                                                             {"kind": "line", "to": (0, 20)}],
-              "fillets": [{"at": (20, 20), "r": 5}]}
+    square = {
+        "type": "path",
+        "start": (0, 0),
+        "segments": [{"kind": "line", "to": (20, 0)}, {"kind": "line", "to": (20, 20)}, {"kind": "line", "to": (0, 20)}],
+        "fillets": [{"at": (20, 20), "r": 5}],
+    }
     shape, _ = run(extrude(square, t))
     assert shape.Volume() / t == pytest.approx(400 - (25 - math.pi * 25 / 4), rel=REL)
     # `corner_radius` rundet bei `rect` alle vier Ecken.
     shape, _ = run(extrude(rect(20, 20, center=(10, 10), corner_radius=5), t))
     assert shape.Volume() / t == pytest.approx(400 - 4 * (25 - math.pi * 25 / 4), rel=REL)
     # Fehlen nahe `at` Ecken oder passt der Radius nicht, schlägt der Aufbau fehl.
-    with pytest.raises(BuildError, match="genau 1"):
+    with pytest.raises(BuildError, match="exactly 1"):
         run(extrude({**square, "fillets": [{"at": (10, 10), "r": 5}]}, t))
-    with pytest.raises(BuildError, match="Rundung"):
+    with pytest.raises(BuildError, match="2D fillet"):
         run(extrude({**square, "fillets": [{"at": (20, 20), "r": 50}]}, t))
 
 
 def test_cut_first_rejected():
     with pytest.raises(BuildError, match="add"):
         run(extrude(rect(10, 10), 5, mode="cut"))
-    with pytest.raises(BuildError, match="Volumenkörper muss bereits"):
+    with pytest.raises(BuildError, match="solid must already"):
         run(holes(0, [(0, 0)], 3))
     with pytest.raises(BuildError):
         build([])
@@ -293,7 +359,9 @@ def test_script_op_runs():
     with pytest.raises(BuildError, match="op 1"):
         run(block(), {"op": "script", "code": "result = 5"})
     with pytest.raises(BuildError, match="ImportError"):
-        run(block(), {"op": "script", "code": "import os"})  # Die eingebauten Funktionen sind eingeschränkt; `__import__` ist nicht verfügbar.
+        run(
+            block(), {"op": "script", "code": "import os"}
+        )  # Die eingebauten Funktionen sind eingeschränkt; `__import__` ist nicht verfügbar.
 
 
 def test_custom_plane_inclined_hole():
@@ -310,9 +378,13 @@ def test_custom_plane_inclined_hole():
         assert got == pytest.approx(u, abs=1e-9)
     tilted = SketchPlane(name="custom", origin=(0, 0, 0), normal=(0, 0, 1), xdir=(1, 1, 5)).workplane().plane
     assert tilted.xDir.toTuple() == pytest.approx((math.sqrt(0.5), math.sqrt(0.5), 0))  # senkrecht gemacht
-    for bad in ({"name": "XY", "origin": (0, 0, 1)}, {"name": "XZ", "xdir": (1, 0, 0)}, {"name": "custom"},
-                {"name": "custom", "origin": (0, 0, 0), "normal": (0, 0, 0)},
-                {"name": "custom", "origin": (0, 0, 0), "normal": (0, 0, 1), "xdir": (0, 0, 2)}):
+    for bad in (
+        {"name": "XY", "origin": (0, 0, 1)},
+        {"name": "XZ", "xdir": (1, 0, 0)},
+        {"name": "custom"},
+        {"name": "custom", "origin": (0, 0, 0), "normal": (0, 0, 0)},
+        {"name": "custom", "origin": (0, 0, 0), "normal": (0, 0, 1), "xdir": (0, 0, 2)},
+    ):
         with pytest.raises(ValueError):
             SketchPlane(**bad)
 
@@ -344,9 +416,13 @@ def test_thread_minor_and_fine():
 
 
 def test_refs_valid_paths():
-    op = ExtrudeOp(op="extrude", profile=RectProfile(type="rect", center=(0, 0), w=10, h=20),
-                   plane=SketchPlane(name="XY", offset=2), distance=5,
-                   refs={"profile.w": "d1", "plane.offset": "d2", "distance": "d3"})
+    op = ExtrudeOp(
+        op="extrude",
+        profile=RectProfile(type="rect", center=(0, 0), w=10, h=20),
+        plane=SketchPlane(name="XY", offset=2),
+        distance=5,
+        refs={"profile.w": "d1", "plane.offset": "d2", "distance": "d3"},
+    )
     dumped = op.model_dump()
     assert get_path(dumped, "profile.w") == 10 and get_path(dumped, "plane.offset") == 2
     set_path(dumped, "profile.w", 12.5)
@@ -371,8 +447,7 @@ def test_refs_valid_paths():
 
 
 def test_refs_bad_path_rejected():
-    kw = {"op": "extrude", "profile": RectProfile(type="rect", center=(0, 0), w=10, h=20),
-          "plane": SketchPlane(name="XY"), "distance": 5}
+    kw = {"op": "extrude", "profile": RectProfile(type="rect", center=(0, 0), w=10, h=20), "plane": SketchPlane(name="XY"), "distance": 5}
     with pytest.raises(ValueError, match=r"profile\.q"):
         ExtrudeOp(**kw, refs={"profile.q": "d1"})
     with pytest.raises(ValueError, match="mode"):
@@ -394,9 +469,9 @@ def test_extrude_taper_volume():
 
 def test_extrude_taper_collapse_rejected():
     circle = {"type": "circle", "center": (0, 0), "d": 40}
-    with pytest.raises(BuildError, match="Verjüngung zu groß"):
+    with pytest.raises(BuildError, match="Taper too large"):
         run(extrude(circle, 500, taper=20))
-    with pytest.raises(BuildError, match="Verjüngung zu groß"):
+    with pytest.raises(BuildError, match="Taper too large"):
         run(block(), extrude(rect(10, 10), -10, offset=10, mode="cut", taper=30))
 
 
@@ -428,10 +503,13 @@ def circle_hull(circles, height=10, plane="XY"):
     return extrude({"type": "hull", "circles": circles}, height, plane=plane)
 
 
-@pytest.mark.parametrize("circles, size", [
-    ([(0, 0, 45), (-75, 0, 15), (75, 0, 15)], (180, 90)),
-    ([(0, 0, 45), (0, -75, 15), (0, 75, 15)], (90, 180)),
-])
+@pytest.mark.parametrize(
+    "circles, size",
+    [
+        ([(0, 0, 45), (-75, 0, 15), (75, 0, 15)], (180, 90)),
+        ([(0, 0, 45), (0, -75, 15), (0, 75, 15)], (90, 180)),
+    ],
+)
 def test_hull_collinear_u_and_v(circles, size):
     shape, notes = run(circle_hull(circles))
     bb = shape.BoundingBox()
@@ -461,12 +539,12 @@ def test_hull_contained_circle():
 def test_hull_rejects_bad_circles():
     with pytest.raises(ValueError):
         OPS.validate_python([circle_hull([(0, 0, 5)])])
-    with pytest.raises(ValueError, match="Kreisradius"):
+    with pytest.raises(ValueError, match="circle radius"):
         OPS.validate_python([circle_hull([(0, 0, 5), (10, 0, 0)])])
 
 
 def test_cut_without_effect_warns():
-    warning = "Kein Material entfernt: Prüfe Ebene, offset und Richtung."
+    warning = "No material removed: check plane, offset and direction."
     far = extrude({"type": "circle", "center": (0, 0), "d": 4}, -3, offset=50, mode="cut")  # Gleitkommazahlen oberhalb des Teils
     assert note(run(block(), far)[1], 1) == {"op_index": 1, "warning": warning}
     swallow = extrude(rect(40, 40), 20, mode="intersect")  # Das Teil liegt vollständig darin.
@@ -486,5 +564,5 @@ def test_revolve_profile_crossing_axis_rejected():
         return {"type": "path", "start": (0, 0), "segments": [{"kind": "radius_arc", "to": (0, 10), "r": r}]}
 
     assert run({"op": "revolve", "profile": bulge(-6)})[0].isValid()  # wölbt sich bis +r
-    with pytest.raises(BuildError, match="kreuzt die Drehachse"):
+    with pytest.raises(BuildError, match="crosses the axis of revolution"):
         run({"op": "revolve", "profile": bulge(6)})

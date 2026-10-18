@@ -1,14 +1,11 @@
 from pathlib import Path
 
 import pytest
+from helpers import DEMO_PDF, DEMO_TITLE_BLOCK
 
-from d2c.text import items_from_xml, parse_dimension_text, read_text
+from d2c.drawing.text import items_from_xml, parse_dimension_text, read_text
 
-DEMO = Path(__file__).parent / "fixtures" / "demo_drawing.pdf"
-TITLE_BLOCK = (0.467, 0.838, 0.962, 0.973)
-
-NO_DIMENSION = dict(prefix=None, count=None, nominal=None, tol_upper=None, tol_lower=None,
-                    fit=None, envelope=False, thread=None)
+NO_DIMENSION = dict(prefix=None, count=None, nominal=None, tol_upper=None, tol_lower=None, fit=None, envelope=False, thread=None)
 
 
 def parsed(**fields) -> dict:
@@ -39,9 +36,25 @@ def test_parse_dimension_text_cases():
         "10 -0,1 +0,2": parsed(nominal=10.0, tol_upper=0.2, tol_lower=-0.1),  # der größere Wert ist die obere Abweichung
     }
     # Text, der kein Maß ist, darf nicht als Maß erkannt werden
-    for text in ("", "Ø", "H10", "A-B", "+0,2 -0,1", "↗ 0,1 A-B", "Schnitt A-A", "0,5 x 45°", "45°",
-                 "ISO 13715 +0,4", "DIN 332 - A 2,0 x 4,25", "0,1 CZ A-B", "6 x 10°", "Ø10 ±", "2,0 x 4,25",
-                 "2x Ø6 (3x)", "M10x0,75 6H"):
+    for text in (
+        "",
+        "Ø",
+        "H10",
+        "A-B",
+        "+0,2 -0,1",
+        "↗ 0,1 A-B",
+        "Schnitt A-A",
+        "0,5 x 45°",
+        "45°",
+        "ISO 13715 +0,4",
+        "DIN 332 - A 2,0 x 4,25",
+        "0,1 CZ A-B",
+        "6 x 10°",
+        "Ø10 ±",
+        "2,0 x 4,25",
+        "2x Ø6 (3x)",
+        "M10x0,75 6H",
+    ):
         cases[text] = None
     for text, expected in cases.items():
         assert parse_dimension_text(text) == expected, text
@@ -52,82 +65,132 @@ WIDTH, HEIGHT = 1500, 1000  # aus synthetischen pdftohtml-Seiten in deren Einhei
 
 def xml_page(texts: list[str], fonts: dict[int, tuple[str, int]]) -> str:
     """Ein `pdftohtml -xml`-Dokument; `fonts` ordnet einer Schrift-ID (Familie, Größe) zu."""
-    specs = "\n".join(f'\t<fontspec id="{i}" size="{size}" family="{family}" color="#000000"/>'
-                      for i, (family, size) in fonts.items())
-    return (f'<?xml version="1.0" encoding="UTF-8"?>\n<!DOCTYPE pdf2xml SYSTEM "pdf2xml.dtd">\n\n'
-            f'<pdf2xml producer="poppler" version="25.03.0">\n'
-            f'<page number="1" position="absolute" top="0" left="0" height="{HEIGHT}" width="{WIDTH}">\n'
-            f'{specs}\n' + "\n".join(texts) + "\n</page>\n</pdf2xml>\n")
+    specs = "\n".join(f'\t<fontspec id="{i}" size="{size}" family="{family}" color="#000000"/>' for i, (family, size) in fonts.items())
+    return (
+        f'<?xml version="1.0" encoding="UTF-8"?>\n<!DOCTYPE pdf2xml SYSTEM "pdf2xml.dtd">\n\n'
+        f'<pdf2xml producer="poppler" version="25.03.0">\n'
+        f'<page number="1" position="absolute" top="0" left="0" height="{HEIGHT}" width="{WIDTH}">\n'
+        f"{specs}\n" + "\n".join(texts) + "\n</page>\n</pdf2xml>\n"
+    )
 
 
 def piece(font: int, top: int, left: int, text: str, width: int = 0, height: int = 21) -> str:
     return f'<text top="{top}" left="{left}" width="{width}" height="{height}" font="{font}">{text}</text>'
 
 
-FONTS = {0: ("AAAAAA+SolidEdgeISO", 20), 1: ("AAAAAA+SolidEdgeISO", 17),
-         2: ("BBBBBB+SolidEdgeISO1Symbols", 20), 3: ("CCCCCC+SolidEdgeISOGDTSymbols", 20),
-         4: ("DDDDDD+Helvetica", 20), 5: ("AAAAAA+SolidEdgeISO", 41), 6: ("EEEEEE+SolidEdgeISO,Bold", 17)}
+FONTS = {
+    0: ("AAAAAA+SolidEdgeISO", 20),
+    1: ("AAAAAA+SolidEdgeISO", 17),
+    2: ("BBBBBB+SolidEdgeISO1Symbols", 20),
+    3: ("CCCCCC+SolidEdgeISOGDTSymbols", 20),
+    4: ("DDDDDD+Helvetica", 20),
+    5: ("AAAAAA+SolidEdgeISO", 41),
+    6: ("EEEEEE+SolidEdgeISO,Bold", 17),
+}
 
 
 def test_symbol_mapping_only_in_symbol_fonts():
     # dieselben Buchstaben in vier Schriften, weit genug auseinander, damit keine zwei Stücke zu einem Text verbunden werden
-    xml = xml_page([
-        piece(4, 100, 100, "O", width=14),   # Helvetica: bleibt O
-        piece(2, 300, 100, "O", width=14),   # ISO1Symbols: Durchmesserzeichen
-        piece(2, 500, 100, "L", width=14),   # ISO1Symbols enthält kein L: bleibt L
-        piece(3, 700, 100, "L", width=14),   # GDTSymbols: Hüllbedingung
-        piece(4, 900, 100, "L", width=14),   # Helvetica: Schnittbuchstabe L
-        piece(2, 100, 600, "u", width=14),   # ISO1Symbols: Plusminuszeichen
-        piece(0, 300, 600, "u", width=14),   # normale Schrift: bleibt u
-    ], FONTS)
+    xml = xml_page(
+        [
+            piece(4, 100, 100, "O", width=14),  # Helvetica: bleibt O
+            piece(2, 300, 100, "O", width=14),  # ISO1Symbols: Durchmesserzeichen
+            piece(2, 500, 100, "L", width=14),  # ISO1Symbols enthält kein L: bleibt L
+            piece(3, 700, 100, "L", width=14),  # GDTSymbols: Hüllbedingung
+            piece(4, 900, 100, "L", width=14),  # Helvetica: Schnittbuchstabe L
+            piece(2, 100, 600, "u", width=14),  # ISO1Symbols: Plusminuszeichen
+            piece(0, 300, 600, "u", width=14),  # normale Schrift: bleibt u
+        ],
+        FONTS,
+    )
     got = [(i["text"], i["font"]) for i in sorted(items_from_xml(xml), key=lambda i: (i["x0"], i["y0"]))]
-    assert got == [("O", "Helvetica"), ("Ø", "SolidEdgeISO1Symbols"), ("L", "SolidEdgeISO1Symbols"),
-                   ("Ⓔ", "SolidEdgeISOGDTSymbols"), ("L", "Helvetica"), ("±", "SolidEdgeISO1Symbols"),
-                   ("u", "SolidEdgeISO")]  # Schriftnamen enthalten kein Subset-Präfix
+    assert got == [
+        ("O", "Helvetica"),
+        ("Ø", "SolidEdgeISO1Symbols"),
+        ("L", "SolidEdgeISO1Symbols"),
+        ("Ⓔ", "SolidEdgeISOGDTSymbols"),
+        ("L", "Helvetica"),
+        ("±", "SolidEdgeISO1Symbols"),
+        ("u", "SolidEdgeISO"),
+    ]  # Schriftnamen enthalten kein Subset-Präfix
 
 
 def test_pieces_merge_into_lines():
-    xml = xml_page([
-        # senkrechte Passung mit Hüllbedingung, durch Kerning und Schriftwechsel in vier Stücke aufgeteilt
-        piece(2, 600, 300, "O", height=20), piece(0, 580, 300, "8h"), piece(0, 560, 300, "10"),
-        piece(3, 541, 300, "L", height=29),
-        # senkrechter Durchmesser mit Abweichung in der kleineren Toleranzschrift
-        piece(2, 700, 400, "O", height=20), piece(0, 680, 400, "18"), piece(1, 665, 400, "-0", height=18),
-        piece(1, 652, 400, ",3", height=18),
-        # gestapelt: die hochgestellte Abweichung ist ein eigenes Element neben dem Maß
-        piece(0, 100, 700, "40", width=16), piece(1, 88, 720, "+0,1", width=19, height=18),
-        # Abweichung auf der Grundlinie wird mit dem Maß verbunden
-        piece(0, 200, 700, "70", width=16), piece(1, 203, 719, "-0,1", width=19, height=18),
-        # Weit auseinanderliegende Tabellenzellen bleiben getrennt; eine fett gedruckte Überschrift verschachtelt ihren Text in <b>.
-        piece(1, 900, 1000, "Ø 6 h10", width=41, height=17), piece(1, 900, 1100, "Ø 5,952", width=41, height=17),
-        piece(6, 950, 1000, "<b>Paßmaß</b>", width=44, height=17),
-        # Eine an beliebigen Zeichen getrennte Gewindenotiz behält ihre Leerzeichen und verliert keinen Text.
-        piece(0, 400, 500, "M 1"), piece(0, 380, 500, "2 x"), piece(0, 361, 500, " 1"), piece(0, 349, 500, ",5"),
-        # ein großer Abstand innerhalb derselben Schrift entspricht einem Wortzwischenraum
-        piece(0, 800, 100, "3x", width=13), piece(0, 801, 127, "35", width=14),
-        # ein deutlich größerer Ansichts-Buchstabe neben einem Maß ist ein eigener Text
-        piece(5, 600, 1200, "K", width=16, height=42), piece(0, 617, 1220, "27 ±0,1", width=43),
-        # leere Textstücke enthalten nichts
-        piece(0, 50, 50, " ", width=5),
-        # Gedrehter Text am Seitenrand: Sein geschätztes Ende läge außerhalb der Seite.
-        piece(0, 10, 1400, "R 0,3"),
-        # Auf dem Kopf stehender Text wird mit negativer Breite gemeldet; sein Kasten endet links.
-        piece(0, 500, 1300, "Scale", width=-74),
-        # Text ragt über den rechten Seitenrand hinaus
-        piece(0, 300, 1480, "Edge", width=40),
-        # horizontaler und gedrehter Text werden auch dann nie verbunden, wenn ihre Koordinaten übereinstimmen
-        piece(0, 100, -10, "H1", width=30), piece(0, 120, 117, "V1"),
-    ], FONTS)
+    xml = xml_page(
+        [
+            # senkrechte Passung mit Hüllbedingung, durch Kerning und Schriftwechsel in vier Stücke aufgeteilt
+            piece(2, 600, 300, "O", height=20),
+            piece(0, 580, 300, "8h"),
+            piece(0, 560, 300, "10"),
+            piece(3, 541, 300, "L", height=29),
+            # senkrechter Durchmesser mit Abweichung in der kleineren Toleranzschrift
+            piece(2, 700, 400, "O", height=20),
+            piece(0, 680, 400, "18"),
+            piece(1, 665, 400, "-0", height=18),
+            piece(1, 652, 400, ",3", height=18),
+            # gestapelt: die hochgestellte Abweichung ist ein eigenes Element neben dem Maß
+            piece(0, 100, 700, "40", width=16),
+            piece(1, 88, 720, "+0,1", width=19, height=18),
+            # Abweichung auf der Grundlinie wird mit dem Maß verbunden
+            piece(0, 200, 700, "70", width=16),
+            piece(1, 203, 719, "-0,1", width=19, height=18),
+            # Weit auseinanderliegende Tabellenzellen bleiben getrennt; eine fett gedruckte Überschrift verschachtelt ihren Text in <b>.
+            piece(1, 900, 1000, "Ø 6 h10", width=41, height=17),
+            piece(1, 900, 1100, "Ø 5,952", width=41, height=17),
+            piece(6, 950, 1000, "<b>Paßmaß</b>", width=44, height=17),
+            # Eine an beliebigen Zeichen getrennte Gewindenotiz behält ihre Leerzeichen und verliert keinen Text.
+            piece(0, 400, 500, "M 1"),
+            piece(0, 380, 500, "2 x"),
+            piece(0, 361, 500, " 1"),
+            piece(0, 349, 500, ",5"),
+            # ein großer Abstand innerhalb derselben Schrift entspricht einem Wortzwischenraum
+            piece(0, 800, 100, "3x", width=13),
+            piece(0, 801, 127, "35", width=14),
+            # ein deutlich größerer Ansichts-Buchstabe neben einem Maß ist ein eigener Text
+            piece(5, 600, 1200, "K", width=16, height=42),
+            piece(0, 617, 1220, "27 ±0,1", width=43),
+            # leere Textstücke enthalten nichts
+            piece(0, 50, 50, " ", width=5),
+            # Gedrehter Text am Seitenrand: Sein geschätztes Ende läge außerhalb der Seite.
+            piece(0, 10, 1400, "R 0,3"),
+            # Auf dem Kopf stehender Text wird mit negativer Breite gemeldet; sein Kasten endet links.
+            piece(0, 500, 1300, "Scale", width=-74),
+            # Text ragt über den rechten Seitenrand hinaus
+            piece(0, 300, 1480, "Edge", width=40),
+            # horizontaler und gedrehter Text werden auch dann nie verbunden, wenn ihre Koordinaten übereinstimmen
+            piece(0, 100, -10, "H1", width=30),
+            piece(0, 120, 117, "V1"),
+        ],
+        FONTS,
+    )
     found = items_from_xml(xml)
     assert found == sorted(found, key=lambda i: (i["y0"], i["x0"]))  # von oben nach unten, dann von links nach rechts
     items = {i["text"]: i for i in found}
-    assert sorted(items) == sorted(["Ø8h10 Ⓔ", "Ø18 -0,3", "40", "+0,1", "70 -0,1", "Ø 6 h10", "Ø 5,952",
-                                    "Paßmaß", "M 12 x 1,5", "3x 35", "K", "27 ±0,1", "R 0,3", "Scale", "Edge", "H1", "V1"])
+    assert sorted(items) == sorted(
+        [
+            "Ø8h10 Ⓔ",
+            "Ø18 -0,3",
+            "40",
+            "+0,1",
+            "70 -0,1",
+            "Ø 6 h10",
+            "Ø 5,952",
+            "Paßmaß",
+            "M 12 x 1,5",
+            "3x 35",
+            "K",
+            "27 ±0,1",
+            "R 0,3",
+            "Scale",
+            "Edge",
+            "H1",
+            "V1",
+        ]
+    )
     assert items["R 0,3"]["y0"] == 0 and items["R 0,3"]["y1"] > 0  # auf die Seite begrenzt
     assert items["Edge"]["x1"] == 1 and items["Edge"]["x0"] < 1
     assert (items["Scale"]["x0"], items["Scale"]["x1"]) == (round(1226 / WIDTH, 4), round(1300 / WIDTH, 4))
-    assert {text for text, item in items.items() if item["vertical"]} == {
-        "Ø8h10 Ⓔ", "Ø18 -0,3", "M 12 x 1,5", "R 0,3", "V1"}
+    assert {text for text, item in items.items() if item["vertical"]} == {"Ø8h10 Ⓔ", "Ø18 -0,3", "M 12 x 1,5", "R 0,3", "V1"}
     assert items["Ø8h10 Ⓔ"]["parsed"] == parsed(prefix="Ø", nominal=8.0, fit="h10", envelope=True)
     assert items["Ø18 -0,3"]["parsed"]["tol_lower"] == -0.3
     assert items["70 -0,1"]["parsed"]["tol_lower"] == -0.1
@@ -150,8 +213,10 @@ def write_pdf(path: Path, content: str, rotate: int = 0) -> Path:
     objects = [
         b"<< /Type /Catalog /Pages 2 0 R >>",
         b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
-        (f"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 300] /Rotate {rotate} /Contents 4 0 R "
-         "/Resources << /Font << /F1 5 0 R >> >> >>").encode(),
+        (
+            f"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 300] /Rotate {rotate} /Contents 4 0 R "
+            "/Resources << /Font << /F1 5 0 R >> >> >>"
+        ).encode(),
         b"<< /Length %d >>\nstream\n" % len(stream) + stream + b"\nendstream",
         b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>",
     ]
@@ -169,12 +234,15 @@ def write_pdf(path: Path, content: str, rotate: int = 0) -> Path:
 
 
 def test_read_text_minimal_pdf(tmp_path):
-    pdf = write_pdf(tmp_path / "minimal.pdf", (
-        "BT /F1 12 Tf 20 270 Td (Massstab 1:1) Tj ET\n"            # oben links
-        "BT /F1 12 Tf 100 180 Td (\xd816 H7) Tj ET\n"            # 0xD8 ist das Durchmesserzeichen in WinAnsi
-        "BT /F1 12 Tf 0 1 -1 0 150 100 Tm (R 0,3) Tj ET\n"       # gedreht, von unten nach oben zu lesen
-        "BT /F1 12 Tf 100 20 Td (4x 6,6) Tj ET\n"                # unten rechts
-    ))
+    pdf = write_pdf(
+        tmp_path / "minimal.pdf",
+        (
+            "BT /F1 12 Tf 20 270 Td (Massstab 1:1) Tj ET\n"  # oben links
+            "BT /F1 12 Tf 100 180 Td (\xd816 H7) Tj ET\n"  # 0xD8 ist das Durchmesserzeichen in WinAnsi
+            "BT /F1 12 Tf 0 1 -1 0 150 100 Tm (R 0,3) Tj ET\n"  # gedreht, von unten nach oben zu lesen
+            "BT /F1 12 Tf 100 20 Td (4x 6,6) Tj ET\n"  # unten rechts
+        ),
+    )
     items = {i["text"]: i for i in read_text(pdf)}
     assert sorted(items) == ["4x 6,6", "Massstab 1:1", "R 0,3", "Ø16 H7"]
     for item in items.values():
@@ -224,10 +292,14 @@ def test_read_text_minimal_pdf(tmp_path):
 def test_read_text_rotated_page(tmp_path):
     # eine Hochformatseite mit /Rotate 90 zeigt ein A3-Blatt im Querformat von 300 × 200 pt;
     # die Textmatrix hebt die Drehung auf, sodass der Text auf der angezeigten Seite waagerecht steht
-    pdf = write_pdf(tmp_path / "rotated.pdf", (
-        "BT /F1 12 Tf 0 1 -1 0 30 20 Tm (Massstab 1:1) Tj ET\n"     # angezeigt: 20 pt vom linken und 30 pt vom oberen Rand
-        "BT /F1 12 Tf 0 1 -1 0 180 200 Tm (4x 6,6) Tj ET\n"      # angezeigt: 200 pt vom linken und 180 pt vom oberen Rand
-    ), rotate=90)
+    pdf = write_pdf(
+        tmp_path / "rotated.pdf",
+        (
+            "BT /F1 12 Tf 0 1 -1 0 30 20 Tm (Massstab 1:1) Tj ET\n"  # angezeigt: 20 pt vom linken und 30 pt vom oberen Rand
+            "BT /F1 12 Tf 0 1 -1 0 180 200 Tm (4x 6,6) Tj ET\n"  # angezeigt: 200 pt vom linken und 180 pt vom oberen Rand
+        ),
+        rotate=90,
+    )
     items = {i["text"]: i for i in read_text(pdf)}
     assert sorted(items) == ["4x 6,6", "Massstab 1:1"]
     scale, count = items["Massstab 1:1"], items["4x 6,6"]
@@ -239,7 +311,7 @@ def test_read_text_rotated_page(tmp_path):
 
 
 def test_demo_text_items():
-    by_text = {i["text"]: i for i in read_text(DEMO)}
+    by_text = {i["text"]: i for i in read_text(DEMO_PDF)}
     assert by_text["Ø16 H7"]["parsed"]["fit"] == "H7"
     holes = by_text["4x Ø6,6"]["parsed"]
     assert (holes["count"], holes["nominal"]) == (4, 6.6)
@@ -247,6 +319,6 @@ def test_demo_text_items():
 
 
 def test_region_filter():
-    texts = [i["text"] for i in read_text(DEMO, region=TITLE_BLOCK)]
-    assert "Maßstab 1:1" in texts
+    texts = [i["text"] for i in read_text(DEMO_PDF, region=DEMO_TITLE_BLOCK)]
+    assert "Scale 1:1" in texts
     assert "Ø30" not in texts

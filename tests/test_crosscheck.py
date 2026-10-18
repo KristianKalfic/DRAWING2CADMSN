@@ -8,26 +8,25 @@ import sys
 from pathlib import Path
 
 import pytest
+from helpers import demo_spec
 from mcp.server.mcpserver.exceptions import ToolError
 
-from d2c import server as srv
-from d2c.crosscheck import compare_specs, plausibility
-from d2c.session import Session
+from d2c.demo import DATA
+from d2c.quality.crosscheck import compare_specs, plausibility
+from d2c.server import tools as srv
 from d2c.spec import PartSpec
 
 ROOT = Path(__file__).parents[1]
-DEMO_SPEC = ROOT / "tests" / "fixtures" / "demo_spec.json"
+DEMO_SPEC = DATA / "demo_spec.json"
 FREECAD_CHECK = ROOT / "scripts" / "freecad_check.py"
 
 
-@pytest.fixture(autouse=True)
-def fresh_session(monkeypatch):
-    monkeypatch.setattr(srv, "session", Session())
+pytestmark = pytest.mark.usefixtures("fresh_session")
 
 
 def demo() -> dict:
     """Die Demo-Spezifikation als schlichtes Diktat, bei jedem Aufruf frisch, damit ein Test genau eine Sache ändert."""
-    return json.loads(DEMO_SPEC.read_text("utf-8"))
+    return demo_spec()
 
 
 def spec_of(raw: dict) -> PartSpec:
@@ -39,13 +38,13 @@ def codes(findings: list[dict]) -> list[str]:
 
 
 def add_fillet(raw: dict, radius: float) -> dict:
-    raw["dimensions"].append({"id": "rf", "kind": "radius", "value": radius, "text": f"R{radius:g}",
-                              "source": None, "confidence": 0.9})
+    raw["dimensions"].append({"id": "rf", "kind": "radius", "value": radius, "text": f"R{radius:g}", "source": None, "confidence": 0.9})
     raw["features"].append({"id": "f_fillet", "type": "fillet", "dim_ids": ["rf"]})
     return raw
 
 
 # ---------------------------------------------------------------- compare_specs
+
 
 def test_compare_identical_specs_no_findings():
     assert compare_specs(spec_of(demo()), spec_of(demo())) == []
@@ -59,8 +58,8 @@ def test_compare_ignores_noise_between_readings():
     holes = raw["expected"]["holes"]
     holes.reverse()
     for hole in holes:
-        hole["at"][2] += 7  # another point on the same axis
-    holes[0]["axis"] = [0, 0, -1]  # the same line, the other direction
+        hole["at"][2] += 7  # ein anderer Punkt auf derselben Achse
+    holes[0]["axis"] = [0, 0, -1]  # dieselbe Gerade, andere Richtung
     holes[1]["at"][0] += 0.01
     raw["expected"]["bbox"][0] += 0.02
     assert compare_specs(spec_of(demo()), spec_of(raw)) == []
@@ -68,13 +67,14 @@ def test_compare_ignores_noise_between_readings():
 
 def test_compare_pairs_stepped_holes_despite_float_noise():
     """Eine Senkung teilt die Achse ihrer Bohrung: der Durchmesser unterscheidet sie, nicht ein Rauschen in den Koordinaten."""
+
     def with_counterbore(x_hole: float, x_bore: float) -> PartSpec:
         raw = demo()
         raw["expected"]["holes"][1]["at"][0] = x_hole
         raw["expected"]["holes"].append({"d": 11, "at": [x_bore, 15, 5], "axis": [0, 0, -1], "dim_ids": ["d66"]})
         return spec_of(raw)
 
-    # by axis distance alone each counterbore would take the wrong partner
+    # allein nach Achsabstand fände jede Senkung den falschen Partner
     assert compare_specs(with_counterbore(30, 30 + 2e-12), with_counterbore(30 + 3e-12, 30 + 0.5e-12)) == []
 
 
@@ -94,12 +94,12 @@ def test_compare_detects_hole_diameter_axis_and_count():
     raw = demo()
     holes = raw["expected"]["holes"]
     holes[2]["d"] = 6.0
-    holes[3].update(axis=[1, 0, 0], at=[30, -15, 5])  # a slanted hole is no longer on the line of the other one
+    holes[3].update(axis=[1, 0, 0], at=[30, -15, 5])  # ein schräges Loch liegt nicht mehr auf der Geraden des anderen
     del holes[4]
     findings = compare_specs(spec_of(demo()), spec_of(raw))
     assert sorted((f["code"], f["where"]) for f in findings) == [
         ("EXTRACTION_MISMATCH", "expected.holes[2].d"),
-        ("EXTRACTION_MISMATCH", "expected.holes[3].axis"),  # the position of a slanted hole is not compared
+        ("EXTRACTION_MISMATCH", "expected.holes[3].axis"),  # die Lage eines schrägen Lochs wird nicht verglichen
         ("HOLE_COUNT", "expected.holes"),
     ]
     count = next(f for f in findings if f["code"] == "HOLE_COUNT")
@@ -115,12 +115,11 @@ def test_compare_detects_changed_bbox():
 
 def test_compare_detects_dimension_only_in_one():
     raw = demo()
-    raw["dimensions"].append({"id": "x1", "kind": "length", "value": 12, "text": "12", "source": None,
-                              "confidence": 0.9})
+    raw["dimensions"].append({"id": "x1", "kind": "length", "value": 12, "text": "12", "source": None, "confidence": 0.9})
     a, b = spec_of(demo()), spec_of(raw)
     (only_b,) = compare_specs(a, b)
     assert (only_b["code"], only_b["where"]) == ("ONLY_IN_B", "second.dimensions.x1")
-    assert only_b["suggested_review"]["refs"] == []  # the id does not exist in A
+    assert only_b["suggested_review"]["refs"] == []  # die ID gibt es in A nicht
     (only_a,) = compare_specs(b, a)
     assert (only_a["code"], only_a["where"]) == ("ONLY_IN_A", "dimensions.x1")
     assert only_a["suggested_review"]["refs"] == ["x1"]
@@ -129,11 +128,9 @@ def test_compare_detects_dimension_only_in_one():
 
 def test_compare_tolerance_decides_pairing():
     raw = demo()
-    raw["dimensions"].append({"id": "x1", "kind": "length", "value": 12, "text": "12", "source": None,
-                              "confidence": 0.9})
+    raw["dimensions"].append({"id": "x1", "kind": "length", "value": 12, "text": "12", "source": None, "confidence": 0.9})
     other = demo()
-    other["dimensions"].append({"id": "y1", "kind": "length", "value": 12.04, "text": "12,04", "source": None,
-                                "confidence": 0.9})
+    other["dimensions"].append({"id": "y1", "kind": "length", "value": 12.04, "text": "12,04", "source": None, "confidence": 0.9})
     assert compare_specs(spec_of(raw), spec_of(other)) == []
     assert codes(compare_specs(spec_of(raw), spec_of(other), tol=0.01)) == ["ONLY_IN_A", "ONLY_IN_B"]
 
@@ -141,7 +138,7 @@ def test_compare_tolerance_decides_pairing():
 def test_compare_pairs_leftover_dimensions_by_printed_text():
     raw = demo()
     d66 = next(d for d in raw["dimensions"] if d["id"] == "d66")
-    d66.update(kind="count", value=4)  # "4x Ø6,6" read as the count 4 instead of the diameter 6.6
+    d66.update(kind="count", value=4)  # "4x Ø6,6" als Anzahl 4 statt als Durchmesser 6,6 gelesen
     findings = compare_specs(spec_of(demo()), spec_of(raw))
     assert [(f["code"], f["where"]) for f in findings] == [("EXTRACTION_MISMATCH", "dimensions.d66")]
     assert "diameter 6.6" in findings[0]["message"] and "count 4" in findings[0]["message"]
@@ -159,13 +156,14 @@ def test_compare_detects_changed_fit_and_deviation():
 
 # ---------------------------------------------------------------- plausibility
 
+
 def test_plausibility_demo_spec_no_findings():
     assert plausibility(spec_of(demo())) == []
 
 
 def test_plausibility_hole_outside_bbox():
     raw = demo()
-    raw["expected"]["holes"][1]["at"] = [70, 15, 0]  # the holes now span 106.6 mm along x, the bbox has 80
+    raw["expected"]["holes"][1]["at"] = [70, 15, 0]  # die Löcher spannen nun 106,6 mm entlang x, die bbox hat 80
     (finding,) = plausibility(spec_of(raw))
     assert (finding["code"], finding["where"]) == ("HOLE_OUTSIDE_BBOX", "expected.bbox.x")
     assert "106.6" in finding["message"] and "80" in finding["message"]
@@ -175,7 +173,7 @@ def test_plausibility_hole_outside_bbox():
     raw = demo()
     raw["expected"]["holes"] = [{"d": 90, "at": [0, 0, 0], "axis": [0, 0, 1], "dim_ids": ["d16"]}]
     assert [f["where"] for f in plausibility(spec_of(raw))] == ["expected.bbox.x", "expected.bbox.y"]
-    # holes along another axis count across their own plane: a hole along x spans y and z
+    # Löcher entlang einer anderen Achse zählen quer zu ihrer Ebene: ein Loch entlang x spannt y und z
     raw = demo()
     raw["expected"]["holes"] = [{"d": 30, "at": [0, 0, 10], "axis": [1, 0, 0], "dim_ids": ["d16"]}]
     assert [f["where"] for f in plausibility(spec_of(raw))] == ["expected.bbox.z"]  # 30 > 25, but 30 <= 50
@@ -218,20 +216,21 @@ def test_plausibility_fillet_too_big():
 
 # ---------------------------------------------------------------- check_spec tool
 
+
 def check(**args) -> dict:
     return json.loads(asyncio.run(srv.server.call_tool("check_spec", args)).content[0].text)
 
 
 def test_check_spec_tool_returns_findings():
     clean = check(spec=demo())
-    assert clean == {"findings": [], "count": 0}  # a dict, not an empty list, which would arrive as no answer
+    assert clean == {"findings": [], "count": 0}  # ein Wörterbuch, keine leere Liste, die als keine Antwort ankäme
     raw = demo()
     raw["expected"]["holes"][1]["at"] = [70, 15, 0]
     one = check(spec=raw)
     assert one["count"] == len(one["findings"]) == 1
     assert one["findings"][0]["code"] == "HOLE_OUTSIDE_BBOX"
     second = json.loads(json.dumps(raw))
-    second["expected"]["bbox"][2] = 30  # the only difference between the two readings
+    second["expected"]["bbox"][2] = 30  # der einzige Unterschied zwischen den beiden Auswertungen
     both = check(spec=raw, second=second)
     assert both["count"] == 2
     assert codes(both["findings"]) == ["HOLE_OUTSIDE_BBOX", "EXTRACTION_MISMATCH"]
@@ -242,14 +241,14 @@ def test_check_spec_tool_registers_nothing():
     check(spec=demo())
     assert srv.session.specs == {}
     assert not (Path(os.environ["D2C_RESULTS"]) / "demo_bracket").exists()
-    with pytest.raises(ToolError, match="rufe zuerst `submit_spec` auf"):
+    with pytest.raises(ToolError, match="call `submit_spec` first"):
         asyncio.run(srv.server.call_tool("get_state", {"part": "demo_bracket"}))
 
 
 def test_check_spec_tool_rejects_invalid_spec():
     raw = demo()
-    raw["dimensions"][0]["id"] = "d50"  # duplicate id
-    with pytest.raises(ToolError, match="Doppelte ID"):
+    raw["dimensions"][0]["id"] = "d50"  # doppelte ID
+    with pytest.raises(ToolError, match="Duplicate ID"):
         check(spec=raw)
 
 
@@ -259,6 +258,7 @@ def test_instructions_name_check_spec():
 
 
 # ---------------------------------------------------------------- scripts/freecad_check.py
+
 
 def stub_freecad(tmp_path: Path, measured: dict) -> Path:
     """Ein Ersatz für freecadcmd, der eine feste Messung schreibt, wo das Skript sie erwartet."""
@@ -273,8 +273,7 @@ def measured(**changes) -> dict:
     holes = [(16, (0, 0)), (6.6, (30, 15)), (6.6, (-30, 15)), (6.6, (30, -15)), (6.6, (-30, -15))]
     cylinders = [{"d": d, "axis": [0, 0, -1], "point": [x, y, 10], "concave": True} for d, (x, y) in holes]
     cylinders.append({"d": 10, "axis": [0, 0, -1], "point": [-35, -20, 0], "concave": False})
-    return {"version": "1.1.4", "valid": True, "solids": 1, "volume": 43993.2, "bbox": [80, 50, 25],
-            "cylinders": cylinders} | changes
+    return {"version": "1.1.4", "valid": True, "solids": 1, "volume": 43993.2, "bbox": [80, 50, 25], "cylinders": cylinders} | changes
 
 
 def run_check(tmp_path: Path, report: dict, *extra: str) -> subprocess.CompletedProcess:
@@ -287,8 +286,9 @@ def run_check(tmp_path: Path, report: dict, *extra: str) -> subprocess.Completed
 def test_freecad_check_without_freecad_exits_2(tmp_path):
     step = tmp_path / "part.step"
     step.write_text("dummy")
-    done = subprocess.run([sys.executable, str(FREECAD_CHECK), str(step), "--freecad", str(tmp_path / "no" / "freecadcmd")],
-                          capture_output=True, text=True)
+    done = subprocess.run(
+        [sys.executable, str(FREECAD_CHECK), str(step), "--freecad", str(tmp_path / "no" / "freecadcmd")], capture_output=True, text=True
+    )
     assert done.returncode == 2
     assert "FreeCAD not found" in done.stderr and "--freecad" in done.stderr
 
@@ -297,18 +297,21 @@ def test_freecad_check_passes_matching_part(tmp_path):
     done = run_check(tmp_path, measured(), "--spec", str(DEMO_SPEC))
     assert done.returncode == 0, done.stdout + done.stderr
     assert "FreeCAD 1.1.4" in done.stdout and "FAILED" not in done.stdout
-    assert run_check(tmp_path, measured()).returncode == 0  # without --spec: only the solid is checked
+    assert run_check(tmp_path, measured()).returncode == 0  # ohne --spec wird nur der Körper geprüft
 
 
-@pytest.mark.parametrize("change, shown", [
-    ({"bbox": [80, 50, 24]}, "bbox"),
-    ({"cylinders": measured()["cylinders"][1:]}, "hole d=16"),  # the bore is missing
-    ({"cylinders": [{**c, "concave": False} if c["d"] == 16 else c for c in measured()["cylinders"]]}, "hole d=16"),
-    ({"cylinders": [{**c, "axis": [1, 0, 0]} if c["d"] == 16 else c for c in measured()["cylinders"]]}, "hole d=16"),
-    ({"cylinders": [{**c, "point": [1, 0, 10]} if c["d"] == 16 else c for c in measured()["cylinders"]]}, "hole d=16"),
-    ({"valid": False}, "valid=False"),
-    ({"solids": 2}, "solids=2"),
-])
+@pytest.mark.parametrize(
+    "change, shown",
+    [
+        ({"bbox": [80, 50, 24]}, "bbox"),
+        ({"cylinders": measured()["cylinders"][1:]}, "hole d=16"),  # die Bohrung fehlt
+        ({"cylinders": [{**c, "concave": False} if c["d"] == 16 else c for c in measured()["cylinders"]]}, "hole d=16"),
+        ({"cylinders": [{**c, "axis": [1, 0, 0]} if c["d"] == 16 else c for c in measured()["cylinders"]]}, "hole d=16"),
+        ({"cylinders": [{**c, "point": [1, 0, 10]} if c["d"] == 16 else c for c in measured()["cylinders"]]}, "hole d=16"),
+        ({"valid": False}, "valid=False"),
+        ({"solids": 2}, "solids=2"),
+    ],
+)
 def test_freecad_check_fails_wrong_part(tmp_path, change, shown):
     done = run_check(tmp_path, measured(**change), "--spec", str(DEMO_SPEC))
     assert done.returncode == 1, done.stdout + done.stderr
@@ -317,10 +320,9 @@ def test_freecad_check_fails_wrong_part(tmp_path, change, shown):
 
 def test_freecad_check_without_result_exits_1(tmp_path):
     exe = tmp_path / "freecadcmd"
-    exe.write_text(f"#!{sys.executable}\nprint('cannot read the file')\n")
+    exe.write_text(f"#!{sys.executable}\nprint('Datei nicht lesbar')\n")
     exe.chmod(0o755)
     step = tmp_path / "part.step"
     step.write_text("dummy")
-    done = subprocess.run([sys.executable, str(FREECAD_CHECK), str(step), "--freecad", str(exe)],
-                          capture_output=True, text=True)
-    assert done.returncode == 1 and "cannot read the file" in done.stderr
+    done = subprocess.run([sys.executable, str(FREECAD_CHECK), str(step), "--freecad", str(exe)], capture_output=True, text=True)
+    assert done.returncode == 1 and "Datei nicht lesbar" in done.stderr

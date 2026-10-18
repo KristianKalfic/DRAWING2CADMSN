@@ -1,0 +1,343 @@
+{
+  "assumptions": [
+    {
+      "id": "rv1",
+      "refs": [
+        {
+          "id": "t8",
+          "text": ""
+        }
+      ],
+      "issue": "missing",
+      "assumption": "Flange thickness 8 mm",
+      "reason": "The flange thickness is not dimensioned; measured in the front view at scale 1:1",
+      "sources": [],
+      "marked_faces": 2
+    }
+  ],
+  "notes": [
+    {
+      "id": "n1",
+      "text": "Material S235JR"
+    },
+    {
+      "id": "n2",
+      "text": "Deburr all edges"
+    }
+  ],
+  "traceability": [
+    {
+      "op_index": 0,
+      "path": "profile.d",
+      "value": 60,
+      "dimension": "d60",
+      "text": "Ø60"
+    },
+    {
+      "op_index": 0,
+      "path": "distance",
+      "value": 8,
+      "dimension": "t8",
+      "text": ""
+    },
+    {
+      "op_index": 1,
+      "path": "d",
+      "value": 12,
+      "dimension": "d12",
+      "text": "Ø12 H7"
+    },
+    {
+      "op_index": 2,
+      "path": "d",
+      "value": 5.5,
+      "dimension": "d55",
+      "text": "4x Ø5,5"
+    },
+    {
+      "op_index": 2,
+      "path": "polar.pitch_d",
+      "value": 44,
+      "dimension": "d44",
+      "text": "Ø44"
+    }
+  ],
+  "unreferenced": [],
+  "dims_found": {
+    "found": [
+      {
+        "id": "d60",
+        "text": "Ø60",
+        "value": 60.0,
+        "nearest": 60.0
+      },
+      {
+        "id": "d12",
+        "text": "Ø12 H7",
+        "value": 12.0,
+        "nearest": 12.0
+      },
+      {
+        "id": "d55",
+        "text": "4x Ø5,5",
+        "value": 5.5,
+        "nearest": 5.5
+      },
+      {
+        "id": "d44",
+        "text": "Ø44",
+        "value": 44.0,
+        "nearest": 43.999999473618274
+      }
+    ],
+    "missing": []
+  },
+  "tolerances": [
+    {
+      "dim_id": "d60",
+      "text": "Ø60",
+      "nominal": 60.0,
+      "lower": -0.3,
+      "upper": 0.3,
+      "mid": 60.0,
+      "source": "general",
+      "in_tolerance_nominal": true,
+      "in_tolerance_mid": true,
+      "geometry": false
+    },
+    {
+      "dim_id": "d12",
+      "text": "Ø12 H7",
+      "nominal": 12.0,
+      "lower": 0.0,
+      "upper": 0.018,
+      "mid": 12.009,
+      "source": "fit",
+      "in_tolerance_nominal": true,
+      "in_tolerance_mid": true,
+      "geometry": false
+    },
+    {
+      "dim_id": "d55",
+      "text": "4x Ø5,5",
+      "nominal": 5.5,
+      "lower": -0.1,
+      "upper": 0.1,
+      "mid": 5.5,
+      "source": "general",
+      "in_tolerance_nominal": true,
+      "in_tolerance_mid": true,
+      "geometry": false
+    },
+    {
+      "dim_id": "d44",
+      "text": "Ø44",
+      "nominal": 44.0,
+      "lower": -0.3,
+      "upper": 0.3,
+      "mid": 44.0,
+      "source": "general",
+      "in_tolerance_nominal": true,
+      "in_tolerance_mid": true,
+      "geometry": false
+    },
+    {
+      "dim_id": "t8",
+      "text": "",
+      "nominal": 8.0,
+      "lower": -0.2,
+      "upper": 0.2,
+      "mid": 8.0,
+      "source": "general",
+      "in_tolerance_nominal": true,
+      "in_tolerance_mid": true,
+      "geometry": false
+    }
+  ],
+  "pmi": [
+    {
+      "type": "diameter",
+      "value": 12.0,
+      "tol_upper": null,
+      "tol_lower": null,
+      "fit": "H7",
+      "descriptions": [],
+      "faces": [
+        "cylinder d=12 at (0, 0, 4)"
+      ]
+    },
+    {
+      "type": "diameter",
+      "value": 5.5,
+      "tol_upper": null,
+      "tol_lower": null,
+      "fit": null,
+      "descriptions": [],
+      "faces": [
+        "cylinder d=5.5 at (15.556, 15.556, 4)"
+      ]
+    },
+    {
+      "type": "diameter",
+      "value": 5.5,
+      "tol_upper": null,
+      "tol_lower": null,
+      "fit": null,
+      "descriptions": [],
+      "faces": [
+        "cylinder d=5.5 at (-15.556, 15.556, 4)"
+      ]
+    },
+    {
+      "type": "diameter",
+      "value": 5.5,
+      "tol_upper": null,
+      "tol_lower": null,
+      "fit": null,
+      "descriptions": [],
+      "faces": [
+        "cylinder d=5.5 at (-15.556, -15.556, 4)"
+      ]
+    },
+    {
+      "type": "diameter",
+      "value": 5.5,
+      "tol_upper": null,
+      "tol_lower": null,
+      "fit": null,
+      "descriptions": [],
+      "faces": [
+        "cylinder d=5.5 at (15.556, -15.556, 4)"
+      ]
+    },
+    {
+      "type": "distance",
+      "value": 8.0,
+      "tol_upper": null,
+      "tol_lower": null,
+      "fit": null,
+      "descriptions": [
+        "ASSUMPTION: Flange thickness 8 mm - The flange thickness is not dimensioned; measured in the front view at scale 1:1 - please check"
+      ],
+      "faces": [
+        "plane z=0",
+        "plane z=8"
+      ]
+    }
+  ],
+  "geometric_tolerances": [],
+  "changes": [],
+  "warnings": [],
+  "validation": [
+    {
+      "check": "Valid solid",
+      "expected": "yes",
+      "actual": "yes",
+      "ok": true
+    },
+    {
+      "check": "Number of solids",
+      "expected": "1",
+      "actual": "1",
+      "ok": true
+    },
+    {
+      "check": "Free edges",
+      "expected": "0",
+      "actual": "0",
+      "ok": true
+    },
+    {
+      "check": "Volume mm³",
+      "expected": "> 0",
+      "actual": "20954.4",
+      "ok": true
+    },
+    {
+      "check": "bbox_x",
+      "expected": "60",
+      "actual": "60",
+      "ok": true
+    },
+    {
+      "check": "bbox_y",
+      "expected": "60",
+      "actual": "60",
+      "ok": true
+    },
+    {
+      "check": "bbox_z",
+      "expected": "8",
+      "actual": "8",
+      "ok": true
+    },
+    {
+      "check": "hole (d12)",
+      "expected": "Ø12 at [0.0, 0.0, 0.0], axis [0.0, 0.0, 1.0]",
+      "actual": "Ø12, 0 from axis, through",
+      "ok": true
+    },
+    {
+      "check": "hole (d55)",
+      "expected": "Ø5.5 at [15.5563, 15.5563, 0.0], axis [0.0, 0.0, 1.0]",
+      "actual": "Ø5.5, 6.95597e-05 from axis, through",
+      "ok": true
+    },
+    {
+      "check": "hole (d55)",
+      "expected": "Ø5.5 at [-15.5563, 15.5563, 0.0], axis [0.0, 0.0, 1.0]",
+      "actual": "Ø5.5, 6.95597e-05 from axis, through",
+      "ok": true
+    },
+    {
+      "check": "hole (d55)",
+      "expected": "Ø5.5 at [-15.5563, -15.5563, 0.0], axis [0.0, 0.0, 1.0]",
+      "actual": "Ø5.5, 6.95597e-05 from axis, through",
+      "ok": true
+    },
+    {
+      "check": "hole (d55)",
+      "expected": "Ø5.5 at [15.5563, -15.5563, 0.0], axis [0.0, 0.0, 1.0]",
+      "actual": "Ø5.5, 6.95597e-05 from axis, through",
+      "ok": true
+    },
+    {
+      "check": "STEP re-import valid",
+      "expected": "yes",
+      "actual": "yes",
+      "ok": true
+    },
+    {
+      "check": "Solids in STEP re-import",
+      "expected": "1",
+      "actual": "1",
+      "ok": true
+    },
+    {
+      "check": "Volume change on STEP re-import",
+      "expected": "<= 1e-06",
+      "actual": "3.87e-14",
+      "ok": true
+    },
+    {
+      "check": "STEP PMI read back",
+      "expected": "6",
+      "actual": "6",
+      "ok": true
+    },
+    {
+      "check": "Geometric tolerances read back",
+      "expected": "0",
+      "actual": "0",
+      "ok": true
+    },
+    {
+      "check": "Marked faces rv1",
+      "expected": "> 0",
+      "actual": "2",
+      "ok": true
+    }
+  ],
+  "validation_basis": "Consistency with the captured specification",
+  "all_ok": true
+}

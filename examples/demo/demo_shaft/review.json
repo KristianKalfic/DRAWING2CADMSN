@@ -1,0 +1,278 @@
+{
+  "assumptions": [],
+  "notes": [
+    {
+      "id": "n1",
+      "text": "Material C45"
+    },
+    {
+      "id": "n2",
+      "text": "Deburr all edges"
+    }
+  ],
+  "traceability": [
+    {
+      "op_index": 0,
+      "path": "steps.0.0",
+      "value": 20,
+      "dimension": "ds1",
+      "text": "Ø20"
+    },
+    {
+      "op_index": 0,
+      "path": "steps.0.1",
+      "value": 35,
+      "dimension": "l1",
+      "text": "35"
+    },
+    {
+      "op_index": 0,
+      "path": "steps.1.0",
+      "value": 30,
+      "dimension": "ds2",
+      "text": "Ø30"
+    },
+    {
+      "op_index": 0,
+      "path": "steps.1.1",
+      "value": 45,
+      "dimension": "l2",
+      "text": "45"
+    },
+    {
+      "op_index": 0,
+      "path": "steps.2.0",
+      "value": 24,
+      "dimension": "ds3",
+      "text": "Ø24"
+    },
+    {
+      "op_index": 0,
+      "path": "steps.2.1",
+      "value": 30,
+      "dimension": "l3",
+      "text": "30"
+    },
+    {
+      "op_index": 1,
+      "path": "size",
+      "value": 2,
+      "dimension": "c2",
+      "text": "2x45°"
+    }
+  ],
+  "unreferenced": [],
+  "dims_found": {
+    "found": [
+      {
+        "id": "ds1",
+        "text": "Ø20",
+        "value": 20.0,
+        "nearest": 20.0
+      },
+      {
+        "id": "ds2",
+        "text": "Ø30",
+        "value": 30.0,
+        "nearest": 30.0
+      },
+      {
+        "id": "ds3",
+        "text": "Ø24",
+        "value": 24.0,
+        "nearest": 24.0
+      },
+      {
+        "id": "l1",
+        "text": "35",
+        "value": 35.0,
+        "nearest": 35.0
+      },
+      {
+        "id": "l2",
+        "text": "45",
+        "value": 45.0,
+        "nearest": 45.0
+      },
+      {
+        "id": "l3",
+        "text": "30",
+        "value": 30.0,
+        "nearest": 30.0
+      },
+      {
+        "id": "lt",
+        "text": "110",
+        "value": 110.0,
+        "nearest": 110.0
+      }
+    ],
+    "missing": []
+  },
+  "tolerances": [
+    {
+      "dim_id": "ds1",
+      "text": "Ø20",
+      "nominal": 20.0,
+      "lower": -0.2,
+      "upper": 0.2,
+      "mid": 20.0,
+      "source": "general",
+      "in_tolerance_nominal": true,
+      "in_tolerance_mid": true,
+      "geometry": false
+    },
+    {
+      "dim_id": "ds2",
+      "text": "Ø30",
+      "nominal": 30.0,
+      "lower": -0.2,
+      "upper": 0.2,
+      "mid": 30.0,
+      "source": "general",
+      "in_tolerance_nominal": true,
+      "in_tolerance_mid": true,
+      "geometry": false
+    },
+    {
+      "dim_id": "ds3",
+      "text": "Ø24",
+      "nominal": 24.0,
+      "lower": -0.2,
+      "upper": 0.2,
+      "mid": 24.0,
+      "source": "general",
+      "in_tolerance_nominal": true,
+      "in_tolerance_mid": true,
+      "geometry": false
+    },
+    {
+      "dim_id": "l1",
+      "text": "35",
+      "nominal": 35.0,
+      "lower": -0.3,
+      "upper": 0.3,
+      "mid": 35.0,
+      "source": "general",
+      "in_tolerance_nominal": true,
+      "in_tolerance_mid": true,
+      "geometry": false
+    },
+    {
+      "dim_id": "l2",
+      "text": "45",
+      "nominal": 45.0,
+      "lower": -0.3,
+      "upper": 0.3,
+      "mid": 45.0,
+      "source": "general",
+      "in_tolerance_nominal": true,
+      "in_tolerance_mid": true,
+      "geometry": false
+    },
+    {
+      "dim_id": "l3",
+      "text": "30",
+      "nominal": 30.0,
+      "lower": -0.2,
+      "upper": 0.2,
+      "mid": 30.0,
+      "source": "general",
+      "in_tolerance_nominal": true,
+      "in_tolerance_mid": true,
+      "geometry": false
+    },
+    {
+      "dim_id": "lt",
+      "text": "110",
+      "nominal": 110.0,
+      "lower": -0.3,
+      "upper": 0.3,
+      "mid": 110.0,
+      "source": "general",
+      "in_tolerance_nominal": true,
+      "in_tolerance_mid": true,
+      "geometry": true
+    }
+  ],
+  "pmi": [],
+  "geometric_tolerances": [],
+  "changes": [],
+  "warnings": [],
+  "validation": [
+    {
+      "check": "Valid solid",
+      "expected": "yes",
+      "actual": "yes",
+      "ok": true
+    },
+    {
+      "check": "Number of solids",
+      "expected": "1",
+      "actual": "1",
+      "ok": true
+    },
+    {
+      "check": "Free edges",
+      "expected": "0",
+      "actual": "0",
+      "ok": true
+    },
+    {
+      "check": "Volume mm³",
+      "expected": "> 0",
+      "actual": "56233.5",
+      "ok": true
+    },
+    {
+      "check": "bbox_x",
+      "expected": "30",
+      "actual": "30",
+      "ok": true
+    },
+    {
+      "check": "bbox_y",
+      "expected": "30",
+      "actual": "30",
+      "ok": true
+    },
+    {
+      "check": "bbox_z",
+      "expected": "110",
+      "actual": "110",
+      "ok": true
+    },
+    {
+      "check": "STEP re-import valid",
+      "expected": "yes",
+      "actual": "yes",
+      "ok": true
+    },
+    {
+      "check": "Solids in STEP re-import",
+      "expected": "1",
+      "actual": "1",
+      "ok": true
+    },
+    {
+      "check": "Volume change on STEP re-import",
+      "expected": "<= 1e-06",
+      "actual": "2.57e-14",
+      "ok": true
+    },
+    {
+      "check": "STEP PMI read back",
+      "expected": "0",
+      "actual": "0",
+      "ok": true
+    },
+    {
+      "check": "Geometric tolerances read back",
+      "expected": "0",
+      "actual": "0",
+      "ok": true
+    }
+  ],
+  "validation_basis": "Consistency with the captured specification",
+  "all_ok": true
+}

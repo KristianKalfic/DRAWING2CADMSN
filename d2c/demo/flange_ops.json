@@ -1,0 +1,9 @@
+[
+  {"op": "extrude", "profile": {"type": "circle", "center": [0, 0], "d": 60},
+   "plane": {"name": "XY"}, "distance": 8,
+   "refs": {"profile.d": "d60", "distance": "t8"}},
+  {"op": "holes", "plane": {"name": "XY", "offset": 8}, "positions": [[0, 0]], "d": 12,
+   "refs": {"d": "d12"}},
+  {"op": "holes", "plane": {"name": "XY", "offset": 8}, "polar": {"center": [0, 0], "pitch_d": 44, "count": 4, "start_angle": 45},
+   "d": 5.5, "refs": {"d": "d55", "polar.pitch_d": "d44"}}
+]
