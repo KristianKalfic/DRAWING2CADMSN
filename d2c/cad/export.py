@@ -161,12 +161,22 @@ def _cylinder_faces(shape: cq.Shape, hole: dict, tol: float = LINEAR_TOL) -> lis
     return faces
 
 
+MARK_REACH = 5.0  # mm: so weit darf ein Markierungspunkt neben jeder Fläche liegen und trifft noch die nächstliegende
+
+
 def mark_faces(shape: cq.Shape, mark: dict) -> list[cq.Face]:
-    """Die Flächen einer Markierung: die festgelegten `face_ids` (Indizes in `shape.Faces()`, siehe `pin_marks`), sonst die Flächen nahe ihren Punkten."""
+    """Die Flächen einer Markierung: die festgelegten `face_ids` (Indizes in `shape.Faces()`, siehe `pin_marks`), sonst die Flächen
+    nahe ihren Punkten; trifft kein Punkt eine Fläche, die nächstliegende, wenn sie höchstens MARK_REACH entfernt ist. Ein
+    Punkt weit neben dem Teil markiert nichts, und der Export scheitert an der Prüfung "Marked faces"."""
     if "face_ids" in mark:
         faces = shape.Faces()
         return [faces[i] for i in mark["face_ids"]]
-    return select_faces(shape, mark["near"])
+    near = select_faces(shape, mark["near"])
+    if near or not mark["near"]:
+        return near
+    vertices = [cq.Vertex.makeVertex(*p) for p in mark["near"]]
+    distance, face = min(((min(f.distance(v) for v in vertices), f) for f in shape.Faces()), key=lambda pair: pair[0])
+    return [face] if distance <= MARK_REACH else []
 
 
 def _review_faces(shape: cq.Shape, marks: Sequence[dict], threads: Sequence[dict]) -> tuple[dict[cq.Face, list[str]], list[cq.Face]]:

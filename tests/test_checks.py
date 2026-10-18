@@ -231,10 +231,10 @@ def test_roundtrip_colors_thread_faces(tmp_path):
 def test_mark_without_face_not_ok(tmp_path):
     marks = [
         {"id": "far", "near": [(55, 0, 0)]},  # 50 mm von der nächstgelegenen Fläche entfernt
-        {"id": "just_off", "near": [(0, 0, 15.6)]},  # 0,6 mm über der Oberseite, außerhalb der Reichweite von 0,5 mm
+        {"id": "just_off", "near": [(0, 0, 15.6)]},  # 0,6 mm über der Oberseite: keine Fläche in 0,5 mm, die nächste in MARK_REACH
     ]
     result = step_roundtrip(cq.Workplane().box(10, 20, 30), str(tmp_path / "box.step"), marks=marks)
-    assert result["marks"] == [{"id": "far", "faces": 0}, {"id": "just_off", "faces": 0}]
+    assert result["marks"] == [{"id": "far", "faces": 0}, {"id": "just_off", "faces": 1}]
     assert (result["reimport_valid"], result["solids"]) == (True, 1)  # Nur die Markierungen sind dafür verantwortlich.
     assert result["ok"] is False
 

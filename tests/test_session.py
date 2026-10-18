@@ -638,11 +638,11 @@ def test_changed_ops_remove_the_outdated_mid_files_but_keep_the_nominal_result(s
 
 
 def test_failed_mid_export_keeps_all_earlier_files():
-    """Auf der Mitte ist der Block 19,4 breit: eine Markierung 0,4 mm über seiner rechten Fläche bei 20 ist dann 0,7 mm von ihr entfernt, außerhalb der Reichweite."""
+    """Eine Markierung 10 mm neben dem Block trifft keine Fläche: der Export auf der Mitte scheitert, die früheren Dateien bleiben."""
     session = block_session(width_lower=-1.2)
     folder = results_root() / "block"
     assert session.export("block")["ok"] is True and session.export("block", variant="mid")["ok"] is True
-    mark = ReviewItem(id="rv1", refs=[], issue="ambiguous", assumption="side face", reason="unclear", mark_near=[(10.4, 0, 2.5)])
+    mark = ReviewItem(id="rv1", refs=[], issue="ambiguous", assumption="side face", reason="unclear", mark_near=[(20, 0, 2.5)])
     session.specs["block"] = session.specs["block"].model_copy(update={"review": [mark]})
     result = session.export("block", variant="mid")
     assert (result["ok"], result["error"]) == (False, "Check failed")

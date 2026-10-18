@@ -450,6 +450,12 @@ def test_a_mark_off_the_surface_takes_the_nearest_face():
     assert sorted(f.Center().y for f in entry["faces"]) == [-10, 10]
 
 
+def test_a_color_mark_off_the_surface_takes_the_nearest_face(tmp_path):
+    """Wie beim PMI: ein Markierungspunkt 2 mm neben der Fläche färbt die nächstliegende Fläche, statt den Export scheitern zu lassen."""
+    trip = step_roundtrip(cq.Workplane().add(built(BLOCK)), str(tmp_path / "part.step"), marks=[{"id": "r1", "near": [(0, 12, 5)]}])
+    assert trip["marks"] == [{"id": "r1", "faces": 1}] and trip["ok"]
+
+
 @pytest.mark.parametrize("kind, value, expected", [("diameter", 10, 10.0), ("radius", 5, 10.0)])
 def test_assumed_diameter_and_radius_use_the_cylinder_at_the_point(tmp_path, kind, value, expected):
     shape = drilled()  # Platte 30 x 20 x 10 mit Bohrung Ø10 in der Mitte
