@@ -488,7 +488,7 @@ def test_instructions_fit_the_client_limit():
     """Die Anleitung bleibt knapp (unter 5400 Zeichen); die Regeln stehen darin.
 
     Die CLI kürzt Server-Anweisungen bei 4096 Zeichen; der Agent hebt das mit CLAUDE_CODE_MAX_MCP_DESCRIPTION_LENGTH auf,
-    bei `claude -p` muss die Variable gesetzt sein (siehe README).
+    bei `claude -p` muss die Variable gesetzt sein (siehe docs/reference.md).
     """
     text = Path(srv.__file__).with_name("instructions.md").read_text("utf-8")
     assert len(text) < 5400
