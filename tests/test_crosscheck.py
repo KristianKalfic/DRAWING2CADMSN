@@ -147,7 +147,7 @@ def test_compare_pairs_leftover_dimensions_by_printed_text():
 def test_compare_detects_changed_fit_and_deviation():
     raw = demo()
     d16, d80 = (next(d for d in raw["dimensions"] if d["id"] == i) for i in ("d16", "d80"))
-    d16["fit"] = None
+    d16["fit"] = "H8"  # geändert; gelöscht käme H7 aus dem Text "Ø16 H7" zurück
     d80.update(tol_upper=0.1, tol_lower=-0.1)
     findings = compare_specs(spec_of(demo()), spec_of(raw))
     assert sorted(f["where"] for f in findings) == ["dimensions.d16.fit", "dimensions.d80.tol"]

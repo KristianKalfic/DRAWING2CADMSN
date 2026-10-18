@@ -1,10 +1,90 @@
 # Drawing2CAD
 
-[![License: AGPL-3.0-or-later](https://img.shields.io/badge/License-AGPL--3.0--or--later-blue.svg)](LICENSE)
-
 Drawing2CAD turns a 2D technical drawing into a 3D solid model in STEP format (AP242). A language model reads the drawing and builds the part exclusively through the tools of a local MCP server; the server has no network access. After every build step the server checks that the solid is valid and matches the captured specification (overall size, holes, STEP re-import), and lists printed dimensions that do not occur in the solid. Every assumption that is not stated in the drawing is marked orange in the model and listed with its reason in a review list.
 
-Contents: [Requirements](#requirements) · [Quick start](#quick-start) · [Local models](#local-models) · [Processing a drawing](#processing-a-drawing) · [Requirements matrix](#requirements-matrix) · [Results](#results) · [Limitations](#limitations) · [Data flow and privacy](#data-flow-and-privacy) · [Configuration](#configuration) · [Project layout](#project-layout) · [Licenses](#licenses)
+## At a glance
+
+| | |
+| --- | --- |
+| **Input** | PDF, PNG or JPG drawing, dropped into the web UI or passed on the command line |
+| **Output** | STEP AP242 with semantic PMI, GLB for the 3D view, check report, review list `review.md` |
+| **CAD kernel** | CadQuery 2.8 on OpenCascade 7.9, inside a Docker container with `--network none` |
+| **Language model** | any MCP-capable model: Claude, Ollama, Anthropic-compatible endpoints; the model only calls the 15 server tools |
+| **Tolerances** | ISO 2768-1 and ISO 286-1 read from the drawing, optional model at the tolerance midpoints with a compliance report |
+| **Revisions** | a changed drawing updates the existing model (`--revise`) and lists every change instead of rebuilding from scratch |
+| **Last full run** | 21 of 22 drawings exported, 350 of 351 server checks passed, 21 of 21 open in FreeCAD ([results](#results)) |
+
+Check it in three commands, without a language model and without network:
+
+```
+docker build -t d2c .
+docker run --rm --network none d2c pytest -q
+docker run --rm --network none d2c python -m d2c.demo   # ends with "3 of 3 parts exported, all checks passed"
+```
+
+```mermaid
+flowchart LR
+  D[Drawing<br/>PDF, PNG, JPG] --> W[Web UI or CLI<br/>d2c.web, d2c.agent]
+  W <--> L[Language model<br/>Claude, Ollama, ...]
+  L -- MCP tools only --> S
+  subgraph C[CAD container, no network]
+    S[MCP server<br/>15 tools] --> R[Read<br/>render, text layer, vector measure]
+    R --> P[PartSpec<br/>review items required]
+    P --> B[Build<br/>operations in a fresh sandbox process]
+    B --> K[Check<br/>solid, size, holes, STEP re-import]
+    K -- failed --> B
+    K --> E[Export<br/>STEP AP242 + PMI, GLB, review.md]
+  end
+  E --> O[results/part/]
+```
+
+The component diagram with isolation boundaries is shown below, the full system specification in [docs/spec.md](docs/spec.md) (both German).
+
+## How it meets the challenge
+
+![Architecture: drawing, language model, local MCP server with sandbox, checks and STEP export](docs/architektur.png)
+
+The pipeline is the one the challenge recommends: **drawing → structured JSON description of the part → MCP server builds the model → validation → STEP export.**
+
+1. The language model reads the drawing through read-only tools (page images, text layer, vector measurement) and submits a `PartSpec` in JSON: views, every dimension with its printed text, grid zone, `confidence` and tolerance, features, notes, expected overall size and holes, and review items.
+2. The MCP server accepts the specification only if every assumed or uncertain dimension (`assumed=true` or `confidence` < 0.8) has a review item with a reason.
+3. The model builds the part with a few structured tools. After every step the server rebuilds the part in an isolated process and returns a machine-readable report with failed checks and the next step, so the model corrects its own errors.
+4. `export_step` writes STEP AP242 with semantic PMI only if all checks pass, re-imports the file and writes the review list `review.md`. Assumptions are orange faces in STEP and GLB.
+
+| Challenge requirement | How Drawing2CAD meets it | Evidence |
+| --- | --- | --- |
+| MCP server runs fully locally, e.g. in Docker, without cloud dependency | Docker image, server started with `--network none` (or in an internal Compose network) | CI runs tests and demo with `--network none` |
+| Model scripts run in an isolated sandbox: no network, time limit | every build in a separate worker process with time, CPU and memory limits; `run_script` sees only an allow list (no imports, no files); container read-only, non-root | `cad/sandbox.py`, `tests/test_sandbox.py` (escape attempts are rejected) |
+| Scriptable open-source CAD kernel on OpenCascade | CadQuery 2.8 with OCP 7.9 | `cad/ops.py` |
+| Few clearly described tools with structured parameters; free code only as fallback | 15 tools (table below); `run_script` is the fallback and can be switched off; lite mode with smaller tool sets for small local models | `server/tools.py`, `tests/test_server.py` |
+| Validation after every build, machine-readable: closed valid solid, dimensions vs. drawing (size, hole diameters, hole positions), STEP re-import | `checks.py` after every build: valid closed single solid, bounding box, hole diameters and positions, printed dimensions found in the solid; STEP and PMI re-import on export; JSON report with `ok`, `failed`, `next` | `report.json` per part, `tests/test_checks.py` |
+| Independent of the AI model | standard MCP; Claude, Ollama and any Anthropic-compatible endpoint; inputs of small models are normalised and every reinterpretation is reported (`coerced`) | `agent/`, `server/coerce.py` |
+| **Metric:** at least 3 sample parts as STEP | 21 of 22 sample drawings exported; the public demo builds 3 parts without any model | [Results](#results), `python -m d2c.demo` |
+| **Metric:** 100 % of STEP files pass the server checks and open in a CAD system | 350 of 351 server checks; 21 of 21 STEP files open and measure correctly in FreeCAD; NX was not available | [Results](#results), `scripts/freecad_check.py` |
+| **Metric:** every missing or assumed dimension in the review list with a reason | enforced by `submit_spec`; 39 review items in 21 parts, each marked in the model | `examples/demo/*/review.md` |
+| **Must:** recognise contours, dimensions, holes, basic features | rendering, text layer and vector measurement of circles, arcs and contours | A1 in the [matrix](#requirements-matrix) |
+| **Must:** build only through the MCP server, export STEP | the agent has no tools other than the MCP tools | A3 |
+| **Must:** flag ambiguity instead of interpreting it | mandatory review items, scale check, reading and export gates that refuse once | A2, A11 |
+| **Could:** STEP AP242 with semantic PMI | hole fits and tolerances, toleranced distances, geometric tolerances with datums, assumed dimensions with a note | A13 |
+| **Could:** validate the PMI | own PMI read-back with OpenCascade on every export; the NIST STEP File Analyzer was not run | A15 |
+| **Extension:** read tolerances, build at tolerance midpoint, check compliance | ISO 2768-1 and ISO 286-1 tables, `export_step(variant="mid")`, compliance per dimension in `review.md` | A12, `tests/test_tolerances.py` |
+| **Extension:** modify an already built model | `--revise` or the UI option "Update existing model (new revision)": reads the new drawing, keeps the operations, changes only the differences and writes a change list | `quality/revision.py`, `tests/test_revision.py` |
+| **Milestones:** upload and analyse, mark unclear items with PMI or colours, demo with real data | web UI with live run and 3D view; orange faces plus PMI notes; run on all sample drawings | [Web UI](#web-ui-with-your-own-drawing), [Results](#results) |
+
+### MCP tools
+
+| Phase | Tool | Purpose |
+| --- | --- | --- |
+| Read | `render_drawing` | page or crop of the drawing as PNG |
+| Read | `read_drawing_text` | text layer: printed dimensions, fits, tolerances, notes |
+| Read | `measure_drawing` | circles, arcs and extents from the vector geometry, in model mm; scale check |
+| Specify | `check_spec`, `submit_spec` | check and accept the JSON part specification with review items |
+| Build | `extrude`, `revolve`, `add_holes`, `edge_finish` | base body, cuts, plain, counterbored, countersunk and threaded holes, fillets and chamfers |
+| Build | `run_script` | CadQuery fallback in the sandbox, only if no structured tool fits |
+| Correct | `edit_op`, `delete_op`, `move_op`, `get_state` | change the operation list, every change rebuilds the part |
+| Export | `export_step` | checks, STEP AP242 with PMI, GLB, report and review list |
+
+Contents: [How it meets the challenge](#how-it-meets-the-challenge) · [Requirements](#requirements) · [Quick start](#quick-start) · [Local models](#local-models) · [Processing a drawing](#processing-a-drawing) · [Requirements matrix](#requirements-matrix) · [Results](#results) · [Limitations](#limitations) · [Data flow and privacy](#data-flow-and-privacy) · [Configuration](#configuration) · [Project layout](#project-layout) · [Third-party components](#third-party-components)
 
 ## Requirements
 
@@ -304,15 +384,13 @@ examples/demo/         sample result of the demo (STEP, GLB, review list, report
 docs/                  specification, architecture, results, UI design
 Dockerfile, requirements.lock          reproducible image: dependencies from the lock file, base image by digest
 docker-compose.yml, start.sh, .env.example   running the web UI
-LICENSE, NOTICE        license of the project and the third-party components
+NOTICE                 third-party components and their licenses
 ```
 
 The layers and their allowed imports are listed as a table in `docs/spec.md`, section 4.4; `tests/test_layers.py` checks them. Tests with the marker `refdata` need reference data under `/app/data` and are skipped otherwise; local tests of this kind belong in `tests/test_refdata.py` (not versioned).
 
 Development: `uv sync --extra dev`, then `uv run ruff check`, `uv run ruff format --check` and `uv run pytest`. CI (`.github/workflows/ci.yml`) checks Ruff and formatting, compares `requirements.lock` with `uv.lock`, builds the image on amd64 and arm64, runs the tests and the demo with `--network none` and compares the sample result.
 
-## Licenses
+## Third-party components
 
-Drawing2CAD is licensed under the [GNU Affero General Public License, version 3 or later](LICENSE) (`AGPL-3.0-or-later`). The reason is PyMuPDF (AGPL-3.0 or commercial license from Artifex), which runs in the same process: anyone offering the web UI to third parties over a network must offer them the source. Distribution under other terms would require a commercial PyMuPDF license or replacing PyMuPDF.
-
-Third-party components and their licenses, with versions from `pyproject.toml` and `uv.lock`, are listed in [NOTICE](NOTICE): CadQuery 2.8.0 (Apache-2.0), OCP 7.9.3 and Open CASCADE (LGPL-2.1 with exception), PyMuPDF 1.28.2 (AGPL-3.0), mcp 2.3.0 and pydantic (MIT), claude-agent-sdk 0.2.168 (MIT), model-viewer (Apache-2.0), Inter Tight and JetBrains Mono (SIL OFL 1.1), poppler-utils in the image (GPL).
+CadQuery 2.8.0 (Apache-2.0), OCP 7.9.3 and Open CASCADE (LGPL-2.1 with exception), PyMuPDF 1.28.2 (AGPL-3.0 or commercial license from Artifex), mcp 2.3.0 and pydantic (MIT), claude-agent-sdk 0.2.168 (MIT), model-viewer (Apache-2.0), Inter Tight and JetBrains Mono (SIL OFL 1.1), poppler-utils in the image (GPL). Versions from `pyproject.toml` and `uv.lock`; details in [NOTICE](NOTICE).

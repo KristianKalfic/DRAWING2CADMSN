@@ -1,5 +1,4 @@
 Drawing2CAD
-Lizenz des Projekts: GNU Affero General Public License, Version 3 oder später (AGPL-3.0-or-later, Datei LICENSE).
 
 Das Projekt nutzt die folgenden Komponenten Dritter. Die Versionen stammen aus pyproject.toml und uv.lock.
 Die Texte der jeweiligen Lizenzen gehören zu den Paketen; nur die mitgelieferten Dateien (letzter Abschnitt) liegen im Repository.
@@ -30,7 +29,3 @@ Mitgeliefert unter d2c/web/static/vendor
 model-viewer (Google)             Apache-2.0 (Datei model-viewer.LICENSE); das Bundle enthält three.js (MIT), Lit (BSD-3-Clause) und fflate (MIT)
 Inter Tight                       SIL Open Font License 1.1 (fonts/OFL-InterTight.txt)
 JetBrains Mono                    SIL Open Font License 1.1 (fonts/OFL-JetBrainsMono.txt)
-
-Hinweis zur AGPL: pymupdf wird im selben Prozess geladen (d2c/drawing/pages.py, d2c/drawing/vector/, d2c/web/app.py). Deshalb steht das Projekt
-unter der AGPL-3.0 oder später. Wer die Web-Oberfläche Dritten über ein Netz anbietet, muss diesen die Quellen anbieten (AGPL, Abschnitt 13).
-Eine Weitergabe ohne AGPL setzt entweder eine kommerzielle Lizenz von Artifex für pymupdf oder den Ersatz von pymupdf voraus.

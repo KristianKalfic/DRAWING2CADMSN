@@ -1,6 +1,6 @@
 import pytest
 
-from d2c.spec import PartSpec
+from d2c.spec import PartSpec, tolerance_in_text
 
 
 def minimal_spec() -> dict:
@@ -82,9 +82,6 @@ def test_unknown_ref_rejected():
     reject(spec, "x9")
     spec = minimal_spec()
     spec["dimensions"][0]["source"]["view"] = "v9"
-    reject(spec, "v9")
-    spec = minimal_spec()
-    spec["notes"] = [{"id": "n1", "text": "Radien R1", "source": {"view": "v9", "cell": None}}]
     reject(spec, "v9")
     # `refs` darf auf ein Maß, Konstruktionsmerkmal oder einen Hinweis verweisen, aber nicht auf eine Ansicht oder einen anderen Prüfeintrag.
     spec = minimal_spec()
@@ -234,6 +231,43 @@ def test_tolerance_fields_validated():
         reject(spec, "general_tolerance")
 
 
+@pytest.mark.parametrize(
+    ("kind", "value", "text", "expected"),
+    [
+        ("length", 77, "77 ±0,1", (0.1, -0.1, None)),
+        ("length", 35, "35±0,1", (0.1, -0.1, None)),
+        ("length", 57, "57 -0,1", (0.0, -0.1, None)),
+        ("diameter", 14, "Ø14 +0,1", (0.1, 0.0, None)),
+        ("length", 12, "12 +0,4 -0,1", (0.4, -0.1, None)),
+        ("radius", 30.75, "R 30,75 +0,05", (0.05, 0.0, None)),
+        ("diameter", 30, "Ø30 H10L", (None, None, "H10")),
+        ("diameter", 6, "4x Ø6 h10", (None, None, "h10")),
+        # Fasen und Gewinde tragen keine Abmaße.
+        ("chamfer", 2, "2 x 45°", (None, None, None)),
+        ("thread", 12, "M12", (None, None, None)),
+        ("length", 113, "113", (None, None, None)),
+    ],
+)
+def test_tolerance_is_taken_from_the_printed_text(kind, value, text, expected):
+    spec = minimal_spec()
+    spec["dimensions"][1].update(kind=kind, value=value, text=text)
+    dim = PartSpec.model_validate(spec).dimensions[1]
+    assert (dim.tol_upper, dim.tol_lower, dim.fit) == expected
+
+
+def test_entered_tolerance_wins_over_the_text():
+    spec = minimal_spec()
+    spec["dimensions"][1].update(kind="length", value=77, text="77 ±0,1", fit="js9")
+    dim = PartSpec.model_validate(spec).dimensions[1]
+    assert (dim.tol_upper, dim.tol_lower, dim.fit) == (None, None, "js9")
+
+
+def test_deviation_of_another_number_is_not_taken():
+    # "50 -0,1" als halbes Maß für den Wert 100: Die Abweichung gehört zur 50.
+    assert tolerance_in_text("50 -0,1", 100.0) == {}
+    assert tolerance_in_text("39 / 42 -0,2", 81.0) == {}
+
+
 def test_source_defaults_to_none():
     spec = minimal_spec()
     del spec["dimensions"][0]["source"]
@@ -362,3 +396,9 @@ def test_faces_near_on_a_length():
     spec = minimal_spec()
     spec["dimensions"][1]["faces_near"] = [[0, 0, 0], [0, 0, 76.2]]
     assert PartSpec.model_validate(spec).dimensions[1].faces_near == [(0, 0, 0), (0, 0, 76.2)]
+
+
+def test_note_from_the_title_block_needs_no_view():
+    spec = minimal_spec()
+    spec["notes"] = [{"id": "n1", "text": "Rz 50", "source": {"view": "title", "cell": None}}]
+    assert PartSpec.model_validate(spec).notes[0].source.view == "title"

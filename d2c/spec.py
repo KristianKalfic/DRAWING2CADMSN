@@ -39,6 +39,44 @@ def _prints_value(text: str, value: float) -> bool:
     return any(abs(float(n.replace(",", ".")) - value) <= _VALUE_TOL for n in _NUMBER.findall(text))
 
 
+_TOLERANCE_KINDS = ("length", "diameter", "radius")  # Nur lineare Maße tragen Abmaße oder eine Passung
+_DEV = r"[+\-−–]\s*\d+(?:[.,]\d+)?"
+# Hinter der Maßzahl: "±0,1", eine oder zwei vorzeichenbehaftete Abweichungen ("-0,1", "+0,4 -0,1") oder eine
+# ISO-286-Passung ("H7", "h10", "js6"; ein angehängter Buchstabe wie in "H10L" stört nicht).
+_SYMMETRIC = re.compile(r"\s*(?:±|\+/-|\+-)\s*(\d+(?:[.,]\d+)?)")
+_DEVIATIONS = re.compile(rf"\s*({_DEV})(?:\s*({_DEV}))?(?![\d.,])")
+_FIT = re.compile(r"\s*([A-HJKMNPR-Z]{1,2}|[a-hjkmnpr-z]{1,2})(\d{1,2})(?!\d)")
+
+
+def _float(text: str) -> float:
+    return float(re.sub(r"\s", "", text).replace(",", ".").replace("−", "-").replace("–", "-"))
+
+
+def tolerance_in_text(text: str, value: object) -> dict:
+    """Abmaße ({"tol_upper", "tol_lower"}) oder Passung ({"fit"}) hinter der Maßzahl, die `value` entspricht.
+
+    "77 ±0,1" -> ±0.1, "57 -0,1" -> 0 und -0.1, "Ø30 H10" -> H10. Steht die Zahl nicht im Text (etwa "50 -0,1"
+    als halbes Maß für den Wert 100), bleibt das Ergebnis leer: Die Abweichung gehört dann zu einem anderen Maß.
+    """
+    if not isinstance(value, int | float):
+        return {}
+    for number in _NUMBER.finditer(text):
+        if abs(_float(number.group()) - value) > _VALUE_TOL:
+            continue
+        rest = text[number.end() :]
+        if match := _SYMMETRIC.match(rest):
+            dev = _float(match.group(1))
+            return {"tol_upper": dev, "tol_lower": -dev}
+        if match := _DEVIATIONS.match(rest):
+            devs = [_float(g) for g in match.groups() if g]
+            if len(devs) == 1:
+                devs.append(0.0)
+            return {"tol_upper": max(devs), "tol_lower": min(devs)}
+        if match := _FIT.match(rest):
+            return {"fit": match.group(1) + match.group(2)}
+    return {}
+
+
 class _Strict(BaseModel):
     # NaN oder inf in bbox oder Bohrungsposition ließe spätere Vergleiche unbemerkt bestehen.
     model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
@@ -73,6 +111,17 @@ class Dimension(_Strict):
     faces_near: list[tuple[float, float, float]] = []
     """Lengths only: two model points, one on each of the two dimensioned faces (plane or hole, whose axis counts).
     The dimension is then written with its tolerance as semantic PMI between these faces."""
+
+    @model_validator(mode="before")
+    @classmethod
+    def _tolerance_from_text(cls, data: object) -> object:
+        """Übernimmt Abmaße oder Passung aus dem gedruckten Text, wenn das Modell sie nicht eingetragen hat."""
+        if not isinstance(data, dict) or data.get("kind") not in _TOLERANCE_KINDS:
+            return data
+        if any(data.get(key) is not None for key in ("tol_upper", "tol_lower", "fit")):
+            return data
+        found = tolerance_in_text(str(data.get("text", "")), data.get("value"))
+        return {**data, **found} if found else data
 
 
 class View(_Strict):
@@ -240,7 +289,8 @@ class PartSpec(_Strict):
             errors += [f"`feature` {f.id!r}: unknown `dim_id` {i!r}." for i in f.dim_ids if i not in dim_ids]
         for k, hole in enumerate(self.expected.holes):
             errors += [f"`expected.holes[{k}]`: unknown `dim_id` {i!r}." for i in hole.dim_ids if i not in dim_ids]
-        for item in (*self.dimensions, *self.notes, *self.datums, *self.geometric_tolerances):
+        # Hinweise stehen oft im Schriftfeld, außerhalb jeder Ansicht; ihre Quelle wird deshalb nicht gegen die Ansichten geprüft.
+        for item in (*self.dimensions, *self.datums, *self.geometric_tolerances):
             if item.source is not None and item.source.view not in view_ids:
                 kind = type(item).__name__.lower()
                 errors.append(f"{kind} {item.id!r}: unknown source view {item.source.view!r}.")
