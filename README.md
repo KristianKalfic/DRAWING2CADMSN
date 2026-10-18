@@ -2,6 +2,8 @@
 
 Drawing2CAD turns a 2D technical drawing into a 3D solid model in STEP format (AP242). A language model reads the drawing and builds the part exclusively through the tools of a local MCP server; the server has no network access. After every build step the server checks that the solid is valid and matches the captured specification (overall size, holes, STEP re-import), and lists printed dimensions that do not occur in the solid. Every assumption that is not stated in the drawing is marked orange in the model and listed with its reason in a review list.
 
+Contents: [At a glance](#at-a-glance) · [How it meets the challenge](#how-it-meets-the-challenge) · [Prerequisites](#prerequisites) · [Quick start](#quick-start) · [Local models](#local-models) · [Processing a drawing](#processing-a-drawing) · [Requirements matrix](#requirements-matrix) · [Results](#results) · [Limitations](#limitations) · [Data flow and privacy](#data-flow-and-privacy) · [Configuration](#configuration) · [Troubleshooting](#troubleshooting) · [Verifying results](#verifying-results) · [Project layout](#project-layout) · [Third-party components](#third-party-components)
+
 ## At a glance
 
 | | |
@@ -84,11 +86,10 @@ The pipeline is the one the challenge recommends: **drawing → structured JSON 
 | Correct | `edit_op`, `delete_op`, `move_op`, `get_state` | change the operation list, every change rebuilds the part |
 | Export | `export_step` | checks, STEP AP242 with PMI, GLB, report and review list |
 
-Contents: [How it meets the challenge](#how-it-meets-the-challenge) · [Requirements](#requirements) · [Quick start](#quick-start) · [Local models](#local-models) · [Processing a drawing](#processing-a-drawing) · [Requirements matrix](#requirements-matrix) · [Results](#results) · [Limitations](#limitations) · [Data flow and privacy](#data-flow-and-privacy) · [Configuration](#configuration) · [Project layout](#project-layout) · [Third-party components](#third-party-components)
 
-## Requirements
+## Prerequisites
 
-| Requirement | Purpose |
+| Prerequisite | Purpose |
 | --- | --- |
 | [Docker](https://docs.docker.com/get-docker/) (Docker Desktop on Windows and macOS) | build the image, tests, demo, CAD server |
 | about 8 GB RAM, 4 GB free disk space | the image is about 3 GB |
