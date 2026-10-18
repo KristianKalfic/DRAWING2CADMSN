@@ -225,7 +225,11 @@ def test_tolerance_fields_validated():
         spec = minimal_spec()
         spec["general_tolerance"] = f"ISO 2768-{grade}"
         PartSpec.model_validate(spec)
-    for text in ("ISO 2768-x", "ISO 2768-mK", "2768-m", "ISO 2768-m\n"):
+    for text in ("DIN ISO 2768-m", "ISO 2768-mK", "ISO 2768 - m", "DIN EN ISO 2768-mH", " ISO 2768-m\n"):
+        spec = minimal_spec()
+        spec["general_tolerance"] = text
+        assert PartSpec.model_validate(spec).general_tolerance == "ISO 2768-m"
+    for text in ("ISO 2768-x", "2768-m", "Allg.-Toleranz"):
         spec = minimal_spec()
         spec["general_tolerance"] = text
         reject(spec, "general_tolerance")

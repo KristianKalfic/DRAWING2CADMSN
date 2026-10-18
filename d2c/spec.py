@@ -39,6 +39,8 @@ def _prints_value(text: str, value: float) -> bool:
     return any(abs(float(n.replace(",", ".")) - value) <= _VALUE_TOL for n in _NUMBER.findall(text))
 
 
+# Allgemeintoleranz im Schriftfeld: "ISO 2768-m", "DIN ISO 2768-mK", "ISO 2768 - f", "DIN EN ISO 2768-c".
+_GENERAL = re.compile(r"\s*(?:DIN\s+)?(?:EN\s+)?ISO\s*2768\s*[-–]?\s*([fmcvFMCV])[HKL]?\s*")
 _TOLERANCE_KINDS = ("length", "diameter", "radius")  # Nur lineare Maße tragen Abmaße oder eine Passung
 _DEV = r"[+\-−–]\s*\d+(?:[.,]\d+)?"
 # Hinter der Maßzahl: "±0,1", eine oder zwei vorzeichenbehaftete Abweichungen ("-0,1", "+0,4 -0,1") oder eine
@@ -255,6 +257,13 @@ class PartSpec(_Strict):
     general_tolerance: str | None = Field(None, pattern=r"^ISO 2768-[fmcv]$")  # aus dem Schriftfeld
 
     _scale = field_validator("scale")(normalize_scale)
+
+    @field_validator("general_tolerance", mode="before")
+    @classmethod
+    def _general(cls, value: object) -> object:
+        """Schreibweisen aus dem Schriftfeld wie "DIN ISO 2768-mK" auf "ISO 2768-m"; die Klasse H/K/L gilt Form und Lage."""
+        match = _GENERAL.fullmatch(value) if isinstance(value, str) else None
+        return f"ISO 2768-{match.group(1).lower()}" if match else value
 
     @model_validator(mode="after")
     def _check_consistency(self) -> Self:
